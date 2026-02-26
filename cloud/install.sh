@@ -80,7 +80,9 @@ echo ""
 if [ -d "$INSTALL_DIR/.git" ]; then
   # Pull latest source first
   echo -e "  ${DIM}Pulling latest changes...${NC}"
-  cd "$INSTALL_DIR" && git pull --quiet 2>/dev/null || true
+  cd "$INSTALL_DIR"
+  git sparse-checkout set cloud remote-ui 2>/dev/null
+  git pull --quiet 2>/dev/null || true
   cd cloud
   echo -e "  ${GREEN}✓ Source updated${NC}"
   echo ""
