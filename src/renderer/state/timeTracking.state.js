@@ -251,67 +251,47 @@ function recoverFromCheckpoint() {
 
 function archivePastMonths() {
   const state = dataState.get();
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth();
-  let changed = false;
+  const currentMonthStr = getMonthString(); // "YYYY-MM"
 
-  // Archive global sessions from past months
-  if (state.global?.sessions?.length > 0) {
-    const current = [];
-    const past = {};
+  // If month hasn't changed, nothing to do
+  if (state.month === currentMonthStr) return;
 
-    for (const s of state.global.sessions) {
-      const d = new Date(s.startTime);
-      if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
-        current.push(s);
-      } else {
-        const key = `${d.getFullYear()}-${d.getMonth()}`;
-        if (!past[key]) past[key] = { year: d.getFullYear(), month: d.getMonth(), sessions: [] };
-        past[key].sessions.push(s);
-      }
-    }
-
-    if (Object.keys(past).length > 0) {
-      for (const { year, month, sessions } of Object.values(past)) {
-        ArchiveService.appendToArchive(year, month, sessions, {});
-      }
-      state.global.sessions = current;
-      changed = true;
-    }
-  }
-
-  // Archive project sessions from past months
-  for (const [pid, pData] of Object.entries(state.projects || {})) {
-    if (!pData.sessions?.length) continue;
-    const current = [];
-    const past = {};
-
-    for (const s of pData.sessions) {
-      const d = new Date(s.startTime);
-      if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
-        current.push(s);
-      } else {
-        const key = `${d.getFullYear()}-${d.getMonth()}`;
-        if (!past[key]) past[key] = { year: d.getFullYear(), month: d.getMonth(), sessions: [] };
-        past[key].sessions.push(s);
-      }
-    }
-
-    if (Object.keys(past).length > 0) {
-      for (const { year, month, sessions } of Object.values(past)) {
-        const projectName = getProjectName(pid);
-        ArchiveService.appendToArchive(year, month, [], { [pid]: { projectName, sessions } });
-      }
-      pData.sessions = current;
-      changed = true;
-    }
-  }
-
-  if (changed) {
-    dataState.set({ ...state, month: getMonthString() });
+  // First run ever — just stamp the current month, don't archive
+  if (!state.month) {
+    dataState.set({ ...state, month: currentMonthStr });
     save();
+    return;
   }
+
+  // Safety check: only archive if the stored month is strictly in the past.
+  // This protects existing users whose timetracking.json has an outdated month
+  // stamp but still contains current-month sessions (e.g. after a refactor or
+  // clock drift). If any session belongs to the current month, skip archiving.
+  const hasCurrentMonthSessions = (
+    (state.global?.sessions || []).some(s => s.startTime?.startsWith(currentMonthStr)) ||
+    Object.values(state.projects || {}).some(p =>
+      (p.sessions || []).some(s => s.startTime?.startsWith(currentMonthStr))
+    )
+  );
+
+  if (hasCurrentMonthSessions) {
+    // Sessions du mois courant détectées — juste corriger le stamp, pas d'archivage
+    dataState.set({ ...state, month: currentMonthStr });
+    save();
+    return;
+  }
+
+  // The stored month is truly past — copy file as archive then reset
+  ArchiveService.archiveCurrentFile(state.month);
+
+  dataState.set({
+    version: 3,
+    month: currentMonthStr,
+    global: { sessions: [] },
+    projects: {}
+  });
+  save();
+  console.debug(`[TimeTracking] Archived ${state.month} → starting fresh for ${currentMonthStr}`);
 }
 
 function cleanupOrphans() {

@@ -69,18 +69,54 @@ function createEmptyArchive(year, month) {
 }
 
 /**
- * Read an archive file from disk (bypasses cache)
+ * Read an archive file from disk (bypasses cache).
+ * Supports both v1 format (globalSessions/projectSessions)
+ * and v3 format (global.sessions/projects) — normalizes to v1 shape.
  */
 async function readArchiveFromDisk(filePath) {
   try {
     if (!fs.existsSync(filePath)) return null;
     const content = await fs.promises.readFile(filePath, 'utf8');
     if (!content || !content.trim()) return null;
-    return JSON.parse(content);
+    const data = JSON.parse(content);
+    return normalizeArchive(data);
   } catch (error) {
     console.warn('[ArchiveService] Failed to read archive:', filePath, error.message);
     return null;
   }
+}
+
+/**
+ * Normalize an archive to the v1 reading shape:
+ * { version, month, globalSessions, projectSessions }
+ * Handles both v1 (already correct) and v3 (timetracking.json format).
+ */
+function normalizeArchive(data) {
+  if (!data) return null;
+
+  // v3 format: { global: { sessions }, projects: { pid: { sessions } } }
+  if (data.version === 3 || (data.global && !data.globalSessions)) {
+    const projectSessions = {};
+    for (const [pid, pData] of Object.entries(data.projects || {})) {
+      if (pData.sessions?.length > 0) {
+        projectSessions[pid] = {
+          projectName: pData.projectName || pid,
+          sessions: pData.sessions
+        };
+      }
+    }
+    return {
+      version: 1,
+      month: data.month,
+      createdAt: data.createdAt || new Date().toISOString(),
+      lastModifiedAt: data.lastModifiedAt || new Date().toISOString(),
+      globalSessions: data.global?.sessions || [],
+      projectSessions
+    };
+  }
+
+  // v1 format: already correct
+  return data;
 }
 
 /**
@@ -133,6 +169,80 @@ function writeArchive(year, month, archiveData) {
       if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
     } catch (_) {}
   }
+}
+
+/**
+ * Archive the current timetracking.json file as the archive for a given month.
+ * The month param is a "YYYY-MM" string (e.g. "2026-02").
+ * Simply copies the file — no transformation needed.
+ */
+function archiveCurrentFile(monthStr) {
+  try {
+    const { timeTrackingFile } = require('../utils/paths');
+    if (!fs.existsSync(timeTrackingFile)) return;
+
+    const [yearStr, monthNumStr] = monthStr.split('-');
+    const year = parseInt(yearStr, 10);
+    const month = parseInt(monthNumStr, 10) - 1; // 0-based
+
+    ensureYearDir(year);
+    const destPath = getArchiveFilePath(year, month);
+
+    // If an archive already exists, merge instead of overwriting
+    if (fs.existsSync(destPath)) {
+      const existing = JSON.parse(fs.readFileSync(destPath, 'utf8'));
+      const current = JSON.parse(fs.readFileSync(timeTrackingFile, 'utf8'));
+      const merged = mergeArchives(existing, current, monthStr);
+      const tempFile = `${destPath}.tmp`;
+      fs.writeFileSync(tempFile, JSON.stringify(merged, null, 2));
+      fs.renameSync(tempFile, destPath);
+    } else {
+      fs.copyFileSync(timeTrackingFile, destPath);
+    }
+
+    invalidateArchiveCache(year, month);
+    console.debug(`[ArchiveService] Archived ${monthStr} → ${destPath}`);
+  } catch (error) {
+    console.error('[ArchiveService] Failed to archive current file:', error.message);
+  }
+}
+
+/**
+ * Merge an existing archive with a v3 timetracking snapshot, deduplicating by session ID.
+ */
+function mergeArchives(existing, current, monthStr) {
+  const normalized = normalizeArchive(existing);
+  const currentNorm = normalizeArchive(current);
+
+  // Merge global sessions
+  const globalById = new Map();
+  (normalized.globalSessions || []).forEach(s => globalById.set(s.id, s));
+  (currentNorm.globalSessions || []).forEach(s => globalById.set(s.id, s));
+  const globalSessions = [...globalById.values()].sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+  // Merge project sessions
+  const projectSessions = { ...(normalized.projectSessions || {}) };
+  for (const [pid, data] of Object.entries(currentNorm.projectSessions || {})) {
+    if (!projectSessions[pid]) {
+      projectSessions[pid] = { projectName: data.projectName, sessions: [] };
+    } else if (data.projectName) {
+      projectSessions[pid].projectName = data.projectName;
+    }
+    const existingIds = new Set(projectSessions[pid].sessions.map(s => s.id));
+    for (const s of data.sessions) {
+      if (!existingIds.has(s.id)) projectSessions[pid].sessions.push(s);
+    }
+    projectSessions[pid].sessions.sort((a, b) => a.startTime.localeCompare(b.startTime));
+  }
+
+  return {
+    version: 1,
+    month: monthStr,
+    createdAt: normalized.createdAt || new Date().toISOString(),
+    lastModifiedAt: new Date().toISOString(),
+    globalSessions,
+    projectSessions
+  };
 }
 
 /**
@@ -303,6 +413,7 @@ module.exports = {
   loadArchive,
   writeArchive,
   appendToArchive,
+  archiveCurrentFile,
   getArchivedGlobalSessions,
   getArchivedProjectSessions,
   getArchivedAllProjectSessions,
