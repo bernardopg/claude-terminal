@@ -15,7 +15,7 @@ const TELEMETRY_URL = process.env.TELEMETRY_URL || 'https://telemetry.claudeterm
 const PING_PATH = '/api/v1/ping';
 const BATCH_PATH = '/api/v1/batch';
 const TIMEOUT = 5000;
-const FLUSH_INTERVAL = 30 * 1000; // 30s
+const FLUSH_INTERVAL = 5 * 1000; // 5s
 
 // Client-side rate limit: 1 ping per event_type per minute
 const lastPingTimes = new Map();
@@ -193,7 +193,7 @@ function canSend(eventType) {
 }
 
 /**
- * Queue a telemetry ping (batched, flushed every 30s).
+ * Queue a telemetry ping (batched, flushed every 5s).
  * @param {string} eventType - e.g. "app:start", "features:terminal:create"
  * @param {Object} [metadata={}]
  */
@@ -214,7 +214,7 @@ function sendPing(eventType, metadata = {}) {
     eventBuffer.push({ eventType, metadata, ts: Date.now() });
     startFlushTimer();
   } catch {
-    // silent — never block the app
+    // silent
   }
 }
 
@@ -228,6 +228,8 @@ function sendStartupPing() {
   sendPing('app:start', {
     project_types: getProjectTypeCounts()
   });
+  // Flush immediately so app:start is never lost
+  flushBuffer();
 }
 
 function sendQuitPing() {
