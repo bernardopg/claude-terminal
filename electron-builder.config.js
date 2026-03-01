@@ -66,7 +66,7 @@ module.exports = {
     oneClick: false,
     perMachine: false,
     allowElevation: true,
-    allowToChangeInstallationDirectory: true,
+    allowToChangeInstallationDirectory: false, // false prevents keepShortcuts=false — preserves taskbar pin across updates
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
     differentialPackage: true,

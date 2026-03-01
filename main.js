@@ -46,6 +46,13 @@ if (!gotTheLock) {
 }
 
 function bootstrapApp() {
+  // Set AUMID explicitly for NSIS builds — must match appId in electron-builder.config.js.
+  // Without this, Electron may generate a different runtime AUMID, causing the taskbar
+  // to show duplicate icons and breaking the taskbar pin across updates.
+  if (process.platform === 'win32') {
+    app.setAppUserModelId('com.yanis.claude-terminal');
+  }
+
   const fs = require('fs');
   const { loadAccentColor, settingsFile } = require('./src/main/utils/paths');
   const { initializeServices, cleanupServices, hookEventServer } = require('./src/main/services');
