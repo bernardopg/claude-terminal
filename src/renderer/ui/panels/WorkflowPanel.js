@@ -48,16 +48,32 @@ const state = {
 const _agentLogs = new Map(); // stepId → [{ type, text, ts }]
 const MAX_LOG_ENTRIES = 50;
 
+let _panelInitialized = false;
+
 function init(context) {
   ctx = context;
   WorkflowMarketplace.init(context);
 }
 
 async function load() {
-  renderPanel();
+  const inEditor = !!document.querySelector('#workflow-panel .wf-editor');
+
+  if (!_panelInitialized) {
+    renderPanel();
+    _panelInitialized = true;
+    await refreshData();
+    renderContent();
+    registerLiveListeners();
+    return;
+  }
+
+  // Panel already built — refresh data silently
   await refreshData();
-  renderContent();
-  registerLiveListeners();
+
+  // If the editor is open, don't touch the DOM: preserve the editing session + AI chat
+  if (!inEditor) {
+    renderContent();
+  }
 }
 
 const api = window.electron_api?.workflow;
