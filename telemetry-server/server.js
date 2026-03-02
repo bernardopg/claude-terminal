@@ -11,8 +11,15 @@ const statsRoute = require('./routes/stats');
 const app = express();
 
 // Trust proxy (nginx/caddy) for correct IP detection
-if (config.TRUST_PROXY === 'true' || config.TRUST_PROXY === '1') {
-  app.set('trust proxy', 1);
+// Set TRUST_PROXY to number of proxy hops (e.g. 2 for gateway+nginx), or 'true' for all proxies
+const _tp = config.TRUST_PROXY;
+if (_tp === 'true') {
+  app.set('trust proxy', true);
+} else {
+  const _tpNum = parseInt(_tp);
+  if (!isNaN(_tpNum) && _tpNum > 0) {
+    app.set('trust proxy', _tpNum);
+  }
 }
 
 // Security headers
