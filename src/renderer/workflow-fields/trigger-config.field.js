@@ -1,10 +1,11 @@
 /**
  * trigger-config field renderer
  * Renders the full trigger configuration UI:
- * - triggerType select (manual / cron / hook / on_workflow)
+ * - triggerType select (manual / cron / hook / on_workflow / webhook)
  * - Conditional cron expression input
  * - Conditional hookType select
  * - Conditional workflow source select
+ * - Conditional webhook URL display
  */
 const { escapeHtml, escapeAttr } = require('./_registry');
 
@@ -15,6 +16,56 @@ const HOOK_TYPES = [
   { value: 'Notification',     label: 'Notification — Sur notification Claude' },
   { value: 'Stop',             label: 'Stop — Quand Claude termine' },
 ];
+
+function _getCloudSettings() {
+  try {
+    const fs = window.electron_nodeModules?.fs;
+    const os = window.electron_nodeModules?.os;
+    const path = window.electron_nodeModules?.path;
+    if (!fs || !os || !path) return {};
+    const settingsPath = path.join(os.homedir(), '.claude-terminal', 'settings.json');
+    if (!fs.existsSync(settingsPath)) return {};
+    return JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+  } catch { return {}; }
+}
+
+function _buildWebhookUrl(workflowId) {
+  const settings = _getCloudSettings();
+  const cloudUrl = (settings.cloudServerUrl || '').replace(/\/$/, '');
+  if (!cloudUrl || !workflowId) return '';
+  return `${cloudUrl}/api/webhook/${workflowId}`;
+}
+
+function _renderWebhookSection(workflowId, esc) {
+  const webhookUrl = _buildWebhookUrl(workflowId);
+  return `<div class="wf-step-edit-field">
+  <label class="wf-step-edit-label">Webhook URL</label>
+  <span class="wf-field-hint">POST avec Authorization: Bearer &lt;votre-api-key&gt;</span>
+  ${webhookUrl
+    ? `<div class="wf-webhook-url-row">
+        <input class="wf-step-edit-input wf-field-mono wf-webhook-url-input" readonly
+          value="${esc(webhookUrl)}" />
+        <button class="wf-webhook-copy-btn" type="button" data-url="${esc(webhookUrl)}">Copier</button>
+      </div>
+      <span class="wf-field-hint" style="margin-top:6px">Le body de la requête est disponible via <code>$trigger.payload</code></span>`
+    : `<span class="wf-field-hint wf-webhook-no-cloud">Relais cloud non configuré — connectez-vous dans Paramètres &rarr; Cloud</span>`
+  }
+</div>`;
+}
+
+function _bindWebhookCopyBtn(root) {
+  root.querySelectorAll('.wf-webhook-copy-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const url = btn.dataset.url;
+      if (url && navigator.clipboard) {
+        navigator.clipboard.writeText(url).then(() => {
+          btn.textContent = 'Copié !';
+          setTimeout(() => { btn.textContent = 'Copier'; }, 2000);
+        });
+      }
+    });
+  });
+}
 
 module.exports = {
   type: 'trigger-config',
@@ -58,6 +109,10 @@ module.exports = {
   </select>
 </div>` : '';
 
+    const webhookSection = triggerType === 'webhook'
+      ? _renderWebhookSection(node.properties._workflowId || '', escapeAttr)
+      : '';
+
     return `<div class="wf-field-group" data-key="triggerType">
 <div class="wf-step-edit-field">
   <label class="wf-step-edit-label">Déclencheur</label>
@@ -67,10 +122,11 @@ module.exports = {
     <option value="cron"${triggerType === 'cron' ? ' selected' : ''}>Planifié (cron)</option>
     <option value="hook"${triggerType === 'hook' ? ' selected' : ''}>Hook Claude</option>
     <option value="on_workflow"${triggerType === 'on_workflow' ? ' selected' : ''}>Après un workflow</option>
+    <option value="webhook"${triggerType === 'webhook' ? ' selected' : ''}>Webhook (HTTP POST)</option>
   </select>
 </div>
 <div class="wf-trigger-conditional">
-  ${cronSection}${hookSection}${onWorkflowSection}
+  ${cronSection}${hookSection}${onWorkflowSection}${webhookSection}
 </div>
 </div>`;
   },
@@ -78,6 +134,9 @@ module.exports = {
   bind(container, field, node, onChange) {
     const typeSelect = container.querySelector('.wf-trigger-type-select');
     if (!typeSelect) return;
+
+    // Bind copy button for initial render (if webhook is already selected)
+    _bindWebhookCopyBtn(container);
 
     typeSelect.addEventListener('change', () => {
       node.properties.triggerType = typeSelect.value;
@@ -128,6 +187,8 @@ module.exports = {
     ${workflows.map(w => `<option value="${esc(w.id)}"${props.triggerValue === w.id ? ' selected' : ''}>${esc(w.name)}</option>`).join('')}
   </select>
 </div>`;
+      } else if (t === 'webhook') {
+        html = _renderWebhookSection(node.properties._workflowId || '', esc);
       }
 
       condDiv.innerHTML = html;
@@ -139,6 +200,9 @@ module.exports = {
         el.addEventListener('change', () => { node.properties[key] = el.value; });
         el.addEventListener('input', () => { node.properties[key] = el.value; });
       });
+
+      // Bind copy button for webhook
+      _bindWebhookCopyBtn(condDiv);
     });
   },
 };

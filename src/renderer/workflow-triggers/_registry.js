@@ -12,6 +12,7 @@ function loadAll() {
     require('./cron.trigger'),
     require('./hook.trigger'),
     require('./on_workflow.trigger'),
+    require('./webhook.trigger'),
   ];
   for (const def of defs) {
     if (def.type) _triggers.set(def.type, def);

@@ -1459,6 +1459,15 @@
       "wait": "Delay",
       "log": "Write to log"
     },
+    "webhook": {
+      "label": "Webhook (HTTP POST)",
+      "urlLabel": "Webhook URL",
+      "urlHint": "POST this URL with Authorization: Bearer <your-api-key>",
+      "copyBtn": "Copy",
+      "copied": "Copied!",
+      "noCloud": "Cloud relay not configured — connect in Settings → Cloud",
+      "payloadHint": "The request body is available as $trigger.payload in your workflow nodes."
+    },
     "db": {
       "connection": "Connection",
       "connectionHint": "Database configured in the app",

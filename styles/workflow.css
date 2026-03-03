@@ -6960,3 +6960,43 @@ select.wf-step-edit-input {
 .wf-runs-show-more:hover {
   color: var(--text-secondary);
 }
+
+/* ── Webhook trigger URL display ── */
+
+.wf-webhook-url-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.wf-webhook-url-row .wf-webhook-url-input {
+  flex: 1;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  cursor: text;
+  user-select: all;
+}
+
+.wf-webhook-copy-btn {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--font-xs);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s, border-color .15s;
+}
+
+.wf-webhook-copy-btn:hover {
+  background: var(--bg-active);
+  border-color: var(--accent);
+}
+
+.wf-webhook-no-cloud {
+  color: var(--warning);
+  display: block;
+  margin-top: 4px;
+}

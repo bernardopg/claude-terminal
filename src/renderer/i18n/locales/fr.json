@@ -1459,6 +1459,15 @@
       "wait": "Temporisation",
       "log": "Écrire dans le log"
     },
+    "webhook": {
+      "label": "Webhook (HTTP POST)",
+      "urlLabel": "URL Webhook",
+      "urlHint": "Envoyez un POST sur cette URL avec Authorization: Bearer <votre-clé-api>",
+      "copyBtn": "Copier",
+      "copied": "Copié !",
+      "noCloud": "Relais cloud non configuré — connectez-vous dans Paramètres → Cloud",
+      "payloadHint": "Le corps de la requête est disponible via $trigger.payload dans les nœuds du workflow."
+    },
     "db": {
       "connection": "Connexion",
       "connectionHint": "Base de données configurée dans l'app",
