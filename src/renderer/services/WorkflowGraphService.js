@@ -735,10 +735,8 @@ function addDataOutputs(node, nodeType) {
 // ── Trigger Node ─────────────────────────────────────────────────────────────
 function TriggerNode() {
   this.addOutput('Start', 'exec');
+  addDataOutputs(this, 'trigger');
   this.properties = { triggerType: 'manual', triggerValue: '', hookType: 'PostToolUse' };
-  this.addWidget('combo', 'Type', 'manual', (v) => { this.properties.triggerType = v; }, {
-    values: ['manual', 'cron', 'hook', 'on_workflow']
-  });
   this.size = [200, this.computeSize()[1]];
   this.removable = false;
 }

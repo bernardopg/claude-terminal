@@ -106,9 +106,9 @@ const NODE_TYPES = {
   'workflow/trigger': {
     title: 'Trigger', desc: 'Point de départ',
     inputs: [],
-    outputs: [{ name: 'Start', type: 'exec' }],
+    outputs: addDataOutputDefs([{ name: 'Start', type: 'exec' }], 'trigger'),
     props: { triggerType: 'manual', triggerValue: '', hookType: 'PostToolUse' },
-    widgets: [{ type: 'combo', name: 'Type', key: 'triggerType', values: ['manual', 'cron', 'hook', 'on_workflow'] }],
+    widgets: [],
     width: 200, removable: false,
     badge: (n) => (n.properties.triggerType || 'manual').toUpperCase(),
   },
@@ -943,11 +943,19 @@ class WorkflowGraphEngine {
           type: s.type === -1 ? 'exec' : (s.type || 'exec'),
           link: s.link != null ? s.link : null,
         })),
-        outputs: (sn.outputs || []).map(s => ({
-          name: s.name,
-          type: s.type === -1 ? 'exec' : (s.type || 'exec'),
-          links: Array.isArray(s.links) ? [...s.links] : [],
-        })),
+        outputs: (() => {
+          const saved = (sn.outputs || []).map(s => ({
+            name: s.name,
+            type: s.type === -1 ? 'exec' : (s.type || 'exec'),
+            links: Array.isArray(s.links) ? [...s.links] : [],
+          }));
+          // Add any outputs from the type definition that are missing in the saved data
+          const defOuts = def.outputs || [];
+          for (let i = saved.length; i < defOuts.length; i++) {
+            saved.push({ name: defOuts[i].name, type: defOuts[i].type, links: [] });
+          }
+          return saved;
+        })(),
         widgets: (def.widgets || []).map(w => ({
           type: w.type,
           name: w.name,

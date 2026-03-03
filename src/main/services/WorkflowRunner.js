@@ -1179,6 +1179,9 @@ class WorkflowRunner {
     this._emitStep(runId, { id: `node_${triggerNode.id}`, type: 'trigger' }, 'running', null);
     this._emitStep(runId, { id: `node_${triggerNode.id}`, type: 'trigger' }, 'success', null);
     visited.add(triggerNode.id);
+    // Expose trigger data as Blueprint data outputs (payload, source)
+    const triggerData = vars.get('trigger') || {};
+    vars.set(`node_${triggerNode.id}`, { payload: triggerData.payload ?? triggerData, source: triggerData.source || 'manual' });
 
     let lastError = null;
 

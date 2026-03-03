@@ -219,10 +219,11 @@ const findStepType = (type) => {
 };
 
 const TRIGGER_CONFIG = {
-  cron: { label: 'Cron', desc: 'Planifié à heures fixes', icon: svgClock(), color: 'info', extra: 'cronPicker' },
-  hook: { label: 'Hook Claude', desc: 'Réagit aux événements', icon: svgHook(), color: 'accent', extra: 'hookType' },
-  on_workflow: { label: 'Après workflow', desc: 'Enchaîné à un autre', icon: svgChain(), color: 'purple', fields: [{ id: 'triggerValue', label: 'Nom du workflow source', placeholder: 'Daily Code Review', mono: false }] },
-  manual: { label: 'Manuel', desc: 'Déclenché à la demande', icon: svgPlay(), color: 'success', fields: [] },
+  cron:        { label: 'Cron',       desc: 'Planifié à heures fixes',  icon: svgClock(),  color: 'info',    extra: 'cronPicker' },
+  hook:        { label: 'Hook',       desc: 'Réagit aux événements',    icon: svgHook(),   color: 'accent',  extra: 'hookType' },
+  on_workflow: { label: 'Workflow',   desc: 'Enchaîné à un autre',      icon: svgChain(),  color: 'purple',  fields: [{ id: 'triggerValue', label: 'Nom du workflow source', placeholder: 'Daily Code Review', mono: false }] },
+  manual:      { label: 'Manuel',     desc: 'Déclenché à la demande',   icon: svgPlay(),   color: 'success', fields: [] },
+  webhook:     { label: 'Webhook',    desc: 'HTTP POST externe',         icon: svgHttp(),   color: 'info',    fields: [] },
 };
 
 // ── Cron picker ─────────────────────────────────────────────────────────────

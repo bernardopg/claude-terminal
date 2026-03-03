@@ -55,6 +55,8 @@ const TYPE_COMPAT = {
 // node type → ordered list of { name, type, key }
 // 'key' = property name in runtime output object
 const NODE_DATA_OUTPUTS = {
+  trigger:      [{ name: 'payload',  type: 'object',  key: 'payload' },
+                 { name: 'source',   type: 'string',  key: 'source' }],
   claude:       [{ name: 'output',   type: 'string',  key: 'output' }],
   shell:        [{ name: 'stdout',   type: 'string',  key: 'stdout' },
                  { name: 'stderr',   type: 'string',  key: 'stderr' },
