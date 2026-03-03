@@ -1272,6 +1272,11 @@ function setActiveTerminal(id) {
         if (history.length > 50) history.shift();
       }
     }
+
+    // Notify about active terminal change (used to update git buttons for worktrees)
+    if (callbacks.onActiveTerminalChange) {
+      callbacks.onActiveTerminalChange(id, termData);
+    }
   }
 }
 
@@ -1491,7 +1496,8 @@ async function createTerminal(project, options = {}) {
   // Create tab
   const tabsContainer = document.getElementById('terminals-tabs');
   const tab = document.createElement('div');
-  tab.className = `terminal-tab status-${initialStatus}${isBasicTerminal ? ' basic-terminal' : ''}`;
+  const isWorktreeTab = !!(overrideCwd && overrideCwd !== project.path);
+  tab.className = `terminal-tab status-${initialStatus}${isBasicTerminal ? ' basic-terminal' : ''}${isWorktreeTab ? ' worktree-tab' : ''}`;
   tab.dataset.id = id;
   tab.tabIndex = 0;
   tab.setAttribute('role', 'tab');
@@ -1500,9 +1506,11 @@ async function createTerminal(project, options = {}) {
     <button class="tab-mode-toggle" title="${escapeHtml(t('chat.switchToChat'))}">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
     </button>` : '';
+  const worktreeIconHtml = isWorktreeTab ? `<span class="tab-worktree-icon" title="Worktree"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="4" cy="4" r="1.5"/><circle cx="12" cy="4" r="1.5"/><circle cx="4" cy="12" r="1.5"/><path d="M4 5.5v5M5.5 4h5M12 5.5v2.5a2 2 0 01-2 2H7"/></svg></span>` : '';
 
   tab.innerHTML = `
     <span class="status-dot"></span>
+    ${worktreeIconHtml}
     <span class="tab-name">${escapeHtml(tabName)}</span>
     ${modeToggleHtml}
     <button class="tab-close"><svg viewBox="0 0 12 12"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.5" fill="none"/></svg></button>`;
@@ -3884,12 +3892,16 @@ async function createChatTerminal(project, options = {}) {
   // Create tab
   const tabsContainer = document.getElementById('terminals-tabs');
   const tab = document.createElement('div');
-  tab.className = 'terminal-tab status-ready chat-mode';
+  const mainProjectPath = parentProjectId ? projectsState.get().projects.find(p => p.id === parentProjectId)?.path : null;
+  const isWorktreeChatTab = !!(mainProjectPath && project.path !== mainProjectPath);
+  tab.className = `terminal-tab status-ready chat-mode${isWorktreeChatTab ? ' worktree-tab' : ''}`;
   tab.dataset.id = id;
   tab.tabIndex = 0;
   tab.setAttribute('role', 'tab');
+  const worktreeIconHtmlChat = isWorktreeChatTab ? `<span class="tab-worktree-icon" title="Worktree"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="4" cy="4" r="1.5"/><circle cx="12" cy="4" r="1.5"/><circle cx="4" cy="12" r="1.5"/><path d="M4 5.5v5M5.5 4h5M12 5.5v2.5a2 2 0 01-2 2H7"/></svg></span>` : '';
   tab.innerHTML = `
     <span class="status-dot"></span>
+    ${worktreeIconHtmlChat}
     <span class="tab-name">${escapeHtml(tabName)}</span>
     <button class="tab-mode-toggle" title="${escapeHtml(t('chat.switchToTerminal'))}">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V8h16v12zm-2-1h-6v-2h6v2zM7.5 17l-1.41-1.41L8.67 13l-2.59-2.59L7.5 9l4 4-4 4z"/></svg>

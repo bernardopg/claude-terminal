@@ -79,12 +79,20 @@ echo ""
 
 if [ -d "$INSTALL_DIR/.git" ]; then
   # Pull latest source first
-  echo -e "  ${DIM}Pulling latest changes...${NC}"
+  echo -e "  ${DIM}Fetching latest release...${NC}"
   cd "$INSTALL_DIR"
   git sparse-checkout set cloud remote-ui 2>/dev/null
-  git pull --quiet 2>/dev/null || true
+  git fetch --unshallow --quiet 2>/dev/null || true
+  git fetch origin --tags --quiet 2>/dev/null || true
+  LATEST_TAG=$(git tag -l "v*" | sort -V | tail -1)
+  if [ -n "$LATEST_TAG" ]; then
+    git checkout "$LATEST_TAG" --quiet 2>/dev/null || true
+    echo -e "  ${GREEN}✓ Source updated to ${BOLD}$LATEST_TAG${NC}"
+  else
+    git pull --quiet 2>/dev/null || true
+    echo -e "  ${GREEN}✓ Source updated${NC}"
+  fi
   cd cloud
-  echo -e "  ${GREEN}✓ Source updated${NC}"
   echo ""
 
   # Detect if this is a fully configured install (has .env = setup was completed)
@@ -241,12 +249,20 @@ else
   SKIP_CONFIGURED=false
 
   echo -e "  ${CYAN}Cloning cloud server...${NC}"
-  git clone --depth 1 --filter=blob:none --sparse \
+  git clone --filter=blob:none --sparse \
     https://github.com/Sterll/claude-terminal.git "$INSTALL_DIR" 2>/dev/null
   cd "$INSTALL_DIR" && git sparse-checkout set cloud remote-ui 2>/dev/null
-  cd cloud
 
-  echo -e "  ${GREEN}✓ Source ready${NC}"
+  # Checkout latest release tag
+  git fetch origin --tags --quiet 2>/dev/null || true
+  LATEST_TAG=$(git tag -l "v*" | sort -V | tail -1)
+  if [ -n "$LATEST_TAG" ]; then
+    git checkout "$LATEST_TAG" --quiet 2>/dev/null || true
+    echo -e "  ${GREEN}✓ Source ready at ${BOLD}$LATEST_TAG${NC}"
+  else
+    echo -e "  ${GREEN}✓ Source ready${NC}"
+  fi
+  cd cloud
   echo ""
 fi
 

@@ -197,6 +197,99 @@ export function createCloudRouter(relay?: RelayServer): Router {
     }
   });
 
+  // Clone a GitHub repo into a project (faster than ZIP upload)
+  router.post('/projects/clone', async (req: AuthRequest, res: Response) => {
+    try {
+      const { name, cloneUrl } = req.body;
+      if (!name || !cloneUrl) {
+        res.status(400).json({ error: 'Missing name or cloneUrl' });
+        return;
+      }
+      projectManager.validateProjectName(name);
+      await projectManager.checkProjectLimit(req.userName!);
+
+      const projectPath = await store.createProjectDir(req.userName!, name);
+      const { execFile } = require('child_process');
+      const { promisify } = require('util');
+      const execFileAsync = promisify(execFile);
+
+      // Clone into a tmp dir then move contents so folder name = project name
+      const tmpDest = projectPath + '__clone_tmp';
+      try {
+        await execFileAsync('git', ['clone', '--depth=1', cloneUrl, tmpDest], { timeout: 5 * 60 * 1000 });
+        const entries = await fs.promises.readdir(tmpDest);
+        for (const entry of entries) {
+          await fs.promises.rename(path.join(tmpDest, entry), path.join(projectPath, entry));
+        }
+      } catch (err: any) {
+        await store.deleteProjectDir(req.userName!, name);
+        throw new Error(`Clone failed: ${err.message}`);
+      } finally {
+        await fs.promises.rm(tmpDest, { recursive: true, force: true }).catch(() => {});
+      }
+
+      // Register in user.json
+      const user = await store.getUser(req.userName!);
+      if (user) {
+        const existing = user.projects.findIndex((p: any) => p.name === name);
+        const entry = { name, createdAt: Date.now(), lastActivity: null };
+        if (existing >= 0) user.projects[existing] = entry;
+        else user.projects.push(entry);
+        await store.saveUser(req.userName!, user);
+      }
+
+      res.status(201).json({ name, path: projectPath });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // Apply a git patch + untracked files sent as multipart form
+  const patchUpload = multer({
+    dest: path.join(os.tmpdir(), 'ct-cloud-patches'),
+    limits: { fileSize: 50 * 1024 * 1024 },
+  });
+  router.post('/projects/:name/patch', patchUpload.fields([
+    { name: 'patch', maxCount: 1 },
+    { name: 'untracked', maxCount: 500 },
+  ]), async (req: AuthRequest, res: Response) => {
+    try {
+      const name = req.params.name as string;
+      const projectPath = store.getProjectPath(req.userName!, name);
+      const files = req.files as Record<string, Express.Multer.File[]>;
+
+      // Apply git patch if present
+      if (files?.patch?.[0]) {
+        const patchFile = files.patch[0].path;
+        const { execFile } = require('child_process');
+        const { promisify } = require('util');
+        const execFileAsync = promisify(execFile);
+        try {
+          await execFileAsync('git', ['apply', '--whitespace=nowarn', patchFile], { cwd: projectPath, timeout: 30000 });
+        } catch (err: any) {
+          // Non-fatal: patch may fail if already applied or no changes
+          console.warn(`[Cloud] git apply warning for ${name}: ${err.message}`);
+        } finally {
+          await fs.promises.unlink(patchFile).catch(() => {});
+        }
+      }
+
+      // Write untracked files
+      if (files?.untracked) {
+        for (const file of files.untracked) {
+          const dest = path.join(projectPath, file.originalname);
+          await fs.promises.mkdir(path.dirname(dest), { recursive: true });
+          await fs.promises.copyFile(file.path, dest);
+          await fs.promises.unlink(file.path).catch(() => {});
+        }
+      }
+
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   router.post('/projects', upload.single('zip'), async (req: AuthRequest, res: Response) => {
     try {
       const name = req.body?.name;

@@ -46,9 +46,10 @@ function ensureMarkedConfig() {
       },
       table({ header, rows }) {
         const safeAlign = (a) => ['left', 'center', 'right'].includes(a) ? a : 'left';
-        const headerHtml = header.map(h => `<th style="text-align:${safeAlign(h.align)}">${escapeHtml(typeof h.text === 'string' ? h.text : String(h.text || ''))}</th>`).join('');
+        const parseCell = (text) => marked.parseInline(typeof text === 'string' ? text : String(text || ''));
+        const headerHtml = header.map(h => `<th style="text-align:${safeAlign(h.align)}">${parseCell(h.text)}</th>`).join('');
         const rowsHtml = rows.map(row =>
-          `<tr>${row.map(cell => `<td style="text-align:${safeAlign(cell.align)}">${escapeHtml(typeof cell.text === 'string' ? cell.text : String(cell.text || ''))}</td>`).join('')}</tr>`
+          `<tr>${row.map(cell => `<td style="text-align:${safeAlign(cell.align)}">${parseCell(cell.text)}</td>`).join('')}</tr>`
         ).join('');
         return `<div class="chat-table-wrapper"><table class="chat-table"><thead><tr>${headerHtml}</tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
       },
@@ -58,6 +59,10 @@ function ensureMarkedConfig() {
         const isSafe = safePrefixes.some(p => raw.startsWith(p));
         const safeHref = isSafe ? escapeHtml(raw) : '#';
         return `<a href="${safeHref}" class="chat-link" target="_blank" rel="noopener noreferrer">${escapeHtml(typeof text === 'string' ? text : String(text || ''))}</a>`;
+      },
+      paragraph({ text }) {
+        // Strip trailing <br> added by breaks:true before block elements (lists, headings...)
+        return `<p>${text.replace(/(<br\s*\/?>)+\s*$/, '')}</p>\n`;
       }
     },
     breaks: true,

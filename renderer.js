@@ -637,13 +637,13 @@ function refreshDashboardAsync(projectId) {
   }
 }
 
-async function gitPull(projectId) {
+async function gitPull(projectId, overridePath) {
   const project = getProject(projectId);
   if (!project) return;
   localState.gitOperations.set(projectId, { ...localState.gitOperations.get(projectId), pulling: true });
   ProjectList.render();
   try {
-    const result = await api.git.pull({ projectPath: project.path });
+    const result = await api.git.pull({ projectPath: overridePath || project.path });
 
     // Handle merge conflicts
     if (result.hasConflicts) {
@@ -703,13 +703,13 @@ async function gitPull(projectId) {
   }
 }
 
-async function gitPush(projectId) {
+async function gitPush(projectId, overridePath) {
   const project = getProject(projectId);
   if (!project) return;
   localState.gitOperations.set(projectId, { ...localState.gitOperations.get(projectId), pushing: true });
   ProjectList.render();
   try {
-    const result = await api.git.push({ projectPath: project.path });
+    const result = await api.git.push({ projectPath: overridePath || project.path });
     localState.gitOperations.set(projectId, { ...localState.gitOperations.get(projectId), pushing: false, lastResult: result });
     ProjectList.render();
 
@@ -1489,7 +1489,17 @@ async function cloudUploadProject(projectId) {
   ProjectList.render();
 
   const projectName = project.name || path.basename(project.path);
-  _activeUploadToast = showToast({ type: 'info', title: t('cloud.uploadTitle'), message: t('cloud.uploadPhaseScanning'), duration: 0 });
+
+  // Check if project has a GitHub remote — use git clone if available (faster)
+  let useGitClone = false;
+  if (api.cloud.checkGitRemote) {
+    try {
+      const { hasGitHub } = await api.cloud.checkGitRemote({ projectPath: project.path });
+      useGitClone = hasGitHub;
+    } catch (_) {}
+  }
+
+  _activeUploadToast = showToast({ type: 'info', title: t('cloud.uploadTitle'), message: useGitClone ? t('cloud.uploadPhaseCloning') || 'Cloning from GitHub...' : t('cloud.uploadPhaseScanning'), duration: 0 });
 
   // Safety net: auto-close toast after 5m30s if upload hangs
   const _uploadSafetyTimer = setTimeout(() => {
@@ -1497,7 +1507,11 @@ async function cloudUploadProject(projectId) {
   }, 330_000);
 
   try {
-    await api.cloud.uploadProject({ projectName, projectPath: project.path });
+    if (useGitClone) {
+      await api.cloud.uploadProjectGit({ projectName, projectPath: project.path });
+    } else {
+      await api.cloud.uploadProject({ projectName, projectPath: project.path });
+    }
     cloudUploadStatus.set(projectId, { synced: true, lastSync: Date.now() });
     // Register for auto-sync (file watcher)
     api.cloud.registerAutoSync({ projectId, projectPath: project.path }).catch(() => {});
@@ -2071,7 +2085,8 @@ TerminalManager.setCallbacks({
   onRenderProjects: () => ProjectList.render(),
   onCreateTerminal: createTerminalForProject,
   onSwitchTerminal: switchTerminal,
-  onSwitchProject: switchProject
+  onSwitchProject: switchProject,
+  onActiveTerminalChange: handleActiveTerminalChange
 });
 
 // Listen for Ctrl+Arrow forwarded from main process (bypasses Windows Snap)
@@ -3082,13 +3097,61 @@ const branchDropdown = document.getElementById('branch-dropdown');
 const branchDropdownList = document.getElementById('branch-dropdown-list');
 
 let currentFilterProjectId = null;
+let currentFilterWorktreePath = null; // non-null when active tab is a worktree
 let branchCache = { projectId: null, data: null };
+
+// Returns the git working directory: worktree path if active tab is a worktree, else project path
+function getEffectiveGitPath() {
+  return currentFilterWorktreePath || getProject(currentFilterProjectId)?.path;
+}
 
 function hideFilterGitActions() {
   filterGitActions.style.display = 'none';
   branchDropdown.classList.remove('active');
   filterBtnBranch.classList.remove('open');
   currentFilterProjectId = null;
+  currentFilterWorktreePath = null;
+  const worktreeBadge = document.getElementById('worktree-badge');
+  if (worktreeBadge) worktreeBadge.style.display = 'none';
+}
+
+// Returns true if a terminal tab is actually working in a worktree path
+// (path comparison is more reliable than parentProjectId which can be stale)
+function isWorktreeTerminal(termData) {
+  if (!termData || !termData.project) return false;
+  const mainPath = getProject(termData.project.id)?.path;
+  if (!mainPath) return false;
+  // Chat tabs: project.path is overridden to worktree path
+  // Terminal tabs: cwd is set to worktree path
+  const activePath = termData.cwd || termData.project.path;
+  return !!activePath && activePath !== mainPath;
+}
+
+// Called by TerminalManager when the active tab changes
+function handleActiveTerminalChange(id, termData) {
+  const worktreeBadge = document.getElementById('worktree-badge');
+  if (!termData) {
+    currentFilterWorktreePath = null;
+    if (worktreeBadge) worktreeBadge.style.display = 'none';
+    return;
+  }
+  if (isWorktreeTerminal(termData)) {
+    currentFilterWorktreePath = termData.cwd || termData.project?.path || null;
+    if (worktreeBadge) worktreeBadge.style.display = '';
+  } else {
+    currentFilterWorktreePath = null;
+    if (worktreeBadge) worktreeBadge.style.display = 'none';
+  }
+  // Refresh branch name if git buttons are visible
+  if (currentFilterProjectId && filterGitActions.style.display !== 'none') {
+    const gitPath = getEffectiveGitPath();
+    if (gitPath) {
+      branchCache = { projectId: null, data: null };
+      api.git.currentBranch({ projectPath: gitPath })
+        .then(branch => { if (filterBranchName) filterBranchName.textContent = branch || 'main'; })
+        .catch(() => {});
+    }
+  }
 }
 
 async function showFilterGitActions(projectId) {
@@ -3108,6 +3171,16 @@ async function showFilterGitActions(projectId) {
   currentFilterProjectId = projectId;
   filterGitActions.style.display = 'flex';
 
+  // Sync worktree badge with the currently active terminal
+  const activeId = terminalsState.get().activeTerminal;
+  const activeTermData = activeId ? terminalsState.get().terminals.get(activeId) : null;
+  const worktreeBadge = document.getElementById('worktree-badge');
+  if (worktreeBadge) {
+    const isWorktree = activeTermData && activeTermData.project?.id === projectId && isWorktreeTerminal(activeTermData);
+    worktreeBadge.style.display = isWorktree ? '' : 'none';
+    currentFilterWorktreePath = isWorktree ? (activeTermData.cwd || activeTermData.project?.path || null) : null;
+  }
+
   // Reset button states based on this project's git operations
   const gitOps = localState.gitOperations.get(projectId) || {};
   filterBtnPull.classList.toggle('loading', !!gitOps.pulling);
@@ -3115,9 +3188,9 @@ async function showFilterGitActions(projectId) {
   filterBtnPush.classList.toggle('loading', !!gitOps.pushing);
   filterBtnPush.disabled = !!gitOps.pushing;
 
-  // Get current branch
+  // Get current branch (use worktree path if active tab is a worktree)
   try {
-    const branch = await api.git.currentBranch({ projectPath: project.path });
+    const branch = await api.git.currentBranch({ projectPath: getEffectiveGitPath() || project.path });
     filterBranchName.textContent = branch || 'main';
   } catch (e) {
     filterBranchName.textContent = '...';
@@ -3128,9 +3201,10 @@ async function showFilterGitActions(projectId) {
 filterBtnPull.onclick = async () => {
   if (!currentFilterProjectId) return;
   const projectId = currentFilterProjectId;
+  const gitPath = getEffectiveGitPath();
   filterBtnPull.classList.add('loading');
   filterBtnPull.disabled = true;
-  await gitPull(projectId);
+  await gitPull(projectId, gitPath);
   branchCache = { projectId: null, data: null };
   // Only remove loading if we're still on the same project
   if (currentFilterProjectId === projectId) {
@@ -3143,9 +3217,10 @@ filterBtnPull.onclick = async () => {
 filterBtnPush.onclick = async () => {
   if (!currentFilterProjectId) return;
   const projectId = currentFilterProjectId;
+  const gitPath = getEffectiveGitPath();
   filterBtnPush.classList.add('loading');
   filterBtnPush.disabled = true;
-  await gitPush(projectId);
+  await gitPush(projectId, gitPath);
   branchCache = { projectId: null, data: null };
   // Only remove loading if we're still on the same project
   if (currentFilterProjectId === projectId) {
@@ -3192,9 +3267,10 @@ filterBtnBranch.onclick = async (e) => {
         branchesData = branchCache.data.branchesData;
         currentBranch = branchCache.data.currentBranch;
       } else {
+        const gitPath = getEffectiveGitPath() || project.path;
         [branchesData, currentBranch] = await Promise.all([
-          api.git.branches({ projectPath: project.path }),
-          api.git.currentBranch({ projectPath: project.path })
+          api.git.branches({ projectPath: gitPath }),
+          api.git.currentBranch({ projectPath: gitPath })
         ]);
         branchCache = { projectId: currentFilterProjectId, data: { branchesData, currentBranch } };
       }
@@ -3439,6 +3515,7 @@ GitChangesPanel.init({
   showToast,
   showGitToast,
   getCurrentFilterProjectId: () => currentFilterProjectId,
+  getEffectiveGitPath,
   getProject,
   refreshDashboardAsync,
   closeBranchDropdown: () => { branchDropdown.classList.remove('active'); filterBtnBranch.classList.remove('open'); },

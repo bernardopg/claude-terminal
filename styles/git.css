@@ -967,6 +967,21 @@
   color: var(--accent);
 }
 
+/* Worktree badge in branch button */
+.worktree-badge {
+  background: rgba(var(--accent-color-rgb, 217, 119, 6), 0.18);
+  color: var(--accent);
+  border: 1px solid rgba(var(--accent-color-rgb, 217, 119, 6), 0.35);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-left: 2px;
+  flex-shrink: 0;
+}
+
 /* Terminals header relative for dropdown positioning */
 .terminals-header {
   position: relative;

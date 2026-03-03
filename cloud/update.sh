@@ -20,23 +20,32 @@ fi
 
 cd "$INSTALL_DIR"
 
-# Fetch latest changes without merging
-git fetch origin --quiet 2>/dev/null
+# Unshallow if needed (handles old --depth 1 clones), then fetch tags
+git fetch --unshallow --quiet 2>/dev/null || true
+git fetch origin --tags --quiet 2>/dev/null
 
-# Compare local vs remote
+# Get latest semver tag
+LATEST_TAG=$(git tag -l "v*" | sort -V | tail -1)
+
+if [ -z "$LATEST_TAG" ]; then
+  log "ERROR: No release tags found"
+  exit 1
+fi
+
+# Compare current HEAD with the tag commit
 LOCAL_HASH=$(git rev-parse HEAD 2>/dev/null)
-REMOTE_HASH=$(git rev-parse origin/main 2>/dev/null || git rev-parse origin/master 2>/dev/null)
+TAG_HASH=$(git rev-parse "$LATEST_TAG^{commit}" 2>/dev/null)
 
-if [ "$LOCAL_HASH" = "$REMOTE_HASH" ]; then
-  log "Up to date ($LOCAL_HASH)"
+if [ "$LOCAL_HASH" = "$TAG_HASH" ]; then
+  log "Up to date at $LATEST_TAG"
   exit 0
 fi
 
-log "Update available: $LOCAL_HASH → $REMOTE_HASH"
+log "New release available: $LATEST_TAG"
 
-# Pull changes
-git pull --quiet 2>/dev/null
-log "Pulled latest changes"
+# Checkout the tag
+git checkout "$LATEST_TAG" --quiet 2>/dev/null
+log "Checked out $LATEST_TAG"
 
 # Rebuild and restart container
 cd cloud

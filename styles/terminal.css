@@ -923,6 +923,24 @@
 }
 
 /* Tab name */
+/* Worktree tab icon */
+.tab-worktree-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--accent);
+  opacity: 0.8;
+}
+
+.tab-worktree-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.terminal-tab.worktree-tab {
+  border-top: 2px solid var(--accent);
+}
+
 .tab-name {
   cursor: pointer;
 }

@@ -217,15 +217,19 @@
 .chat-msg-content h1,
 .chat-msg-content h2,
 .chat-msg-content h3,
-.chat-msg-content h4 {
+.chat-msg-content h4,
+.chat-msg-content h5,
+.chat-msg-content h6 {
   margin: 10px 0 4px;
   color: var(--text-primary);
 }
 
-.chat-msg-content h1 { font-size: 18px; }
-.chat-msg-content h2 { font-size: 16px; }
+.chat-msg-content h1 { font-size: 18px; font-weight: 700; }
+.chat-msg-content h2 { font-size: 16px; font-weight: 700; }
 .chat-msg-content h3 { font-size: 14px; font-weight: 600; }
 .chat-msg-content h4 { font-size: 13px; font-weight: 600; }
+.chat-msg-content h5 { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.chat-msg-content h6 { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
 
 .chat-msg-content ul,
 .chat-msg-content ol {
@@ -237,6 +241,10 @@
   margin: 1px 0;
 }
 
+.chat-msg-content li > p {
+  margin: 0;
+}
+
 .chat-msg-content ul br,
 .chat-msg-content ol br {
   display: none;
@@ -245,6 +253,75 @@
 .chat-msg-content strong {
   color: var(--text-primary);
   font-weight: 600;
+}
+
+/* ── Blockquotes ── */
+.chat-msg-content blockquote {
+  margin: 6px 0;
+  padding: 6px 12px;
+  border-left: 3px solid var(--accent);
+  background: rgba(var(--accent-color-rgb, 217, 119, 6), 0.06);
+  border-radius: 0 6px 6px 0;
+  color: var(--text-secondary);
+}
+
+.chat-msg-content blockquote p {
+  margin: 0;
+}
+
+.chat-msg-content blockquote blockquote {
+  margin-top: 6px;
+  border-left-color: var(--border-color);
+  background: transparent;
+}
+
+/* ── Task lists (checkboxes) ── */
+.chat-msg-content .task-list-item {
+  list-style: none;
+  margin-left: -16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.chat-msg-content .task-list-item input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  border: 1.5px solid var(--border-color);
+  border-radius: 3px;
+  margin-top: 2px;
+  cursor: default;
+  background: var(--bg-secondary);
+  transition: all 0.15s;
+  position: relative;
+}
+
+.chat-msg-content .task-list-item input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.chat-msg-content .task-list-item input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 1px;
+  width: 5px;
+  height: 8px;
+  border: 1.5px solid #fff;
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg);
+}
+
+/* ── Horizontal rule ── */
+.chat-msg-content hr {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 10px 0;
 }
 
 .chat-msg-content a.chat-link {

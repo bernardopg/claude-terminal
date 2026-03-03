@@ -265,7 +265,7 @@ export class ProjectManager {
     }
   }
 
-  private validateProjectName(name: string): void {
+  validateProjectName(name: string): void {
     if (!name || !/^[a-zA-Z0-9_.-]+$/.test(name)) {
       throw new Error('Project name must be alphanumeric (a-z, 0-9, _, ., -)');
     }
@@ -274,7 +274,7 @@ export class ProjectManager {
     }
   }
 
-  private async checkProjectLimit(userName: string): Promise<void> {
+  async checkProjectLimit(userName: string): Promise<void> {
     const dirs = await store.listProjectDirs(userName);
     if (dirs.length >= config.maxProjectsPerUser) {
       throw new Error(`Project limit reached (${config.maxProjectsPerUser})`);

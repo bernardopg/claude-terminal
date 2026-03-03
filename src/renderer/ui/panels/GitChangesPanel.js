@@ -13,6 +13,7 @@ const api = window.electron_api;
 let showToast = null;
 let showGitToast = null;
 let getCurrentFilterProjectId = null;
+let getEffectiveGitPath = null;
 let getProject = null;
 let refreshDashboardAsync = null;
 let closeBranchDropdown = null;
@@ -44,6 +45,7 @@ function init(context) {
   showToast = context.showToast;
   showGitToast = context.showGitToast;
   getCurrentFilterProjectId = context.getCurrentFilterProjectId;
+  getEffectiveGitPath = context.getEffectiveGitPath || null;
   getProject = context.getProject;
   refreshDashboardAsync = context.refreshDashboardAsync;
   closeBranchDropdown = context.closeBranchDropdown;
@@ -254,15 +256,17 @@ async function loadGitChanges() {
   if (!project) return;
 
   gitChangesState.projectId = projectId;
-  gitChangesState.projectPath = project.path;
+  // Use worktree path if the active tab is a worktree, otherwise use the base project path
+  const effectivePath = (getEffectiveGitPath && getEffectiveGitPath()) || project.path;
+  gitChangesState.projectPath = effectivePath;
   gitChangesProject.textContent = `- ${project.name}`;
 
   gitChangesList.innerHTML = `<div class="git-changes-loading">${t('gitChanges.loading')}</div>`;
 
   try {
     const [status, gitInfo] = await Promise.all([
-      api.git.statusDetailed({ projectPath: project.path }),
-      api.git.infoFull(project.path).catch(() => null)
+      api.git.statusDetailed({ projectPath: effectivePath }),
+      api.git.infoFull(effectivePath).catch(() => null)
     ]);
 
     if (!status.success) {
