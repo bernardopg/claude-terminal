@@ -38,6 +38,10 @@ async function initialize() {
   // Initialize state
   await state.initializeState();
 
+  // Expose states on window for workflow field renderers
+  window._projectsState = require('./state/projects.state').projectsState;
+  window._skillsAgentsState = require('./state').skillsAgentsState;
+
   // Initialize i18n with saved language or auto-detect
   const savedLanguage = state.getSetting('language');
   i18n.initI18n(savedLanguage);

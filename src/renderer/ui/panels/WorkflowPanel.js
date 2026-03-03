@@ -85,7 +85,10 @@ async function refreshData() {
       api?.list(),
       api?.getRecentRuns(50),
     ]);
-    if (wfRes?.success) state.workflows = wfRes.workflows;
+    if (wfRes?.success) {
+      state.workflows = wfRes.workflows;
+      window._workflowsListCache = wfRes.workflows; // for trigger-config & subworkflow-picker field renderers
+    }
     if (runRes?.success) state.runs = runRes.runs;
   } catch (e) {
     console.error('[WorkflowPanel] Failed to load data:', e);
@@ -958,11 +961,11 @@ function formatStepOutput(output) {
 /* ─── Node Graph Editor ─────────────────────────────────────────────────── */
 
 // Cache for DB connections (loaded from disk via IPC, independent of Database panel state)
-let _dbConnectionsCache = null;
+window._dbConnectionsCache = null;
 async function loadDbConnections() {
   try {
-    _dbConnectionsCache = await window.electron_api.database.loadConnections() || [];
-  } catch { _dbConnectionsCache = []; }
+    window._dbConnectionsCache = await window.electron_api.database.loadConnections() || [];
+  } catch { window._dbConnectionsCache = []; }
 }
 
 // Node type → color mapping for diagram cards
@@ -1472,7 +1475,7 @@ function openEditor(workflowId = null) {
           <span class="wf-chip wf-chip--${typeInfo.color}">${typeInfo.icon}</span>
           <div class="wf-props-header-text">
             <div class="wf-props-title">${typeInfo.label}</div>
-            <div class="wf-props-subtitle">${typeInfo.desc}</div>
+            <div class="wf-props-subtitle">${t(typeInfo.desc)}</div>
           </div>
           <span class="wf-props-badge wf-props-badge--${typeInfo.color}">${nodeType.toUpperCase()}</span>
         </div>
