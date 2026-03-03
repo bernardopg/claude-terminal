@@ -506,7 +506,7 @@ function renderStashSection() {
 
   let html = `<div class="git-changes-stash-header">
     <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13"><path d="M20 6h-2.18c.07-.44.18-.88.18-1.34C18 2.99 16.99 2 15.66 2c-.87 0-1.54.5-2.12 1.09L12 4.62l-1.55-1.53C9.88 2.5 9.21 2 8.34 2 7.01 2 6 2.99 6 4.34c0 .46.11.9.18 1.34H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-5-2c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zM9 4.34c0-.55.45-1 1-1s1 .45 1 1-.45 1-1 1-1-.45-1-1z"/></svg>
-    <span>${t('gitTab.stashes')}</span>
+    <span>${t('ui.stashes')}</span>
     <span class="git-changes-stash-count">${stashes.length}</span>
     <button class="git-changes-stash-save-btn" title="${t('gitTab.stashSave')}" ${saveDisabled ? 'disabled' : ''}>
       <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
