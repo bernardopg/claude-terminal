@@ -594,6 +594,31 @@ function _handleClientMessage(ws, token, raw) {
         break;
       }
 
+      case 'webhook:trigger': {
+        const { workflowId, payload, triggeredAt } = data || {};
+        if (!workflowId || typeof workflowId !== 'string') {
+          console.warn('[Remote] webhook:trigger: missing or invalid workflowId');
+          break;
+        }
+        try {
+          const workflowService = require('./WorkflowService');
+          console.log(`[Remote] webhook:trigger workflowId=${workflowId}`);
+          workflowService.trigger(workflowId, {
+            source: 'webhook',
+            triggerData: {
+              source: 'webhook',
+              payload: payload || {},
+              triggeredAt: triggeredAt || new Date().toISOString(),
+            },
+          }).catch(err => {
+            console.error(`[Remote] webhook:trigger failed for ${workflowId}:`, err.message);
+          });
+        } catch (e) {
+          console.warn('[Remote] webhook:trigger: WorkflowService not available:', e.message);
+        }
+        break;
+      }
+
       default:
         break;
     }
