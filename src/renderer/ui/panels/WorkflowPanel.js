@@ -48,6 +48,8 @@ const state = {
 const _agentLogs = new Map(); // stepId → [{ type, text, ts }]
 const MAX_LOG_ENTRIES = 50;
 
+let _activeEditorWorkflowId = null; // tracks current open editor's workflowId
+
 let _panelInitialized = false;
 
 function init(context) {
@@ -198,8 +200,8 @@ function registerLiveListeners() {
     const graphService = getGraphService();
     if (graphService) {
       const editorEl = document.querySelector('.wf-editor');
-      if (workflowId && workflows) {
-        const updated = workflows.find(w => w.id === workflowId);
+      if (_activeEditorWorkflowId && workflows) {
+        const updated = workflows.find(w => w.id === _activeEditorWorkflowId);
         if (updated) graphService.loadFromWorkflow(updated);
       }
     }
@@ -487,6 +489,7 @@ function renderContent() {
   state.viewingRunId = null;
   const el = document.getElementById('wf-content');
   if (!el) return;
+  _activeEditorWorkflowId = null;
   // Update badge counts
   const panel = document.getElementById('workflow-panel');
   if (panel) {
@@ -1031,6 +1034,7 @@ function _renderWfDiagramBlock(block, text) {
 }
 
 function openEditor(workflowId = null) {
+  _activeEditorWorkflowId = workflowId;
   const wf = workflowId ? state.workflows.find(w => w.id === workflowId) : null;
   const editorDraft = {
     name: wf?.name || '',
@@ -1413,6 +1417,8 @@ function openEditor(workflowId = null) {
     const nodeType = node.type.replace('workflow/', '');
     const typeInfo = findStepType(nodeType) || { label: nodeType, color: 'muted', icon: '' };
     const props = node.properties || {};
+    // Inject current workflowId so trigger-config field can build the webhook URL
+    props._workflowId = workflowId || '';
 
     let fieldsHtml = '';
 
@@ -2048,6 +2054,7 @@ function openEditor(workflowId = null) {
       await refreshData();
       if (!workflowId && res.id) {
         workflowId = res.id;
+        _activeEditorWorkflowId = res.id;
       }
       return true;
     }

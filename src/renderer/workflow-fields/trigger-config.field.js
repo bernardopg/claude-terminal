@@ -37,7 +37,15 @@ function _buildWebhookUrl(workflowId) {
 }
 
 function _renderWebhookSection(workflowId, esc) {
+  const settings = _getCloudSettings();
+  const cloudUrl = (settings.cloudServerUrl || '').replace(/\/$/, '');
   const webhookUrl = _buildWebhookUrl(workflowId);
+  let noCloudHtml = '';
+  if (!cloudUrl) {
+    noCloudHtml = `<span class="wf-field-hint wf-webhook-no-cloud">Relais cloud non configuré — connectez-vous dans l'onglet Cloud</span>`;
+  } else if (!workflowId) {
+    noCloudHtml = `<span class="wf-field-hint wf-webhook-no-cloud">Sauvegardez le workflow pour obtenir l'URL</span>`;
+  }
   return `<div class="wf-step-edit-field">
   <label class="wf-step-edit-label">Webhook URL</label>
   <span class="wf-field-hint">POST avec Authorization: Bearer &lt;votre-api-key&gt;</span>
@@ -48,7 +56,7 @@ function _renderWebhookSection(workflowId, esc) {
         <button class="wf-webhook-copy-btn" type="button" data-url="${esc(webhookUrl)}">Copier</button>
       </div>
       <span class="wf-field-hint" style="margin-top:6px">Le body de la requête est disponible via <code>$trigger.payload</code></span>`
-    : `<span class="wf-field-hint wf-webhook-no-cloud">Relais cloud non configuré — connectez-vous dans Paramètres &rarr; Cloud</span>`
+    : noCloudHtml
   }
 </div>`;
 }
