@@ -87,9 +87,29 @@ function saveWindowState(win) {
       // File doesn't exist or is corrupt — start fresh
     }
     current.windowState = state;
+    const data = JSON.stringify(current, null, 2);
     const tmpFile = settingsFile + '.tmp';
-    fs.writeFileSync(tmpFile, JSON.stringify(current, null, 2), 'utf8');
-    fs.renameSync(tmpFile, settingsFile);
+    fs.writeFileSync(tmpFile, data, 'utf8');
+    // On Windows, rename can fail with EPERM if antivirus/indexer locks the file — retry then fallback
+    let renamed = false;
+    for (let i = 0; i < 3 && !renamed; i++) {
+      try {
+        fs.renameSync(tmpFile, settingsFile);
+        renamed = true;
+      } catch (renameErr) {
+        if (i < 2 && renameErr.code === 'EPERM') {
+          // Synchronous 50ms delay — works cross-platform without spawning a process
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+        } else if (renameErr.code === 'EPERM') {
+          // Final fallback: write directly (less atomic but avoids data loss)
+          fs.writeFileSync(settingsFile, data, 'utf8');
+          try { fs.unlinkSync(tmpFile); } catch (_) {}
+          renamed = true;
+        } else {
+          throw renameErr;
+        }
+      }
+    }
   } catch (e) {
     console.error('[MainWindow] Failed to save window state:', e);
   }
