@@ -590,6 +590,10 @@ function handleMessage(msg) {
       _showCloudPopup(false);
       _showHeadlessBanner(false);
       _cleanupHeadlessSession();
+      // Clear cloud/headless sessions — desktop will resend its own via request:init
+      state.sessions = {};
+      state.selectedSessionId = null;
+      renderSessionBar(); renderChatMessages();
       // Ask the desktop to send init data (projects, sessions, time)
       wsSend('request:init', {});
       break;
