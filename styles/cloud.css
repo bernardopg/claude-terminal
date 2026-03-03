@@ -821,3 +821,43 @@
   accent-color: var(--accent);
   margin: 0;
 }
+
+/* ── Upload Progress ── */
+.cp-upload-progress {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+
+.cp-upload-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: var(--accent);
+  font-size: var(--font-sm);
+  font-weight: 600;
+}
+
+.cp-upload-bar-wrap {
+  width: 100%;
+  height: 6px;
+  background: var(--bg-hover);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.cp-upload-bar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.cp-upload-details {
+  margin-top: 8px;
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+}

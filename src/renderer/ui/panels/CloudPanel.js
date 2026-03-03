@@ -189,6 +189,21 @@ function buildHtml(settings) {
           <!-- Right Column -->
           <div class="cp-column">
 
+            <!-- Upload Progress (hidden by default) -->
+            <div class="cp-upload-progress" id="cp-upload-progress" style="display:none">
+              <div class="cp-upload-header">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/>
+                  <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+                </svg>
+                <span class="cp-upload-title" id="cp-upload-title">${t('cloud.uploadTitle')}</span>
+              </div>
+              <div class="cp-upload-bar-wrap">
+                <div class="cp-upload-bar" id="cp-upload-bar" style="width:0%"></div>
+              </div>
+              <div class="cp-upload-details" id="cp-upload-details"></div>
+            </div>
+
             <!-- Sessions -->
             <div class="cp-section">
               <div class="cp-section-header">
@@ -510,6 +525,40 @@ function setupHandlers(context) {
       sessionsRefresh.classList.add('spinning');
       await _loadCloudSessions();
       setTimeout(() => sessionsRefresh.classList.remove('spinning'), 400);
+    });
+  }
+
+  // ── Upload progress ──
+  if (api.cloud?.onUploadProgress) {
+    api.cloud.onUploadProgress((progress) => {
+      const wrap = document.getElementById('cp-upload-progress');
+      const bar = document.getElementById('cp-upload-bar');
+      const details = document.getElementById('cp-upload-details');
+      if (!wrap || !bar || !details) return;
+
+      if (progress.phase === 'done') {
+        wrap.style.display = 'none';
+        bar.style.width = '0%';
+        details.textContent = '';
+        return;
+      }
+
+      wrap.style.display = '';
+      const pct = progress.percent || 0;
+      bar.style.width = `${pct}%`;
+
+      const phases = {
+        scanning: t('cloud.uploadPhaseScanning'),
+        compressing: t('cloud.uploadPhaseCompressing'),
+        uploading: t('cloud.uploadPhaseUploading'),
+      };
+      const label = phases[progress.phase] || '';
+
+      if (progress.phase === 'uploading' && progress.uploadedMB != null && progress.totalMB != null) {
+        details.textContent = `${label} ${progress.uploadedMB} / ${progress.totalMB} MB (${pct}%)`;
+      } else {
+        details.textContent = `${label} (${pct}%)`;
+      }
     });
   }
 
