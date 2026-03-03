@@ -2,6 +2,24 @@
 
 All notable changes to Claude Terminal are documented in this file.
 
+## [1.0.2] - 2026-03-03
+
+### Added
+- **Cloud Upload Progress**: real-time progress bar with percentage tracking in cloud panel and toast notifications
+
+### Changed
+- Cloud upload optimized with store mode, real progress tracking, and dynamic timeout
+- Workflow node descriptions and database config field labels now fully translated
+
+### Fixed
+- Cloud server file size limit increased from 100MB to 5GB
+- Cloud upload Content-Length header set correctly for multipart uploads
+- Workflow keyboard shortcuts no longer fire when canvas is hidden
+- Workflow field renderers now access required global variables
+- Project-type tabs excluded from session restore to prevent orphan tabs
+- Copy-paste now works in project-type read-only consoles (FiveM, Minecraft, etc.)
+- Window state save no longer fails when antivirus locks the settings file on Windows
+
 ## [1.0.0] - 2026-03-02
 
 ### Added
