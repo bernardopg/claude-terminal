@@ -1846,10 +1846,11 @@ function createTypeConsole(project, projectIndex) {
   setTimeout(() => fitAddon.fit(), 100);
   setActiveTerminal(id);
 
-  // Prevent double-paste issue
+  // Clipboard handlers + key handler for copy/paste
   setupPasteHandler(consoleView, projectIndex, `${typeId}-input`);
   setupClipboardShortcuts(consoleView, terminal, projectIndex, `${typeId}-input`);
   setupRightClickHandler(consoleView, terminal, projectIndex, `${typeId}-input`);
+  terminal.attachCustomKeyEventHandler(createTerminalKeyHandler(terminal, projectIndex, `${typeId}-input`));
 
   // Write existing logs
   const existingLogs = config.getExistingLogs(projectIndex);
