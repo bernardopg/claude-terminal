@@ -1167,24 +1167,98 @@
   font-size: 14px;
 }
 
-.quick-picker-footer {
-  display: flex;
-  gap: 20px;
-  padding: 10px 20px;
-  border-top: 1px solid var(--border-color);
-  background: var(--bg-tertiary);
-  font-size: 12px;
+/* Section headers */
+.quick-picker-section-header {
+  padding: 8px 20px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--text-muted);
+  border-top: 1px solid var(--border-color);
 }
 
-.quick-picker-footer kbd {
+.quick-picker-section-header:first-child {
+  border-top: none;
+}
+
+/* Loading row */
+.quick-picker-loading {
+  padding: 10px 20px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Inline badge (running, current, count) */
+.quick-picker-badge {
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.quick-picker-badge-running {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--success);
+}
+
+.quick-picker-badge-current {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.quick-picker-badge-count {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+/* Keyboard hint for commands */
+.quick-picker-hint {
+  flex-shrink: 0;
   display: inline-block;
   padding: 2px 6px;
   background: var(--bg-hover);
   border-radius: 3px;
   font-family: 'Cascadia Code', monospace;
   font-size: 11px;
-  margin-right: 4px;
+  color: var(--text-muted);
+}
+
+.quick-picker-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.quick-picker-footer-modes {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.quick-picker-footer-modes span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.quick-picker-footer kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  background: var(--bg-hover);
+  border-radius: 3px;
+  font-family: 'Cascadia Code', monospace;
+  font-size: 10px;
 }
 
 /* Toast Notifications */

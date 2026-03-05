@@ -346,12 +346,17 @@ function registerAllShortcuts() {
   }, { global: true });
 
   registerShortcut(getShortcutKey('openQuickPicker'), () => {
-    ctx.openQuickPicker(document.body, (project) => {
-      const projectIndex = ctx.getProjectIndex(project.id);
-      ctx.setSelectedProjectFilter(projectIndex);
-      ctx.ProjectList.render();
-      ctx.TerminalManager.filterByProject(projectIndex);
-      ctx.createTerminalForProject(project);
+    const { projects, selectedProjectFilter } = ctx.projectsState.get();
+    const currentProject = selectedProjectFilter !== null ? projects[selectedProjectFilter] : null;
+    ctx.openQuickPicker(document.body, {
+      currentProject,
+      onSelectProject: (project) => {
+        const projectIndex = ctx.getProjectIndex(project.id);
+        ctx.setSelectedProjectFilter(projectIndex);
+        ctx.ProjectList.render();
+        ctx.TerminalManager.filterByProject(projectIndex);
+        ctx.createTerminalForProject(project);
+      },
     });
   }, { global: true });
 

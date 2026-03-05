@@ -1,39 +1,471 @@
 /**
- * Quick Picker Feature
- * Handles the quick project picker overlay
+ * Command Palette (Extended Quick Picker)
+ * Unified search across projects, commands, sessions, git branches, MCP servers
  */
 
 const { escapeHtml } = require('../utils/dom');
-const { projectsState } = require('../state');
+const { projectsState, mcpState } = require('../state');
 const { t } = require('../i18n');
 const registry = require('../../project-types/registry');
 
+// ── Icons ──────────────────────────────────────────────────────────────────
+const ICON = {
+  project: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z"/></svg>',
+  command: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M15 3l2.3 2.3-2.89 2.87 1.42 1.42L18.7 6.7 21 9V3h-6zM3 9l2.3-2.3 2.87 2.89 1.42-1.42L6.7 5.3 9 3H3v6zm6 12l-2.3-2.3 2.89-2.87-1.42-1.42L5.3 17.3 3 15v6h6zm12-6l-2.3 2.3-2.87-2.89-1.42 1.42 2.89 2.87L15 21h6v-6z"/></svg>',
+  session: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>',
+  branch: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 12c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zM7 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6.5V18c0 1.1.9 2 2 2s2-.9 2-2v-4c0-.55-.22-1.05-.59-1.41A9.02 9.02 0 0 0 7 9.5zm10 0V10c-1.66 0-3-1.34-3-3H9c0 2.42-1.72 4.44-4 4.9V13a9 9 0 0 1 5.5-1.73V16c0 1.1.9 2 2 2s2-.9 2-2v-2.27c1.53.26 3 1.14 3 2.27h2c0-2.9-2.41-5.24-5.5-5.73V9.5h.5z"/></svg>',
+  mcp: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5C13 2.12 11.88 1 10.5 1S8 2.12 8 3.5V5H4c-1.1 0-1.99.9-1.99 2v3.8H3.5c1.49 0 2.7 1.21 2.7 2.7s-1.21 2.7-2.7 2.7H2V20c0 1.1.9 2 2 2h3.8v-1.5c0-1.49 1.21-2.7 2.7-2.7 1.49 0 2.7 1.21 2.7 2.7V22H17c1.1 0 2-.9 2-2v-4h1.5c1.38 0 2.5-1.12 2.5-2.5S21.88 11 20.5 11z"/></svg>',
+  action: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>',
+  settings: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.03-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>',
+  terminal: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H4V8h16v11zM6 10h2v2H6zm0 4h8v2H6zm4-4h8v2h-8z"/></svg>',
+  git: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 12c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zM7 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm3.17-7.5C10.5 10.1 11 11.5 12 12.5V17c0 1.1.9 2 2 2s2-.9 2-2v-4.5c1.03-.97 1.5-2.35 1.5-3.5H15c0 1.66-1.34 3-3 3S9 10.66 9 9H7c0 1.15.47 2.53 1.5 3.5H6.17A8.956 8.956 0 0 1 7 9.5V6.07A8.97 8.97 0 0 0 7 6V5.5H5V9c0 .66.07 1.3.17 1.93l-1.11.85a.5.5 0 0 0-.12.61l1 1.73c.12.21.37.28.58.2l1.3-.52c.43.33.9.61 1.41.82l.19 1.37c.04.24.24.41.47.41h2c.23 0 .43-.17.47-.41l.19-1.37c.51-.21.98-.49 1.41-.82l1.3.52c.22.08.47 0 .58-.2l1-1.73a.5.5 0 0 0-.12-.61l-1.11-.85c.1-.63.17-1.27.17-1.93V5.5h-2V6c0 .17-.02.33-.03.5H10.17z"/></svg>',
+  newProject: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-1 8h-3v3h-2v-3h-3v-2h3v-3h2v3h3v2z"/></svg>',
+  dashboard: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>',
+  memory: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M15 9H9v6h6V9zm-2 4h-2v-2h2v2zm8-2V9h-2V7c0-1.1-.9-2-2-2h-2V3h-2v2h-2V3H9v2H7c-1.1 0-2 .9-2 2v2H3v2h2v2H3v2h2v2c0 1.1.9 2 2 2h2v2h2v-2h2v2h2v-2h2c1.1 0 2-.9 2-2v-2h2v-2h-2v-2h2zm-4 6H7V7h10v10z"/></svg>',
+  empty: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>',
+};
+
+// ── Prefix → mode map ─────────────────────────────────────────────────────
+const PREFIX_MAP = {
+  '>': 'commands',
+  '@': 'branches',
+  '#': 'sessions',
+  '~': 'mcp',
+  '!': 'actions',
+};
+
+// ── Internal state ────────────────────────────────────────────────────────
 const quickPickerState = {
   isOpen: false,
   selectedIndex: 0,
-  filteredProjects: [],
-  searchQuery: ''
+  flatItems: [],
+  query: '',
+  mode: 'all',
+  asyncData: {
+    branches: null,      // null = not loaded, string[] = loaded
+    currentBranch: null,
+    sessions: null,
+    branchesLoading: false,
+    sessionsLoading: false,
+  },
 };
 
+// ── Async loaders ─────────────────────────────────────────────────────────
+async function loadBranches(projectPath, onDone) {
+  if (!projectPath || quickPickerState.asyncData.branchesLoading) return;
+  quickPickerState.asyncData.branchesLoading = true;
+  try {
+    const [result, current] = await Promise.all([
+      window.electron_api.git.branches({ projectPath }),
+      window.electron_api.git.currentBranch({ projectPath }),
+    ]);
+    const local = result?.local || [];
+    const remote = (result?.remote || []).filter(r => !local.includes(r));
+    quickPickerState.asyncData.branches = [...local, ...remote];
+    quickPickerState.asyncData.currentBranch = current || null;
+  } catch {
+    quickPickerState.asyncData.branches = [];
+    quickPickerState.asyncData.currentBranch = null;
+  }
+  quickPickerState.asyncData.branchesLoading = false;
+  onDone();
+}
+
+async function loadSessions(projectPath, onDone) {
+  if (!projectPath || quickPickerState.asyncData.sessionsLoading) return;
+  quickPickerState.asyncData.sessionsLoading = true;
+  try {
+    const sessions = await window.electron_api.claude.sessions(projectPath);
+    // Sort by date desc, keep top 8
+    const sorted = Array.isArray(sessions)
+      ? sessions.sort((a, b) => new Date(b.modified) - new Date(a.modified)).slice(0, 8)
+      : [];
+    quickPickerState.asyncData.sessions = sorted;
+  } catch {
+    quickPickerState.asyncData.sessions = [];
+  }
+  quickPickerState.asyncData.sessionsLoading = false;
+  onDone();
+}
+
+// ── Built-in commands ─────────────────────────────────────────────────────
+function getBuiltinCommands() {
+  return [
+    {
+      id: 'cmd-settings',
+      label: t('quickPicker.cmd.settings'),
+      hint: 'Ctrl+,',
+      icon: ICON.settings,
+      action: () => document.querySelector('[data-tab="settings"]')?.click(),
+    },
+    {
+      id: 'cmd-new-project',
+      label: t('quickPicker.cmd.newProject'),
+      hint: 'Ctrl+N',
+      icon: ICON.newProject,
+      action: () => document.getElementById('btn-new-project')?.click(),
+    },
+    {
+      id: 'cmd-git',
+      label: t('quickPicker.cmd.openGit'),
+      icon: ICON.git,
+      action: () => document.querySelector('[data-tab="git"]')?.click(),
+    },
+    {
+      id: 'cmd-mcp',
+      label: t('quickPicker.cmd.openMcp'),
+      icon: ICON.mcp,
+      action: () => document.querySelector('[data-tab="mcp"]')?.click(),
+    },
+    {
+      id: 'cmd-skills',
+      label: t('quickPicker.cmd.openSkills'),
+      icon: ICON.action,
+      action: () => document.querySelector('[data-tab="skills"]')?.click(),
+    },
+    {
+      id: 'cmd-agents',
+      label: t('quickPicker.cmd.openAgents'),
+      icon: ICON.session,
+      action: () => document.querySelector('[data-tab="agents"]')?.click(),
+    },
+    {
+      id: 'cmd-dashboard',
+      label: t('quickPicker.cmd.openDashboard'),
+      icon: ICON.dashboard,
+      action: () => document.querySelector('[data-tab="dashboard"]')?.click(),
+    },
+    {
+      id: 'cmd-memory',
+      label: t('quickPicker.cmd.openMemory'),
+      icon: ICON.memory,
+      action: () => document.querySelector('[data-tab="memory"]')?.click(),
+    },
+    {
+      id: 'cmd-new-terminal',
+      label: t('quickPicker.cmd.newTerminal'),
+      hint: 'Ctrl+T',
+      icon: ICON.terminal,
+      action: () => document.querySelector('.new-terminal-btn, [data-action="new-terminal"]')?.click(),
+    },
+  ];
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+function formatRelativeTime(isoDate) {
+  if (!isoDate) return '';
+  const diff = Date.now() - new Date(isoDate).getTime();
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return '<1m';
+  if (min < 60) return `${min}m`;
+  const hrs = Math.floor(min / 60);
+  if (hrs < 24) return `${hrs}h`;
+  return `${Math.floor(hrs / 24)}j`;
+}
+
+function detectMode(value) {
+  const prefix = value?.[0];
+  if (prefix && PREFIX_MAP[prefix]) {
+    return { mode: PREFIX_MAP[prefix], query: value.slice(1).trimStart() };
+  }
+  return { mode: 'all', query: value || '' };
+}
+
+// ── Sections builder ──────────────────────────────────────────────────────
+function buildSections(query, mode, currentProject) {
+  const q = query.toLowerCase();
+  const match = (str) => !q || (str || '').toLowerCase().includes(q);
+  const sections = [];
+
+  // — Projects —
+  if (mode === 'all' || mode === 'projects') {
+    const projects = projectsState.get().projects.filter(p =>
+      match(p.name) || match(p.path)
+    );
+    if (projects.length > 0) {
+      const defaultIcon = ICON.project;
+      sections.push({
+        key: 'projects',
+        label: t('quickPicker.section.projects'),
+        items: projects.map(p => {
+          const typeHandler = registry.get(p.type);
+          const rawIcon = typeHandler?.icon || defaultIcon;
+          const icon = (typeof rawIcon === 'string' && rawIcon.trim().startsWith('<svg') && !/<script|<foreignObject|on\w+\s*=/i.test(rawIcon))
+            ? rawIcon : defaultIcon;
+          return { type: 'project', id: p.id, label: p.name, sublabel: p.path, icon, data: p };
+        }),
+      });
+    }
+  }
+
+  // — Quick Actions (current project) —
+  if ((mode === 'all' || mode === 'actions') && currentProject) {
+    const actions = (currentProject.quickActions || []).filter(a => match(a.label || a.name));
+    if (actions.length > 0) {
+      sections.push({
+        key: 'actions',
+        label: t('quickPicker.section.quickActions'),
+        items: actions.map(a => ({
+          type: 'action',
+          id: `action-${a.label || a.name}`,
+          label: a.label || a.name || '',
+          sublabel: a.command || '',
+          icon: (typeof a.icon === 'string' && a.icon.trim().startsWith('<svg') && !/<script|<foreignObject|on\w+\s*=/i.test(a.icon))
+            ? a.icon : ICON.action,
+          data: { action: a, projectPath: currentProject.path },
+        })),
+      });
+    }
+  }
+
+  // — Commands —
+  if (mode === 'all' || mode === 'commands') {
+    const commands = getBuiltinCommands().filter(c => match(c.label));
+    if (commands.length > 0) {
+      sections.push({
+        key: 'commands',
+        label: t('quickPicker.section.commands'),
+        items: commands.map(c => ({
+          type: 'command',
+          id: c.id,
+          label: c.label,
+          hint: c.hint || '',
+          icon: c.icon,
+          data: c,
+        })),
+      });
+    }
+  }
+
+  // — Git branches (current project, async) —
+  if ((mode === 'all' || mode === 'branches') && currentProject) {
+    const { branches, currentBranch, branchesLoading } = quickPickerState.asyncData;
+    if (branchesLoading) {
+      sections.push({ key: 'branches', label: t('quickPicker.section.branches'), loading: true, items: [] });
+    } else if (branches !== null) {
+      const filtered = branches.filter(b => match(b));
+      if (filtered.length > 0 || mode === 'branches') {
+        sections.push({
+          key: 'branches',
+          label: t('quickPicker.section.branches'),
+          items: filtered.map(b => ({
+            type: 'branch',
+            id: `branch-${b}`,
+            label: b,
+            sublabel: b === currentBranch ? t('quickPicker.branch.current') : '',
+            badge: b === currentBranch ? 'current' : null,
+            icon: ICON.branch,
+            data: { branch: b, projectPath: currentProject.path },
+          })),
+        });
+      }
+    }
+  }
+
+  // — Recent sessions (current project, async) —
+  if ((mode === 'all' || mode === 'sessions') && currentProject) {
+    const { sessions, sessionsLoading } = quickPickerState.asyncData;
+    if (sessionsLoading) {
+      sections.push({ key: 'sessions', label: t('quickPicker.section.sessions'), loading: true, items: [] });
+    } else if (sessions !== null) {
+      const filtered = sessions.filter(s =>
+        match(s.summary) || match(s.firstPrompt) || match(s.sessionId)
+      );
+      if (filtered.length > 0 || mode === 'sessions') {
+        sections.push({
+          key: 'sessions',
+          label: t('quickPicker.section.sessions'),
+          items: filtered.map(s => ({
+            type: 'session',
+            id: `session-${s.sessionId}`,
+            label: s.summary || s.firstPrompt || s.sessionId,
+            sublabel: formatRelativeTime(s.modified),
+            badge: s.messageCount ? String(s.messageCount) : null,
+            icon: ICON.session,
+            data: s,
+          })),
+        });
+      }
+    }
+  }
+
+  // — MCP Servers —
+  if (mode === 'all' || mode === 'mcp') {
+    const { mcps, mcpProcesses } = mcpState.get();
+    const filtered = (mcps || []).filter(m => match(m.name || m.id));
+    if (filtered.length > 0) {
+      sections.push({
+        key: 'mcp',
+        label: t('quickPicker.section.mcp'),
+        items: filtered.map(m => {
+          const proc = (mcpProcesses || {})[m.id];
+          const running = proc?.status === 'running';
+          return {
+            type: 'mcp',
+            id: `mcp-${m.id}`,
+            label: m.name || m.id,
+            sublabel: m.command || '',
+            badge: running ? 'running' : null,
+            icon: ICON.mcp,
+            data: m,
+          };
+        }),
+      });
+    }
+  }
+
+  return sections;
+}
+
+// ── List renderer ─────────────────────────────────────────────────────────
+function renderList(list, handlers, picker, currentProject) {
+  const { mode, query } = detectMode(quickPickerState.query);
+  quickPickerState.mode = mode;
+
+  const sections = buildSections(query, mode, currentProject);
+
+  // Build flat item list for keyboard navigation
+  const flatItems = [];
+  sections.forEach(s => s.items.forEach(item => flatItems.push(item)));
+  quickPickerState.flatItems = flatItems;
+
+  const hasContent = flatItems.length > 0 || sections.some(s => s.loading);
+
+  if (!hasContent) {
+    list.innerHTML = `
+      <div class="quick-picker-empty">
+        ${ICON.empty}
+        <p>${t('quickPicker.noResult')}</p>
+      </div>`;
+    return;
+  }
+
+  list.innerHTML = sections.map(section => {
+    if (section.loading) {
+      return `
+        <div class="quick-picker-section-header">${escapeHtml(section.label)}</div>
+        <div class="quick-picker-loading">${t('quickPicker.loading')}</div>`;
+    }
+    if (section.items.length === 0) return '';
+
+    return `
+      <div class="quick-picker-section-header">${escapeHtml(section.label)}</div>
+      ${section.items.map(item => {
+        const idx = flatItems.indexOf(item);
+        const isSelected = idx === quickPickerState.selectedIndex;
+        return `
+          <div class="quick-picker-item ${isSelected ? 'selected' : ''}" data-flat-index="${idx}">
+            <div class="quick-picker-item-icon">${item.icon}</div>
+            <div class="quick-picker-item-info">
+              <div class="quick-picker-item-name">${escapeHtml(item.label)}</div>
+              ${item.sublabel ? `<div class="quick-picker-item-path">${escapeHtml(item.sublabel)}</div>` : ''}
+            </div>
+            ${item.badge ? `<span class="quick-picker-badge quick-picker-badge-${item.type === 'session' ? 'count' : item.badge}">${escapeHtml(item.badge)}</span>` : ''}
+            ${item.hint ? `<kbd class="quick-picker-hint">${escapeHtml(item.hint)}</kbd>` : ''}
+          </div>`;
+      }).join('')}`;
+  }).join('');
+
+  // Event handlers
+  list.querySelectorAll('.quick-picker-item').forEach(el => {
+    const idx = parseInt(el.dataset.flatIndex, 10);
+    el.onmouseenter = () => {
+      quickPickerState.selectedIndex = idx;
+      list.querySelectorAll('.quick-picker-item').forEach(i =>
+        i.classList.toggle('selected', parseInt(i.dataset.flatIndex, 10) === idx)
+      );
+    };
+    el.onclick = () => activateItem(flatItems[idx], handlers, picker);
+  });
+
+  // Scroll selected into view
+  const selected = list.querySelector('.quick-picker-item.selected');
+  if (selected) selected.scrollIntoView({ block: 'nearest' });
+}
+
+// ── Item activation ───────────────────────────────────────────────────────
+function activateItem(item, handlers, picker) {
+  if (!item) return;
+  closeQuickPicker(picker);
+
+  switch (item.type) {
+    case 'project':
+      handlers.onSelectProject?.(item.data);
+      break;
+    case 'command':
+      item.data.action?.();
+      break;
+    case 'branch':
+      window.electron_api?.git?.checkout({ projectPath: item.data.projectPath, branch: item.data.branch });
+      break;
+    case 'session':
+      // Open the Claude sessions panel; TODO: open specific session
+      document.querySelector('[data-tab="claude"]')?.click();
+      break;
+    case 'mcp':
+      document.querySelector('[data-tab="mcp"]')?.click();
+      break;
+    case 'action':
+      if (item.data.action?.command && item.data.projectPath) {
+        window.electron_api?.terminal?.input?.({ command: item.data.action.command, projectPath: item.data.projectPath });
+      }
+      break;
+  }
+}
+
+// ── Open ──────────────────────────────────────────────────────────────────
 /**
- * Open the quick picker
+ * Open the command palette.
  * @param {HTMLElement} container
- * @param {Function} onSelect
+ * @param {Function|Object} optionsOrOnSelect - legacy: onSelect callback; new: options object
+ *   options.onSelectProject {Function} - called when a project item is selected
+ *   options.currentProject  {Object}   - current active project (for context-aware sections)
  */
-function openQuickPicker(container, onSelect) {
+function openQuickPicker(container, optionsOrOnSelect) {
+  let handlers, currentProject;
+
+  // Backward-compat: old API was openQuickPicker(container, onSelectFn)
+  if (typeof optionsOrOnSelect === 'function') {
+    handlers = { onSelectProject: optionsOrOnSelect };
+    currentProject = null;
+  } else {
+    handlers = optionsOrOnSelect || {};
+    currentProject = handlers.currentProject || null;
+  }
+
   quickPickerState.isOpen = true;
   quickPickerState.selectedIndex = 0;
-  quickPickerState.searchQuery = '';
-  quickPickerState.filteredProjects = [...projectsState.get().projects];
+  quickPickerState.query = '';
+  quickPickerState.mode = 'all';
+  quickPickerState.flatItems = [];
+  quickPickerState.asyncData = {
+    branches: null,
+    currentBranch: null,
+    sessions: null,
+    branchesLoading: false,
+    sessionsLoading: false,
+  };
 
   const picker = document.createElement('div');
   picker.className = 'quick-picker-overlay';
   picker.innerHTML = `
     <div class="quick-picker">
-      <div class="quick-picker-header">
-        <input type="text" class="quick-picker-input" placeholder="${t('quickPicker.searchProjects')}" autofocus>
+      <div class="quick-picker-search">
+        ${ICON.search}
+        <input type="text" class="quick-picker-input" placeholder="${t('quickPicker.placeholder')}" autofocus>
+        <span class="quick-picker-shortcut">Esc</span>
       </div>
       <div class="quick-picker-list"></div>
+      <div class="quick-picker-footer">
+        <span class="quick-picker-footer-modes">
+          <span><kbd>&gt;</kbd>${t('quickPicker.mode.commands')}</span>
+          <span><kbd>@</kbd>${t('quickPicker.mode.branches')}</span>
+          <span><kbd>#</kbd>${t('quickPicker.mode.sessions')}</span>
+          <span><kbd>~</kbd>${t('quickPicker.mode.mcp')}</span>
+        </span>
+        <span><kbd>↑↓</kbd> ${t('quickPicker.nav.navigate')} &nbsp;<kbd>↵</kbd> ${t('quickPicker.nav.open')}</span>
+      </div>
     </div>
   `;
 
@@ -41,41 +473,38 @@ function openQuickPicker(container, onSelect) {
 
   const input = picker.querySelector('.quick-picker-input');
   const list = picker.querySelector('.quick-picker-list');
+  const rerender = () => renderList(list, handlers, picker, currentProject);
 
-  renderQuickPickerList(list, onSelect, picker);
+  // Start async loads if we have a current project
+  if (currentProject?.path) {
+    loadBranches(currentProject.path, rerender);
+    loadSessions(currentProject.path, rerender);
+  }
+
+  rerender();
 
   input.oninput = () => {
-    quickPickerState.searchQuery = input.value.toLowerCase();
-    quickPickerState.filteredProjects = projectsState.get().projects.filter(p =>
-      p.name.toLowerCase().includes(quickPickerState.searchQuery) ||
-      p.path.toLowerCase().includes(quickPickerState.searchQuery)
-    );
+    quickPickerState.query = input.value;
     quickPickerState.selectedIndex = 0;
-    renderQuickPickerList(list, onSelect, picker);
+    rerender();
   };
 
   input.onkeydown = (e) => {
+    const { flatItems } = quickPickerState;
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
-        quickPickerState.selectedIndex = Math.min(
-          quickPickerState.selectedIndex + 1,
-          quickPickerState.filteredProjects.length - 1
-        );
-        renderQuickPickerList(list, onSelect, picker);
+        quickPickerState.selectedIndex = Math.min(quickPickerState.selectedIndex + 1, flatItems.length - 1);
+        rerender();
         break;
       case 'ArrowUp':
         e.preventDefault();
         quickPickerState.selectedIndex = Math.max(quickPickerState.selectedIndex - 1, 0);
-        renderQuickPickerList(list, onSelect, picker);
+        rerender();
         break;
       case 'Enter':
         e.preventDefault();
-        const selected = quickPickerState.filteredProjects[quickPickerState.selectedIndex];
-        if (selected) {
-          closeQuickPicker(picker);
-          if (onSelect) onSelect(selected);
-        }
+        activateItem(flatItems[quickPickerState.selectedIndex], handlers, picker);
         break;
       case 'Escape':
         e.preventDefault();
@@ -96,64 +525,15 @@ function openQuickPicker(container, onSelect) {
   return picker;
 }
 
-function renderQuickPickerList(list, onSelect, picker) {
-  if (quickPickerState.filteredProjects.length === 0) {
-    list.innerHTML = `<div class="quick-picker-empty">${t('quickPicker.noProjectFound')}</div>`;
-    return;
-  }
-
-  const defaultIcon = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z"/></svg>';
-  list.innerHTML = quickPickerState.filteredProjects.map((project, index) => {
-    const typeHandler = registry.get(project.type);
-    // Only allow SVG icons (no script/foreignObject injection)
-    const rawIcon = typeHandler?.icon || defaultIcon;
-    const safeIcon = typeof rawIcon === 'string' && rawIcon.trim().startsWith('<svg') && !/<script|<foreignObject|on\w+\s*=/i.test(rawIcon) ? rawIcon : defaultIcon;
-    return `
-    <div class="quick-picker-item ${index === quickPickerState.selectedIndex ? 'selected' : ''}" data-index="${index}">
-      <div class="quick-picker-item-icon">${safeIcon}</div>
-      <div class="quick-picker-item-content">
-        <div class="quick-picker-item-name">${escapeHtml(project.name)}</div>
-        <div class="quick-picker-item-path">${escapeHtml(project.path)}</div>
-      </div>
-    </div>`;
-  }).join('');
-
-  list.querySelectorAll('.quick-picker-item').forEach(item => {
-    item.onclick = () => {
-      const index = parseInt(item.dataset.index);
-      const project = quickPickerState.filteredProjects[index];
-      if (project) {
-        closeQuickPicker(picker);
-        if (onSelect) onSelect(project);
-      }
-    };
-    item.onmouseenter = () => {
-      quickPickerState.selectedIndex = parseInt(item.dataset.index);
-      list.querySelectorAll('.quick-picker-item').forEach(i =>
-        i.classList.toggle('selected', i === item)
-      );
-    };
-  });
-
-  const selectedItem = list.querySelector('.quick-picker-item.selected');
-  if (selectedItem) selectedItem.scrollIntoView({ block: 'nearest' });
-}
-
+// ── Close ─────────────────────────────────────────────────────────────────
 function closeQuickPicker(picker) {
   quickPickerState.isOpen = false;
   picker.classList.remove('active');
-  setTimeout(() => {
-    if (picker.parentNode) picker.parentNode.removeChild(picker);
-  }, 200);
+  setTimeout(() => picker.parentNode?.removeChild(picker), 200);
 }
 
 function isQuickPickerOpen() {
   return quickPickerState.isOpen;
 }
 
-module.exports = {
-  openQuickPicker,
-  closeQuickPicker,
-  isQuickPickerOpen,
-  quickPickerState
-};
+module.exports = { openQuickPicker, closeQuickPicker, isQuickPickerOpen, quickPickerState };

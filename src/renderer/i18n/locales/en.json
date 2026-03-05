@@ -466,7 +466,42 @@
   },
   "quickPicker": {
     "searchProjects": "Search projects...",
-    "noProjectFound": "No project found"
+    "noProjectFound": "No project found",
+    "placeholder": "Search everywhere...",
+    "noResult": "No results",
+    "loading": "Loading...",
+    "branch": {
+      "current": "current"
+    },
+    "section": {
+      "projects": "Projects",
+      "commands": "Commands",
+      "branches": "Git Branches",
+      "sessions": "Recent Sessions",
+      "mcp": "MCP Servers",
+      "quickActions": "Quick Actions"
+    },
+    "mode": {
+      "commands": "commands",
+      "branches": "branches",
+      "sessions": "sessions",
+      "mcp": "mcp"
+    },
+    "nav": {
+      "navigate": "navigate",
+      "open": "open"
+    },
+    "cmd": {
+      "settings": "Open settings",
+      "newProject": "New project",
+      "newTerminal": "New terminal",
+      "openGit": "Git panel",
+      "openMcp": "MCP panel",
+      "openSkills": "Skills panel",
+      "openAgents": "Agents panel",
+      "openDashboard": "Dashboard",
+      "openMemory": "Memory editor"
+    }
   },
   "modal": {
     "confirm": "Confirm",
