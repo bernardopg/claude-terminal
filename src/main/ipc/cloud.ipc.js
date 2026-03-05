@@ -17,8 +17,11 @@ const { zipProject } = require('../utils/zipProject');
 const { settingsFile } = require('../utils/paths');
 const { execGit } = require('../utils/git');
 const { getTokenForGit } = require('../services/GitHubAuthService');
+const { hashFiles } = require('../utils/fileHash');
 
 let mainWindow = null;
+
+const { projectsFile } = require('../utils/paths');
 
 /** @type {Set<string>} Locks to prevent concurrent uploads for the same project */
 const _uploadLocks = new Set();
@@ -430,7 +433,10 @@ function registerCloudHandlers() {
           allChanges.push({ projectName: project.name, changes });
         }
       }
-      return { changes: allChanges };
+
+      // Hash-filter: auto-dismiss changes where local files already match cloud
+      const filtered = await _hashFilterPendingChanges(allChanges, url, key);
+      return { changes: filtered };
     } catch {
       return { changes: [] };
     }
@@ -597,7 +603,39 @@ function registerCloudHandlers() {
       }
     }
 
-    return { onlyLocal, onlyCloud, sizeDiff, totalLocal: localMap.size, totalCloud: cloudMap.size };
+    // Second pass: verify sizeDiff files with SHA256 hashes
+    let hashVerified = false;
+    if (sizeDiff.length > 0) {
+      try {
+        const hashResp = await _fetchCloud(
+          `${url}/api/projects/${encodeURIComponent(projectName)}/files/hashes`,
+          {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filePaths: sizeDiff }),
+          }
+        );
+        if (hashResp.ok) {
+          const { hashes: cloudHashes } = await hashResp.json();
+          const cloudHashMap = new Map(cloudHashes.map(h => [h.path, h.hash]));
+          const localHashes = await hashFiles(localProjectPath, sizeDiff);
+
+          // Keep only files where hashes actually differ
+          const trueDiff = sizeDiff.filter(fp => {
+            const localH = localHashes.get(fp);
+            const cloudH = cloudHashMap.get(fp);
+            return !localH || !cloudH || localH !== cloudH;
+          });
+          sizeDiff.length = 0;
+          sizeDiff.push(...trueDiff);
+          hashVerified = true;
+        }
+      } catch {
+        // Hash endpoint unavailable — keep size-based results
+      }
+    }
+
+    return { onlyLocal, onlyCloud, sizeDiff, totalLocal: localMap.size, totalCloud: cloudMap.size, hashVerified };
   });
 
   // ── Conflict detection ──
@@ -623,7 +661,7 @@ function registerCloudHandlers() {
       try {
         const stat = fs.statSync(localPath);
         // Find the matching project to get its sync timestamp
-        const projectsData = JSON.parse(fs.readFileSync(require('../utils/paths').projectsFile, 'utf8'));
+        const projectsData = JSON.parse(fs.readFileSync(projectsFile, 'utf8'));
         const project = (projectsData.projects || []).find(p => p.path === localProjectPath);
         const lastSync = project ? cloudSyncService.getLastSyncTimestamp(project.id) : null;
 
@@ -706,7 +744,7 @@ function registerCloudHandlers() {
       );
 
       // Update sync timestamp
-      const projectsData = JSON.parse(fs.readFileSync(require('../utils/paths').projectsFile, 'utf8'));
+      const projectsData = JSON.parse(fs.readFileSync(projectsFile, 'utf8'));
       const project = (projectsData.projects || []).find(p => p.path === localProjectPath);
       if (project) cloudSyncService.updateSyncTimestamp(project.id);
     } finally {
@@ -823,6 +861,91 @@ async function _fetchCloud(url, opts = {}, timeoutMs = FETCH_TIMEOUT_MS) {
   }
 }
 
+/**
+ * Find the local project path matching a cloud project name.
+ * Matches by project name or by folder basename.
+ */
+function _findLocalProjectPath(cloudProjectName) {
+  try {
+    const data = JSON.parse(fs.readFileSync(projectsFile, 'utf8'));
+    const projects = data.projects || [];
+    const match = projects.find(p =>
+      p.name === cloudProjectName || path.basename(p.path) === cloudProjectName
+    );
+    return match?.path || null;
+  } catch { return null; }
+}
+
+/**
+ * Hash-filter pending changes: compare cloud changed files against local.
+ * Returns only files that truly differ. Auto-acknowledges if all match.
+ */
+async function _hashFilterPendingChanges(allChanges, url, key) {
+  const headers = { 'Authorization': `Bearer ${key}` };
+  const filtered = [];
+
+  for (const entry of allChanges) {
+    const { projectName, changes } = entry;
+    const localPath = _findLocalProjectPath(projectName);
+    if (!localPath) {
+      // Can't compare — keep all changes
+      filtered.push(entry);
+      continue;
+    }
+
+    const allFiles = changes.flatMap(c => c.changedFiles || []);
+    if (allFiles.length === 0) continue;
+
+    try {
+      // Get cloud hashes for changed files
+      const hashResp = await _fetchCloud(
+        `${url}/api/projects/${encodeURIComponent(projectName)}/files/hashes`,
+        {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filePaths: allFiles }),
+        }
+      );
+      if (!hashResp.ok) { filtered.push(entry); continue; }
+      const { hashes: cloudHashes } = await hashResp.json();
+      const cloudHashMap = new Map(cloudHashes.map(h => [h.path, h.hash]));
+
+      // Hash local files
+      const localHashes = await hashFiles(localPath, allFiles);
+
+      // Find truly different files
+      const diffFiles = allFiles.filter(fp => {
+        const localH = localHashes.get(fp);
+        const cloudH = cloudHashMap.get(fp);
+        // If either hash is missing, consider it different
+        return !localH || !cloudH || localH !== cloudH;
+      });
+
+      if (diffFiles.length === 0) {
+        // All files match — auto-acknowledge
+        await _fetchCloud(
+          `${url}/api/projects/${encodeURIComponent(projectName)}/changes/ack`,
+          { method: 'POST', headers }
+        ).catch(() => {});
+      } else {
+        // Report only truly different files
+        const filteredChanges = changes.map(c => ({
+          ...c,
+          changedFiles: (c.changedFiles || []).filter(f => diffFiles.includes(f)),
+        })).filter(c => c.changedFiles.length > 0);
+        if (filteredChanges.length > 0) {
+          filtered.push({ projectName, changes: filteredChanges });
+        }
+      }
+    } catch {
+      // Hash comparison failed — keep original
+      filtered.push(entry);
+    }
+  }
+
+  return filtered;
+}
+
 function _scanLocalFiles(baseDir, currentDir, excludeSet, resultMap) {
   let entries;
   try { entries = fs.readdirSync(currentDir, { withFileTypes: true }); } catch { return; }
@@ -902,8 +1025,10 @@ async function _checkPendingChangesOnReconnect() {
           allChanges.push({ projectName: project.name, changes });
         }
       }
-      if (allChanges.length > 0 && mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('cloud:pending-changes', { changes: allChanges });
+      // Hash-filter: auto-dismiss changes where local files already match cloud
+      const filtered = await _hashFilterPendingChanges(allChanges, url, key);
+      if (filtered.length > 0 && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('cloud:pending-changes', { changes: filtered });
       }
     }
   } catch (err) {

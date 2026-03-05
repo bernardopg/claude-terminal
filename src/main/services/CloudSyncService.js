@@ -10,6 +10,7 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const { settingsFile, projectsFile } = require('../utils/paths');
+const { hashFiles } = require('../utils/fileHash');
 const fileWatcherService = require('./FileWatcherService');
 
 const POLL_INTERVAL_MS = 30000;
@@ -160,6 +161,71 @@ function _stopPolling() {
   }
 }
 
+function _findLocalProjectPath(cloudProjectName) {
+  try {
+    const data = JSON.parse(fs.readFileSync(projectsFile, 'utf8'));
+    const projects = data.projects || [];
+    const match = projects.find(p =>
+      p.name === cloudProjectName || path.basename(p.path) === cloudProjectName
+    );
+    return match?.path || null;
+  } catch { return null; }
+}
+
+async function _hashFilterPendingChanges(allChanges, url, key) {
+  const headers = { 'Authorization': `Bearer ${key}` };
+  const filtered = [];
+
+  for (const entry of allChanges) {
+    const { projectName, changes } = entry;
+    const localPath = _findLocalProjectPath(projectName);
+    if (!localPath) { filtered.push(entry); continue; }
+
+    const allFiles = changes.flatMap(c => c.changedFiles || []);
+    if (allFiles.length === 0) continue;
+
+    try {
+      const hashResp = await _fetchCloud(
+        `${url}/api/projects/${encodeURIComponent(projectName)}/files/hashes`,
+        {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filePaths: allFiles }),
+        }
+      );
+      if (!hashResp.ok) { filtered.push(entry); continue; }
+      const { hashes: cloudHashes } = await hashResp.json();
+      const cloudHashMap = new Map(cloudHashes.map(h => [h.path, h.hash]));
+      const localHashes = await hashFiles(localPath, allFiles);
+
+      const diffFiles = allFiles.filter(fp => {
+        const localH = localHashes.get(fp);
+        const cloudH = cloudHashMap.get(fp);
+        return !localH || !cloudH || localH !== cloudH;
+      });
+
+      if (diffFiles.length === 0) {
+        await _fetchCloud(
+          `${url}/api/projects/${encodeURIComponent(projectName)}/changes/ack`,
+          { method: 'POST', headers }
+        ).catch(() => {});
+      } else {
+        const filteredChanges = changes.map(c => ({
+          ...c,
+          changedFiles: (c.changedFiles || []).filter(f => diffFiles.includes(f)),
+        })).filter(c => c.changedFiles.length > 0);
+        if (filteredChanges.length > 0) {
+          filtered.push({ projectName, changes: filteredChanges });
+        }
+      }
+    } catch {
+      filtered.push(entry);
+    }
+  }
+
+  return filtered;
+}
+
 async function _pollForChanges() {
   if (_isPolling) return;
   _isPolling = true;
@@ -190,8 +256,10 @@ async function _pollForChanges() {
       }
     }
 
+    // Hash-filter: auto-dismiss changes where local files already match cloud
+    const filtered = await _hashFilterPendingChanges(allChanges, url, key);
     if (_mainWindow && !_mainWindow.isDestroyed()) {
-      _mainWindow.webContents.send('cloud:pending-changes', { changes: allChanges });
+      _mainWindow.webContents.send('cloud:pending-changes', { changes: filtered });
     }
   } catch (err) {
     console.warn('[CloudSync] Poll error:', err.message);
