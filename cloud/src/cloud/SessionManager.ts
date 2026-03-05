@@ -253,14 +253,32 @@ export class SessionManager {
     return true;
   }
 
-  listUserSessions(userName: string): Array<{ id: string; projectName: string; status: string }> {
-    const result: Array<{ id: string; projectName: string; status: string }> = [];
+  listUserSessions(userName: string): Array<{ id: string; projectName: string; status: string; createdAt: number | null; lastActivity: number | null; model: string | null }> {
+    const result: Array<{ id: string; projectName: string; status: string; createdAt: number | null; lastActivity: number | null; model: string | null }> = [];
     for (const [, session] of this.sessions) {
       if (session.userName === userName) {
-        result.push({ id: session.id, projectName: session.projectName, status: session.status });
+        // Look up persisted metadata for createdAt / lastActivity / model
+        const meta = this._getUserSessionMeta(userName, session.id);
+        result.push({
+          id: session.id,
+          projectName: session.projectName,
+          status: session.status,
+          createdAt: meta?.createdAt ?? null,
+          lastActivity: meta?.lastActivity ?? null,
+          model: meta?.model ?? null,
+        });
       }
     }
     return result;
+  }
+
+  private _getUserSessionMeta(userName: string, sessionId: string): import('../store/store').UserSession | null {
+    try {
+      const user = store.getUserSync(userName);
+      return user?.sessions.find(s => s.id === sessionId) ?? null;
+    } catch {
+      return null;
+    }
   }
 
   isUserSession(sessionId: string, userName: string): boolean {

@@ -160,6 +160,15 @@ class Store {
     return readJson<UserData>(this.userJsonPath(name));
   }
 
+  getUserSync(name: string): UserData | null {
+    try {
+      const raw = fs.readFileSync(this.userJsonPath(name), 'utf-8');
+      return JSON.parse(raw) as UserData;
+    } catch {
+      return null;
+    }
+  }
+
   async createUser(name: string, apiKey: string): Promise<UserData> {
     const userDir = this.userDir(name);
     await fs.promises.mkdir(userDir, { recursive: true });
