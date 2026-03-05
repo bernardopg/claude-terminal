@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import extractZip from 'extract-zip';
 import { store, UserData } from '../store/store';
 import { config } from '../config';
@@ -263,6 +264,53 @@ export class ProjectManager {
     } catch {
       // No changes dir — nothing to ack
     }
+  }
+
+  /**
+   * Compute SHA256 hash of a single file via streaming.
+   */
+  private _hashFile(filePath: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const hash = crypto.createHash('sha256');
+      const stream = fs.createReadStream(filePath);
+      stream.on('data', (chunk) => hash.update(chunk));
+      stream.on('end', () => resolve(hash.digest('hex')));
+      stream.on('error', reject);
+    });
+  }
+
+  /**
+   * Hash specific files in a cloud project.
+   * Returns only files that exist; missing files are omitted.
+   */
+  async hashProjectFiles(userName: string, projectName: string, filePaths: string[]): Promise<Array<{ path: string; hash: string }>> {
+    const projectPath = store.getProjectPath(userName, projectName);
+    const exists = await this.projectExists(userName, projectName);
+    if (!exists) throw new Error(`Project "${projectName}" does not exist`);
+
+    const BATCH = 20;
+    const results: Array<{ path: string; hash: string }> = [];
+
+    for (let i = 0; i < filePaths.length; i += BATCH) {
+      const batch = filePaths.slice(i, i + BATCH);
+      const promises = batch.map(async (relPath) => {
+        try {
+          // Prevent path traversal
+          const absPath = path.resolve(projectPath, relPath);
+          if (!absPath.startsWith(projectPath)) return null;
+          const h = await this._hashFile(absPath);
+          return { path: relPath, hash: h };
+        } catch {
+          return null;
+        }
+      });
+      const batchResults = await Promise.all(promises);
+      for (const r of batchResults) {
+        if (r) results.push(r);
+      }
+    }
+
+    return results;
   }
 
   validateProjectName(name: string): void {

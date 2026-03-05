@@ -349,6 +349,27 @@ export function createCloudRouter(relay?: RelayServer): Router {
     }
   });
 
+  // ── File hashes (for accurate diff comparison) ──
+
+  router.post('/projects/:name/files/hashes', async (req: AuthRequest, res: Response) => {
+    try {
+      const name = req.params.name as string;
+      const { filePaths } = req.body;
+      if (!Array.isArray(filePaths) || filePaths.length === 0) {
+        res.status(400).json({ error: 'Missing or empty filePaths array' });
+        return;
+      }
+      if (filePaths.length > 5000) {
+        res.status(400).json({ error: 'Too many files (max 5000)' });
+        return;
+      }
+      const hashes = await projectManager.hashProjectFiles(req.userName!, name, filePaths);
+      res.json({ hashes });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   // ── Project Changes (for sync) ──
 
   router.get('/projects/:name/changes', async (req: AuthRequest, res: Response) => {
