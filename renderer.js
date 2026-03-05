@@ -1508,9 +1508,9 @@ async function cloudUploadProject(projectId) {
 
   try {
     if (useGitClone) {
-      await api.cloud.uploadProjectGit({ projectName, projectPath: project.path });
+      await api.cloud.uploadProjectGit({ projectName, projectPath: project.path, cloudProjectKey: project.cloudProjectKey || null });
     } else {
-      await api.cloud.uploadProject({ projectName, projectPath: project.path });
+      await api.cloud.uploadProject({ projectName, projectPath: project.path, cloudProjectKey: project.cloudProjectKey || null });
     }
     cloudUploadStatus.set(projectId, { synced: true, lastSync: Date.now() });
     // Register for auto-sync (file watcher)
@@ -1545,7 +1545,7 @@ async function cloudDeleteProject(projectId) {
   if (!confirmed) return;
 
   try {
-    await api.cloud.deleteProject({ projectId, projectName });
+    await api.cloud.deleteProject({ projectId, projectName, cloudProjectKey: project.cloudProjectKey || null });
     cloudUploadStatus.delete(projectId);
     ProjectList.render();
     showToast({ type: 'success', title: t('cloud.deleteSuccess'), message: projectName });
@@ -1571,6 +1571,7 @@ async function cloudSyncProject(projectId) {
     const { conflicts, totalFiles } = await api.cloud.checkConflicts({
       projectName,
       localProjectPath: project.path,
+      cloudProjectKey: project.cloudProjectKey || null,
     });
 
     if (conflicts.length > 0) {
@@ -1586,10 +1587,11 @@ async function cloudSyncProject(projectId) {
         projectName,
         localProjectPath: project.path,
         resolutions,
+        cloudProjectKey: project.cloudProjectKey || null,
       });
     } else {
       // No conflicts — download directly
-      await api.cloud.downloadChanges({ projectName, localProjectPath: project.path });
+      await api.cloud.downloadChanges({ projectName, localProjectPath: project.path, cloudProjectKey: project.cloudProjectKey || null });
     }
 
     cloudUploadStatus.set(projectId, { synced: true, lastSync: Date.now() });

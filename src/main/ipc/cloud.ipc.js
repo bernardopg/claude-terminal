@@ -177,15 +177,15 @@ function registerCloudHandlers() {
 
   // ── Project upload ──
 
-  ipcMain.handle('cloud:upload-project', async (_event, { projectName, projectPath }) => {
+  ipcMain.handle('cloud:upload-project', async (_event, { projectName, projectPath, cloudProjectKey }) => {
     if (_uploadLocks.has(projectName)) {
       throw new Error(`Upload already in progress for "${projectName}"`);
     }
     _uploadLocks.add(projectName);
 
     const { url, key } = _getCloudConfig();
-    const cloudKey = _getCloudProjectKey(projectName);
-    await _migrateProjectIfNeeded(url, key, cloudKey, projectName);
+    const cloudKey = _getCloudProjectKey(projectName, cloudProjectKey);
+    if (!cloudProjectKey) await _migrateProjectIfNeeded(url, key, cloudKey, projectName);
     const zipPath = path.join(os.tmpdir(), `ct-upload-${Date.now()}.zip`);
 
     try {
@@ -303,7 +303,7 @@ function registerCloudHandlers() {
 
   // ── Upload project via git clone (faster than ZIP for GitHub repos) ──
 
-  ipcMain.handle('cloud:upload-project-git', async (_event, { projectName, projectPath }) => {
+  ipcMain.handle('cloud:upload-project-git', async (_event, { projectName, projectPath, cloudProjectKey }) => {
     if (_uploadLocks.has(projectName)) {
       throw new Error(`Upload already in progress for "${projectName}"`);
     }
@@ -311,8 +311,8 @@ function registerCloudHandlers() {
 
     try {
       const { url, key } = _getCloudConfig();
-      const cloudKey = _getCloudProjectKey(projectName);
-      await _migrateProjectIfNeeded(url, key, cloudKey, projectName);
+      const cloudKey = _getCloudProjectKey(projectName, cloudProjectKey);
+      if (!cloudProjectKey) await _migrateProjectIfNeeded(url, key, cloudKey, projectName);
 
       // Get GitHub token
       const token = await getTokenForGit();
@@ -421,9 +421,9 @@ function registerCloudHandlers() {
 
   // ── Delete project from cloud ──
 
-  ipcMain.handle('cloud:delete-project', async (_event, { projectId, projectName }) => {
+  ipcMain.handle('cloud:delete-project', async (_event, { projectId, projectName, cloudProjectKey }) => {
     const { url, key } = _getCloudConfig();
-    const cloudKey = _getCloudProjectKey(projectName);
+    const cloudKey = _getCloudProjectKey(projectName, cloudProjectKey);
     const resp = await _fetchCloud(`${url}/api/projects/${encodeURIComponent(cloudKey)}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${key}` },
@@ -521,9 +521,9 @@ function registerCloudHandlers() {
 
   // ── Download and apply changes ──
 
-  ipcMain.handle('cloud:download-changes', async (_event, { projectName, localProjectPath }) => {
+  ipcMain.handle('cloud:download-changes', async (_event, { projectName, localProjectPath, cloudProjectKey }) => {
     const { url, key } = _getCloudConfig();
-    const cloudKey = _getCloudProjectKey(projectName);
+    const cloudKey = _getCloudProjectKey(projectName, cloudProjectKey);
     const headers = { 'Authorization': `Bearer ${key}` };
 
     // Download changes zip (longer timeout for file transfer)
@@ -560,9 +560,9 @@ function registerCloudHandlers() {
 
   // ── Takeover a running cloud session ──
 
-  ipcMain.handle('cloud:takeover-session', async (_event, { sessionId, projectName, localProjectPath }) => {
+  ipcMain.handle('cloud:takeover-session', async (_event, { sessionId, projectName, localProjectPath, cloudProjectKey }) => {
     const { url, key } = _getCloudConfig();
-    const cloudKey = _getCloudProjectKey(projectName);
+    const cloudKey = _getCloudProjectKey(projectName, cloudProjectKey);
     const headers = { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' };
 
     // Interrupt the cloud session
@@ -643,9 +643,9 @@ function registerCloudHandlers() {
 
   // ── File comparison (local vs cloud) ──
 
-  ipcMain.handle('cloud:compare-files', async (_event, { projectName, localProjectPath }) => {
+  ipcMain.handle('cloud:compare-files', async (_event, { projectName, localProjectPath, cloudProjectKey }) => {
     const { url, key } = _getCloudConfig();
-    const cloudKey = _getCloudProjectKey(projectName);
+    const cloudKey = _getCloudProjectKey(projectName, cloudProjectKey);
 
     // Fetch cloud file list
     const resp = await _fetchCloud(
@@ -688,9 +688,9 @@ function registerCloudHandlers() {
 
   // ── Conflict detection ──
 
-  ipcMain.handle('cloud:check-conflicts', async (_event, { projectName, localProjectPath }) => {
+  ipcMain.handle('cloud:check-conflicts', async (_event, { projectName, localProjectPath, cloudProjectKey }) => {
     const { url, key } = _getCloudConfig();
-    const cloudKey = _getCloudProjectKey(projectName);
+    const cloudKey = _getCloudProjectKey(projectName, cloudProjectKey);
     const headers = { 'Authorization': `Bearer ${key}` };
 
     const changesResp = await _fetchCloud(
@@ -727,9 +727,9 @@ function registerCloudHandlers() {
 
   // ── Download with conflict resolutions ──
 
-  ipcMain.handle('cloud:download-with-resolutions', async (_event, { projectName, localProjectPath, resolutions }) => {
+  ipcMain.handle('cloud:download-with-resolutions', async (_event, { projectName, localProjectPath, resolutions, cloudProjectKey }) => {
     const { url, key } = _getCloudConfig();
-    const cloudKey = _getCloudProjectKey(projectName);
+    const cloudKey = _getCloudProjectKey(projectName, cloudProjectKey);
     const headers = { 'Authorization': `Bearer ${key}` };
 
     const resp = await _fetchCloud(

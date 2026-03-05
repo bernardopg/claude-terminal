@@ -6,6 +6,7 @@
 const { ipcMain } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { projectsFile } = require('../utils/paths');
 
 /**
  * Register project IPC handlers
@@ -71,6 +72,28 @@ function registerProjectHandlers() {
 
     await scanDir(resolvedPath);
     return todos;
+  });
+
+  ipcMain.handle('project:set-cloud-key', async (_event, { projectId, cloudProjectKey }) => {
+    if (!projectId || typeof projectId !== 'string') throw new Error('Invalid projectId');
+    let data = { projects: [] };
+    try {
+      data = JSON.parse(fs.readFileSync(projectsFile, 'utf8'));
+    } catch (e) {}
+
+    const project = (data.projects || []).find(p => p.id === projectId);
+    if (!project) throw new Error('Project not found');
+
+    if (cloudProjectKey && typeof cloudProjectKey === 'string' && cloudProjectKey.trim()) {
+      project.cloudProjectKey = cloudProjectKey.trim();
+    } else {
+      delete project.cloudProjectKey;
+    }
+
+    const tmp = projectsFile + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
+    fs.renameSync(tmp, projectsFile);
+    return { ok: true };
   });
 }
 

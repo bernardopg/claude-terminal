@@ -292,6 +292,7 @@ contextBridge.exposeInMainWorld('electron_api', {
     scanTodos: (projectPath) => ipcRenderer.invoke('scan-todos', projectPath),
     stats: (projectPath) => ipcRenderer.invoke('project-stats', projectPath),
     onQuickActionRun: createListener('quickaction:run'),
+    setCloudKey: (projectId, cloudProjectKey) => ipcRenderer.invoke('project:set-cloud-key', { projectId, cloudProjectKey }),
   },
 
   // ==================== CLAUDE ====================

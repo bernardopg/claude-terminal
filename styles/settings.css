@@ -2548,3 +2548,27 @@
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
 }
+
+.cp-project-keys-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+.cp-project-key-row {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  align-items: center;
+  gap: 8px;
+}
+.cp-project-key-name {
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cp-project-key-input {
+  font-size: var(--font-xs);
+  padding: 3px 6px;
+}
