@@ -15,16 +15,64 @@ let mcpState = {
   selectedMcp: null,
   mcpLogsCollapsed: false,
   activeSubTab: 'local',
+  activeCategory: 'all',
   registryInitialized: false,
   registry: {
     servers: [],
     searchResults: [],
     searchQuery: '',
-    searchCache: new Map()
+    searchCache: new Map(),
+    lastSectionTitle: ''
   }
 };
 
 let mcpRegistrySearchTimeout = null;
+
+// ========== CATEGORY DETECTION ==========
+
+const CATEGORY_PATTERNS = {
+  database: /database|postgres|mysql|sqlite|mongo|redis|sql|mariadb|supabase|neon|prisma|drizzle|dynamo|cassandra|couchdb|elasticsearch/i,
+  files: /file|filesystem|folder|directory|disk|storage|s3|drive|dropbox|onedrive/i,
+  integration: /github|gitlab|jira|linear|notion|slack|discord|trello|asana|confluence|zendesk|salesforce|hubspot|stripe|twilio/i,
+  web: /search|brave|google|bing|web|scrape|crawl|fetch|http|browser|playwright|puppeteer|selenium|url/i,
+  ai: /ai|llm|openai|anthropic|embedding|vector|langchain|semantic|hugging|ollama|cohere/i,
+  devtools: /git|deploy|ci|docker|kubernetes|aws|cloud|terraform|ansible|build|package|npm|pip|cargo|helm/i
+};
+
+function getMcpServerCategory(server) {
+  const text = `${server.name || ''} ${server.title || ''} ${server.description || ''}`;
+  for (const [cat, pattern] of Object.entries(CATEGORY_PATTERNS)) {
+    if (pattern.test(text)) return cat;
+  }
+  return 'other';
+}
+
+function filterServersByCategory(servers) {
+  if (mcpState.activeCategory === 'all') return servers;
+  return servers.filter(s => getMcpServerCategory(s) === mcpState.activeCategory);
+}
+
+// ========== AVATAR COLORS ==========
+
+const AVATAR_COLORS = [
+  { bg: 'rgba(139, 92, 246, 0.18)', color: '#a78bfa' },
+  { bg: 'rgba(59, 130, 246, 0.18)', color: '#60a5fa' },
+  { bg: 'rgba(34, 197, 94, 0.18)', color: '#4ade80' },
+  { bg: 'rgba(249, 115, 22, 0.18)', color: '#fb923c' },
+  { bg: 'rgba(236, 72, 153, 0.18)', color: '#f472b6' },
+  { bg: 'rgba(20, 184, 166, 0.18)', color: '#2dd4bf' },
+  { bg: 'rgba(234, 179, 8, 0.18)', color: '#facc15' },
+  { bg: 'rgba(99, 102, 241, 0.18)', color: '#818cf8' }
+];
+
+function getServerAvatarStyle(name) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = ((hash << 5) - hash) + name.charCodeAt(i);
+    hash |= 0;
+  }
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
 
 function init(context) {
   ctx = context;
@@ -68,6 +116,9 @@ function setupMcpSubTabs() {
       clearTimeout(mcpRegistrySearchTimeout);
       const query = input.value.trim();
       mcpState.registry.searchQuery = query;
+
+      // Reset category filter on new search
+      if (query.length > 0) mcpState.activeCategory = 'all';
 
       mcpRegistrySearchTimeout = setTimeout(() => {
         if (query.length >= 2) {
@@ -341,6 +392,100 @@ function getMcpServerIcon(server) {
   return escapeHtml((server.title || server.name || '?').charAt(0).toUpperCase());
 }
 
+// ========== CATEGORY FILTERS ==========
+
+function renderCategoryFilters(servers) {
+  const categories = ['all', 'database', 'files', 'web', 'integration', 'devtools', 'ai'];
+  const counts = { all: servers.length };
+
+  servers.forEach(s => {
+    const cat = getMcpServerCategory(s);
+    counts[cat] = (counts[cat] || 0) + 1;
+  });
+
+  // Only show categories that have at least 1 match
+  const visibleCats = categories.filter(c => c === 'all' || (counts[c] || 0) > 0);
+
+  return `<div class="mcp-category-filters">
+    ${visibleCats.map(cat => {
+      const count = counts[cat] || 0;
+      const active = mcpState.activeCategory === cat ? 'active' : '';
+      const label = t(`mcpRegistry.category.${cat}`);
+      const countHtml = cat !== 'all' ? ` <span class="mcp-filter-count">${count}</span>` : '';
+      return `<button class="mcp-filter-pill ${active}" data-category="${cat}">${label}${countHtml}</button>`;
+    }).join('')}
+  </div>`;
+}
+
+function bindCategoryFilterHandlers(servers, sectionTitle) {
+  document.querySelectorAll('.mcp-filter-pill').forEach(btn => {
+    btn.onclick = () => {
+      mcpState.activeCategory = btn.dataset.category;
+      renderMcpRegistryCards(servers, sectionTitle);
+    };
+  });
+}
+
+// ========== REGISTRY CARD RENDERING ==========
+
+function renderRegistryCard(server) {
+  const serverName = server.name || '';
+  const displayName = server.title || serverName;
+  const installed = isMcpInstalled(serverName);
+  const serverType = getMcpServerType(server);
+  const description = server.description || t('mcpRegistry.noDescription');
+  const avatarStyle = getServerAvatarStyle(serverName);
+
+  // Package name for subtitle
+  let pkgName = '';
+  if (server.packages && server.packages.length > 0) {
+    pkgName = server.packages[0].name || server.packages[0].package_name || '';
+  } else if (server.remotes && server.remotes.length > 0) {
+    pkgName = server.remotes[0].url || '';
+  }
+
+  // Icon: prefer server icon, then GitHub org avatar, then colored letter
+  let iconHtml;
+  if (server.icons && server.icons.length > 0) {
+    const fallback = escapeHtml(displayName.charAt(0).toUpperCase());
+    iconHtml = `<img src="${escapeHtml(server.icons[0])}" data-fallback="${fallback}" class="mcp-icon-img">`;
+  } else if (server.repository && server.repository.url) {
+    const ghMatch = server.repository.url.match(/github\.com\/([^/]+)/);
+    if (ghMatch) {
+      const fallback = escapeHtml(displayName.charAt(0).toUpperCase());
+      iconHtml = `<img src="https://github.com/${ghMatch[1]}.png?size=64" data-fallback="${fallback}" class="mcp-icon-img">`;
+    } else {
+      iconHtml = escapeHtml(displayName.charAt(0).toUpperCase());
+    }
+  } else {
+    iconHtml = escapeHtml(displayName.charAt(0).toUpperCase());
+  }
+
+  const cardClass = installed ? 'mcp-registry-card installed' : 'mcp-registry-card';
+
+  return `
+  <div class="${cardClass}" data-server-name="${escapeHtml(serverName)}">
+    <div class="mcp-registry-card-header">
+      <div class="mcp-registry-icon" style="background:${avatarStyle.bg};color:${avatarStyle.color}">${iconHtml}</div>
+      <div class="mcp-registry-card-info">
+        <div class="mcp-registry-card-title">${escapeHtml(displayName)}</div>
+        ${pkgName ? `<div class="mcp-registry-card-pkg">${escapeHtml(pkgName)}</div>` : ''}
+      </div>
+    </div>
+    <div class="mcp-registry-card-desc">${escapeHtml(description)}</div>
+    <div class="mcp-registry-card-footer">
+      <div class="mcp-registry-card-badges">
+        ${serverType ? `<span class="mcp-registry-badge ${serverType}">${serverType}</span>` : ''}
+        ${installed ? `<span class="mcp-registry-badge installed-badge">✓ ${t('mcpRegistry.installed')}</span>` : ''}
+      </div>
+      ${installed
+        ? ''
+        : `<button class="btn-sm btn-install btn-mcp-install">${t('mcpRegistry.install')}</button>`
+      }
+    </div>
+  </div>`;
+}
+
 async function loadMcpRegistryContent() {
   if (mcpState.registry.searchQuery) {
     await searchMcpRegistry(mcpState.registry.searchQuery);
@@ -417,50 +562,39 @@ async function renderMcpRegistryCards(servers, sectionTitle) {
     return;
   }
 
-  let html = `<div class="list-section">
-    <div class="list-section-title">${escapeHtml(sectionTitle)} <span class="list-section-count">${servers.length}</span></div>
+  // Store for re-use by category filters
+  mcpState.registry.lastSectionTitle = sectionTitle;
+
+  const filtered = filterServersByCategory(servers);
+  const catFilters = renderCategoryFilters(servers);
+
+  if (filtered.length === 0) {
+    list.innerHTML = catFilters + `<div class="marketplace-empty">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+      <h3>${t('mcpRegistry.noResults')}</h3>
+    </div>`;
+    bindCategoryFilterHandlers(servers, sectionTitle);
+    return;
+  }
+
+  let html = catFilters;
+  html += `<div class="list-section">
+    <div class="list-section-title">${escapeHtml(sectionTitle)} <span class="list-section-count">${filtered.length}</span></div>
     <div class="list-section-grid">`;
 
-  html += servers.map(server => {
-    const serverName = server.name || '';
-    const displayName = server.title || serverName;
-    const installed = isMcpInstalled(serverName);
-    const serverType = getMcpServerType(server);
-    const icon = getMcpServerIcon(server);
-    const description = server.description || t('mcpRegistry.noDescription');
-    const cardClass = installed ? 'mcp-registry-card installed' : 'mcp-registry-card';
-
-    return `
-    <div class="${cardClass}" data-server-name="${escapeHtml(serverName)}">
-      <div class="mcp-registry-card-header">
-        <div class="mcp-registry-icon">${icon}</div>
-        <div class="mcp-registry-card-info">
-          <div class="mcp-registry-card-title">${escapeHtml(displayName)}</div>
-          <div class="mcp-registry-card-desc">${escapeHtml(description)}</div>
-        </div>
-      </div>
-      <div class="mcp-registry-card-footer">
-        <div class="mcp-registry-card-badges">
-          ${serverType ? `<span class="mcp-registry-badge ${serverType}">${serverType}</span>` : ''}
-          ${installed ? `<span class="mcp-registry-badge installed-badge">${t('mcpRegistry.installed')}</span>` : ''}
-        </div>
-        <div class="mcp-registry-card-actions">
-          <button class="btn-sm btn-secondary btn-mcp-details">${t('mcpRegistry.details')}</button>
-          ${installed ? '' : `<button class="btn-sm btn-install btn-mcp-install">${t('mcpRegistry.install')}</button>`}
-        </div>
-      </div>
-    </div>`;
-  }).join('');
+  html += filtered.map(server => renderRegistryCard(server)).join('');
 
   html += `</div></div>`;
   list.innerHTML = html;
+
   bindMcpRegistryCardHandlers();
+  bindCategoryFilterHandlers(servers, sectionTitle);
 }
 
 function bindMcpRegistryCardHandlers() {
   const list = document.getElementById('mcp-list');
 
-  // Handle icon image load errors using data-fallback instead of inline onerror handlers
+  // Handle icon image load errors
   list.querySelectorAll('.mcp-icon-img').forEach(img => {
     img.addEventListener('error', () => {
       if (img.parentElement) img.parentElement.textContent = img.dataset.fallback || '?';
@@ -470,27 +604,28 @@ function bindMcpRegistryCardHandlers() {
   list.querySelectorAll('.mcp-registry-card').forEach(card => {
     const serverName = card.dataset.serverName;
 
-    const detailsBtn = card.querySelector('.btn-mcp-details');
-    if (detailsBtn) {
-      detailsBtn.onclick = (e) => {
-        e.stopPropagation();
+    // Card click = open details modal
+    card.addEventListener('click', (e) => {
+      if (!e.target.closest('button')) {
         showMcpRegistryDetail(serverName);
-      };
-    }
+      }
+    });
 
     const installBtn = card.querySelector('.btn-mcp-install');
     if (installBtn) {
       installBtn.onclick = async (e) => {
         e.stopPropagation();
         installBtn.disabled = true;
-        installBtn.textContent = t('mcpRegistry.installing');
+        installBtn.innerHTML = `<span class="btn-install-spinner"></span>${t('mcpRegistry.installing')}`;
         try {
           await installMcpFromRegistry(serverName);
           await loadMcpRegistryContent();
         } catch (err) {
           installBtn.disabled = false;
-          installBtn.textContent = t('mcpRegistry.install');
-          alert(`${t('mcpRegistry.installError')}: ${err.message}`);
+          installBtn.innerHTML = t('mcpRegistry.install');
+          if (ctx.showToast) {
+            ctx.showToast({ type: 'error', title: `${t('mcpRegistry.installError')}: ${err.message}` });
+          }
         }
       };
     }
@@ -513,6 +648,7 @@ async function showMcpRegistryDetail(serverName) {
     const serverType = getMcpServerType(server);
     const icon = getMcpServerIcon(server);
     const version = server.version_detail?.version || server.version || '';
+    const avatarStyle = getServerAvatarStyle(serverName);
 
     let metaHtml = '';
     if (version) {
@@ -523,7 +659,8 @@ async function showMcpRegistryDetail(serverName) {
     }
     if (server.packages && server.packages.length > 0) {
       const pkg = server.packages[0];
-      metaHtml += `<div class="mcp-detail-meta-row"><span class="mcp-detail-meta-label">${t('mcpRegistry.packages')}</span><span class="mcp-detail-meta-value">${escapeHtml(pkg.name || pkg.package_name || '')}</span></div>`;
+      const pkgName = pkg.name || pkg.package_name || '';
+      metaHtml += `<div class="mcp-detail-meta-row"><span class="mcp-detail-meta-label">${t('mcpRegistry.packages')}</span><span class="mcp-detail-meta-value">${escapeHtml(pkgName)}</span></div>`;
     }
     if (server.repository && server.repository.url) {
       metaHtml += `<div class="mcp-detail-meta-row"><span class="mcp-detail-meta-label">${t('mcpRegistry.repository')}</span><span class="mcp-detail-meta-value"><a href="#" class="mcp-repo-link" data-url="${escapeHtml(server.repository.url)}" style="color: var(--accent);">${escapeHtml(server.repository.url)}</a></span></div>`;
@@ -531,7 +668,7 @@ async function showMcpRegistryDetail(serverName) {
 
     const detailContent = `
       <div class="mcp-detail-header">
-        <div class="mcp-detail-icon">${icon}</div>
+        <div class="mcp-detail-icon" style="background:${avatarStyle.bg};color:${avatarStyle.color}">${icon}</div>
         <div class="mcp-detail-info">
           <div class="mcp-detail-title">${escapeHtml(displayName)}</div>
           <div class="mcp-detail-name">${escapeHtml(serverName)}</div>
@@ -541,7 +678,7 @@ async function showMcpRegistryDetail(serverName) {
       ${metaHtml ? `<div class="mcp-detail-meta">${metaHtml}</div>` : ''}
       <div class="mcp-detail-actions">
         ${installed
-          ? `<span class="mcp-registry-badge installed-badge" style="font-size: 13px; padding: 6px 16px;">${t('mcpRegistry.installed')}</span>`
+          ? `<span class="mcp-registry-badge installed-badge" style="font-size: 13px; padding: 6px 16px;">✓ ${t('mcpRegistry.installed')}</span>`
           : `<button class="btn-primary btn-mcp-install-detail">${t('mcpRegistry.install')}</button>`
         }
       </div>
@@ -555,7 +692,7 @@ async function showMcpRegistryDetail(serverName) {
         e.preventDefault();
         const url = repoLink.dataset.url;
         if (url && (url.startsWith('https://') || url.startsWith('http://'))) {
-          api.dialog.openExternal(url);
+          ctx.api.dialog.openExternal(url);
         }
       });
     }
@@ -564,15 +701,17 @@ async function showMcpRegistryDetail(serverName) {
     if (installDetailBtn) {
       installDetailBtn.onclick = async () => {
         installDetailBtn.disabled = true;
-        installDetailBtn.textContent = t('mcpRegistry.installing');
+        installDetailBtn.innerHTML = `<span class="btn-install-spinner"></span>${t('mcpRegistry.installing')}`;
         try {
           await installMcpFromRegistry(serverName);
           ctx.closeModal();
           await loadMcpRegistryContent();
         } catch (err) {
           installDetailBtn.disabled = false;
-          installDetailBtn.textContent = t('mcpRegistry.install');
-          alert(`${t('mcpRegistry.installError')}: ${err.message}`);
+          installDetailBtn.innerHTML = t('mcpRegistry.install');
+          if (ctx.showToast) {
+            ctx.showToast({ type: 'error', title: `${t('mcpRegistry.installError')}: ${err.message}` });
+          }
         }
       };
     }
@@ -580,6 +719,55 @@ async function showMcpRegistryDetail(serverName) {
     document.getElementById('modal-body').innerHTML = `<div class="marketplace-empty"><h3>${t('common.error')}</h3><p>${escapeHtml(e.message)}</p></div>`;
   }
 }
+
+// ========== CONNECTION TEST ==========
+
+async function testMcpConnection(serverName, mcpConfig) {
+  // HTTP servers can't be tested via process start
+  if (mcpConfig.type === 'url' || !mcpConfig.command) {
+    return 'http';
+  }
+
+  const testId = `mcp-test-${serverName}-${Date.now()}`;
+
+  return new Promise((resolve) => {
+    let resolved = false;
+
+    const done = (result) => {
+      if (!resolved) {
+        resolved = true;
+        unsubOutput();
+        unsubExit();
+        clearTimeout(timer);
+        // Stop the test process (unless it already exited)
+        if (result !== 'exited' && result !== 'failed') {
+          ctx.api.mcp.stop({ id: testId }).catch(() => {});
+        }
+        resolve(result);
+      }
+    };
+
+    // 5s timeout - MCP servers can be slow to start (npm install)
+    const timer = setTimeout(() => done('timeout'), 5000);
+
+    const unsubOutput = ctx.api.mcp.onOutput(({ id }) => {
+      if (id === testId) done('connected');
+    });
+
+    const unsubExit = ctx.api.mcp.onExit(({ id, code }) => {
+      if (id === testId) done(code === 0 ? 'exited' : 'failed');
+    });
+
+    ctx.api.mcp.start({
+      id: testId,
+      command: mcpConfig.command,
+      args: mcpConfig.args || [],
+      env: mcpConfig.env || {}
+    }).catch(() => done('failed'));
+  });
+}
+
+// ========== INSTALL ==========
 
 async function installMcpFromRegistry(serverName) {
   const result = await ctx.api.mcpRegistry.detail(serverName);
@@ -640,9 +828,27 @@ async function installMcpFromRegistry(serverName) {
   await saveMcpToConfig(serverName, mcpConfig);
   await loadLocalMcpsQuiet();
 
+  const displayName = server.title || serverName;
+
+  // Show immediate success toast
   if (ctx.showToast) {
-    ctx.showToast({ type: 'success', title: t('mcpRegistry.installSuccess', { name: server.title || serverName }) });
+    ctx.showToast({ type: 'success', title: t('mcpRegistry.installSuccess', { name: displayName }) });
   }
+
+  // Test connection in background — don't block the install flow
+  const configCopy = { ...mcpConfig };
+  testMcpConnection(serverName, configCopy).then((testResult) => {
+    if (testResult === 'failed') {
+      if (ctx.showToast) {
+        ctx.showToast({ type: 'warning', title: `${escapeHtml(displayName)}: ${t('mcpRegistry.connectionFailed')}` });
+      }
+    } else if (testResult === 'connected') {
+      if (ctx.showToast) {
+        ctx.showToast({ type: 'success', title: `${escapeHtml(displayName)}: ${t('mcpRegistry.connectionSuccess')}` });
+      }
+    }
+    // timeout / http / exited: no extra toast needed
+  }).catch(() => { /* silent */ });
 }
 
 function showMcpEnvForm(server, envVarsSpec, argsSpec) {
