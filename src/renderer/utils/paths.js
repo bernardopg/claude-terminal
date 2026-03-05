@@ -18,6 +18,7 @@ const legacyMcpsFile = path.join(dataDir, 'mcps.json');
 const archivesDir = path.join(dataDir, 'archives'); // Legacy, kept for migration
 const timeTrackingFile = path.join(dataDir, 'timetracking.json');
 const timeTrackingDir = path.join(dataDir, 'timetracking');
+const sessionRecapsDir = path.join(dataDir, 'session-recaps');
 const contextPacksFile = path.join(dataDir, 'context-packs.json');
 const promptTemplatesFile = path.join(dataDir, 'prompt-templates.json');
 
@@ -31,7 +32,7 @@ const agentsDir = path.join(claudeDir, 'agents');
  * Ensure all required directories exist
  */
 function ensureDirectories() {
-  [dataDir, skillsDir, agentsDir, timeTrackingDir].forEach(dir => {
+  [dataDir, skillsDir, agentsDir, timeTrackingDir, sessionRecapsDir].forEach(dir => {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
@@ -62,6 +63,7 @@ module.exports = {
   archivesDir,
   timeTrackingFile,
   timeTrackingDir,
+  sessionRecapsDir,
   contextPacksFile,
   promptTemplatesFile,
   claudeSettingsFile,
