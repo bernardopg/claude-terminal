@@ -345,7 +345,14 @@ function renderList(list, handlers, picker, currentProject) {
     if (section.loading) {
       return `
         <div class="quick-picker-section-header">${escapeHtml(section.label)}</div>
-        <div class="quick-picker-loading">${t('quickPicker.loading')}</div>`;
+        ${[0, 1, 2].map(i => `
+          <div class="quick-picker-item quick-picker-skeleton">
+            <div class="quick-picker-skeleton-icon"></div>
+            <div class="quick-picker-item-info">
+              <div class="quick-picker-skeleton-bar" style="width:${[55, 70, 45][i]}%"></div>
+              <div class="quick-picker-skeleton-bar quick-picker-skeleton-bar--sm" style="width:${[35, 50, 30][i]}%"></div>
+            </div>
+          </div>`).join('')}`;
     }
     if (section.items.length === 0) return '';
 

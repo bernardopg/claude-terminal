@@ -1182,12 +1182,39 @@
   border-top: none;
 }
 
-/* Loading row */
-.quick-picker-loading {
-  padding: 10px 20px;
-  font-size: 12px;
-  color: var(--text-muted);
-  font-style: italic;
+/* Skeleton shimmer */
+@keyframes qp-shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
+.quick-picker-skeleton {
+  pointer-events: none;
+}
+
+.quick-picker-skeleton-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--bg-hover) 50%, var(--bg-tertiary) 75%);
+  background-size: 200% 100%;
+  animation: qp-shimmer 1.4s ease-in-out infinite;
+}
+
+.quick-picker-skeleton-bar {
+  height: 11px;
+  border-radius: 3px;
+  margin-bottom: 6px;
+  background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--bg-hover) 50%, var(--bg-tertiary) 75%);
+  background-size: 200% 100%;
+  animation: qp-shimmer 1.4s ease-in-out infinite;
+}
+
+.quick-picker-skeleton-bar--sm {
+  height: 9px;
+  margin-bottom: 0;
+  animation-delay: 0.1s;
 }
 
 /* Inline badge (running, current, count) */
