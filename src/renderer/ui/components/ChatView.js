@@ -103,6 +103,9 @@ function createContextSuggestions(project, inputEl, getDefaultPlaceholder) {
   let currentIndex = 0;
   let rotationTimer = null;
   let cache = null; // { suggestions: string[], timestamp: number }
+  let _refreshing = false;
+  let _initTimer = null;
+  let _postStreamTimer = null;
 
   function buildSuggestions(todos, gitStatus) {
     const result = [];
@@ -116,10 +119,12 @@ function createContextSuggestions(project, inputEl, getDefaultPlaceholder) {
   }
 
   async function refresh() {
-    if (!project?.path) return;
+    if (!project?.path || _refreshing) return;
+    _refreshing = true;
     const now = Date.now();
     if (cache && now - cache.timestamp < CACHE_TTL) {
       suggestions = cache.suggestions;
+      _refreshing = false;
       _start();
       return;
     }
@@ -132,6 +137,8 @@ function createContextSuggestions(project, inputEl, getDefaultPlaceholder) {
       cache = { suggestions, timestamp: Date.now() };
     } catch {
       suggestions = [];
+    } finally {
+      _refreshing = false;
     }
     _start();
   }
@@ -162,6 +169,9 @@ function createContextSuggestions(project, inputEl, getDefaultPlaceholder) {
 
   function reset() {
     stop();
+    if (_initTimer) { clearTimeout(_initTimer); _initTimer = null; }
+    if (_postStreamTimer) { clearTimeout(_postStreamTimer); _postStreamTimer = null; }
+    _refreshing = false;
     suggestions = [];
     inputEl.placeholder = getDefaultPlaceholder();
   }
@@ -178,7 +188,7 @@ function createContextSuggestions(project, inputEl, getDefaultPlaceholder) {
     return true;
   }
 
-  return { refresh, stop, reset, handleTab };
+  return { refresh, stop, reset, handleTab, setInitTimer(t) { _initTimer = t; }, setPostStreamTimer(t) { _postStreamTimer = t; } };
 }
 
 // ── Tool Icons ──
@@ -468,7 +478,7 @@ function createChatView(wrapperEl, project, options = {}) {
   // ── Context suggestions ──
   const contextSuggestions = createContextSuggestions(project, inputEl, () => t('chat.placeholder'));
   // Defer initial scan to let the component finish mounting
-  setTimeout(() => { if (project?.path) contextSuggestions.refresh(); }, 500);
+  contextSuggestions.setInitTimer(setTimeout(() => { if (project?.path) contextSuggestions.refresh(); }, 500));
 
   attachBtn.addEventListener('click', () => fileInput.click());
 
@@ -2972,7 +2982,7 @@ function createChatView(wrapperEl, project, options = {}) {
       setStatus('thinking', t('chat.thinking'));
     } else {
       // Refresh contextual suggestions after streaming ends
-      setTimeout(() => contextSuggestions.refresh(), 300);
+      contextSuggestions.setPostStreamTimer(setTimeout(() => contextSuggestions.refresh(), 300));
       setStatus('idle', t('chat.ready') || 'Ready');
       inputEl.focus();
     }
