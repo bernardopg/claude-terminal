@@ -381,6 +381,7 @@ contextBridge.exposeInMainWorld('electron_api', {
     onAutoSyncStatus: createListener('cloud:auto-sync-status'),
     deleteProject: (params) => ipcRenderer.invoke('cloud:delete-project', params),
     syncSkills: () => ipcRenderer.invoke('cloud:sync-skills'),
+    getMachineId: () => ipcRenderer.invoke('cloud:get-machine-id'),
   },
 
   // ==================== USAGE ====================

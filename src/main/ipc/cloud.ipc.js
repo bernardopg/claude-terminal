@@ -167,6 +167,10 @@ function registerCloudHandlers() {
     return cloudRelayClient.getStatus();
   });
 
+  ipcMain.handle('cloud:get-machine-id', async () => {
+    return getMachineId();
+  });
+
   ipcMain.on('cloud:send', (_event, data) => {
     cloudRelayClient.send(data);
   });
