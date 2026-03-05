@@ -38,6 +38,18 @@ const {
   addTask,
   updateTask,
   deleteTask,
+  generateColumnId,
+  generateLabelId,
+  getKanbanColumns,
+  addKanbanColumn,
+  updateKanbanColumn,
+  deleteKanbanColumn,
+  getKanbanLabels,
+  addKanbanLabel,
+  updateKanbanLabel,
+  deleteKanbanLabel,
+  moveTask,
+  migrateTasksToKanban,
 } = require('../../src/renderer/state/projects.state');
 
 // Helper to reset state before each test
@@ -675,7 +687,10 @@ describe('tasks', () => {
     const task = addTask('p1', { title: 'Fix bug' });
     expect(task.id).toMatch(/^task-/);
     expect(task.title).toBe('Fix bug');
-    expect(task.status).toBe('todo');
+    expect(task.columnId).toBe('col-todo'); // premiere colonne par defaut
+    expect(task.description).toBe('');
+    expect(task.labels).toEqual([]);
+    expect(task.order).toBe(0);
     expect(task.sessionId).toBeNull();
     expect(typeof task.createdAt).toBe('number');
     expect(typeof task.updatedAt).toBe('number');
@@ -693,12 +708,12 @@ describe('tasks', () => {
     expect(result).toBeNull();
   });
 
-  test('updateTask changes status and bumps updatedAt', () => {
+  test('updateTask changes columnId and bumps updatedAt', () => {
     const task = addTask('p1', { title: 'Test' });
     jest.advanceTimersByTime(100);
-    updateTask('p1', task.id, { status: 'in_progress' });
+    updateTask('p1', task.id, { columnId: 'col-done' });
     const updated = getTasks('p1')[0];
-    expect(updated.status).toBe('in_progress');
+    expect(updated.columnId).toBe('col-done');
     expect(updated.updatedAt).toBeGreaterThan(updated.createdAt);
   });
 
@@ -710,8 +725,8 @@ describe('tasks', () => {
 
   test('updateTask does nothing for unknown taskId', () => {
     addTask('p1', { title: 'Test' });
-    updateTask('p1', 'nonexistent', { status: 'done' });
-    expect(getTasks('p1')[0].status).toBe('todo');
+    updateTask('p1', 'nonexistent', { columnId: 'col-done' });
+    expect(getTasks('p1')[0].columnId).toBe('col-todo');
   });
 
   test('deleteTask removes task', () => {
@@ -724,5 +739,169 @@ describe('tasks', () => {
     addTask('p1', { title: 'Test' });
     deleteTask('p1', 'nonexistent');
     expect(getTasks('p1')).toHaveLength(1);
+  });
+});
+
+// ── Kanban Columns ──
+
+describe('kanban columns', () => {
+  beforeEach(() => {
+    resetState({
+      projects: [{ id: 'p1', name: 'A', path: '/a', folderId: null }],
+    });
+  });
+
+  test('generateColumnId returns string starting with "col-"', () => {
+    expect(generateColumnId().startsWith('col-')).toBe(true);
+  });
+
+  test('getKanbanColumns returns 3 defaults when none set', () => {
+    const cols = getKanbanColumns('p1');
+    expect(cols).toHaveLength(3);
+    expect(cols[0].id).toBe('col-todo');
+    expect(cols[1].id).toBe('col-inprogress');
+    expect(cols[2].id).toBe('col-done');
+  });
+
+  test('addKanbanColumn adds column', () => {
+    addKanbanColumn('p1', { title: 'Review', color: '#ff0' });
+    const cols = getKanbanColumns('p1');
+    expect(cols).toHaveLength(4);
+    expect(cols[3].title).toBe('Review');
+  });
+
+  test('updateKanbanColumn changes title', () => {
+    updateKanbanColumn('p1', 'col-todo', { title: 'Backlog' });
+    const col = getKanbanColumns('p1').find(c => c.id === 'col-todo');
+    expect(col.title).toBe('Backlog');
+  });
+
+  test('deleteKanbanColumn removes empty column', () => {
+    const result = deleteKanbanColumn('p1', 'col-done');
+    expect(result).toBe(true);
+    expect(getKanbanColumns('p1')).toHaveLength(2);
+  });
+
+  test('deleteKanbanColumn refuses to delete non-empty column', () => {
+    addTask('p1', { title: 'T', columnId: 'col-todo' });
+    const result = deleteKanbanColumn('p1', 'col-todo');
+    expect(result).toBe(false);
+    expect(getKanbanColumns('p1')).toHaveLength(3);
+  });
+});
+
+// ── Kanban Labels ──
+
+describe('kanban labels', () => {
+  beforeEach(() => {
+    resetState({
+      projects: [{ id: 'p1', name: 'A', path: '/a', folderId: null }],
+    });
+  });
+
+  test('generateLabelId returns string starting with "lbl-"', () => {
+    expect(generateLabelId().startsWith('lbl-')).toBe(true);
+  });
+
+  test('getKanbanLabels returns empty by default', () => {
+    expect(getKanbanLabels('p1')).toEqual([]);
+  });
+
+  test('addKanbanLabel adds label', () => {
+    const label = addKanbanLabel('p1', { name: 'bug', color: '#f00' });
+    expect(label.id).toMatch(/^lbl-/);
+    expect(getKanbanLabels('p1')).toHaveLength(1);
+  });
+
+  test('updateKanbanLabel changes name', () => {
+    const label = addKanbanLabel('p1', { name: 'bug', color: '#f00' });
+    updateKanbanLabel('p1', label.id, { name: 'feature' });
+    expect(getKanbanLabels('p1')[0].name).toBe('feature');
+  });
+
+  test('deleteKanbanLabel removes label from tasks', () => {
+    const label = addKanbanLabel('p1', { name: 'bug', color: '#f00' });
+    addTask('p1', { title: 'T', labels: [label.id] });
+    deleteKanbanLabel('p1', label.id);
+    expect(getKanbanLabels('p1')).toHaveLength(0);
+    expect(getTasks('p1')[0].labels).toEqual([]);
+  });
+});
+
+// ── moveTask ──
+
+describe('moveTask', () => {
+  beforeEach(() => {
+    resetState({
+      projects: [{ id: 'p1', name: 'A', path: '/a', folderId: null }],
+    });
+  });
+
+  test('moveTask changes columnId cross-column', () => {
+    const t1 = addTask('p1', { title: 'T1', columnId: 'col-todo' });
+    moveTask('p1', t1.id, 'col-inprogress', 0);
+    const moved = getTasks('p1').find(t => t.id === t1.id);
+    expect(moved.columnId).toBe('col-inprogress');
+    expect(moved.order).toBe(0);
+  });
+
+  test('moveTask does nothing if targetColumnId does not exist', () => {
+    const t1 = addTask('p1', { title: 'T1', columnId: 'col-todo' });
+    moveTask('p1', t1.id, 'col-nonexistent', 0);
+    const task = getTasks('p1').find(t => t.id === t1.id);
+    expect(task.columnId).toBe('col-todo'); // unchanged
+  });
+
+  test('moveTask same-column reorder down is correct', () => {
+    // orders: t0=0, t1=1, t2=2, t3=3
+    const t0 = addTask('p1', { title: 'T0', columnId: 'col-todo', order: 0 });
+    const t1 = addTask('p1', { title: 'T1', columnId: 'col-todo', order: 1 });
+    const t2 = addTask('p1', { title: 'T2', columnId: 'col-todo', order: 2 });
+    const t3 = addTask('p1', { title: 'T3', columnId: 'col-todo', order: 3 });
+    // Move t1 (order=1) to order=3
+    moveTask('p1', t1.id, 'col-todo', 3);
+    const tasks = getTasks('p1');
+    const get = (id) => tasks.find(t => t.id === id).order;
+    expect(get(t0.id)).toBe(0);
+    expect(get(t1.id)).toBe(3);
+    expect(get(t2.id)).toBe(1);
+    expect(get(t3.id)).toBe(2);
+  });
+});
+
+// ── migrateTasksToKanban ──
+
+describe('migrateTasksToKanban', () => {
+  test('maps status to columnId', () => {
+    resetState({
+      projects: [{
+        id: 'p1', name: 'A', path: '/a', folderId: null,
+        tasks: [
+          { id: 't1', title: 'T1', status: 'in_progress', sessionId: null, createdAt: 1, updatedAt: 1 },
+          { id: 't2', title: 'T2', status: 'done', sessionId: null, createdAt: 1, updatedAt: 1 },
+          { id: 't3', title: 'T3', status: 'todo', sessionId: null, createdAt: 1, updatedAt: 1 },
+        ]
+      }]
+    });
+    migrateTasksToKanban('p1');
+    const tasks = getTasks('p1');
+    expect(tasks.find(t => t.id === 't1').columnId).toBe('col-inprogress');
+    expect(tasks.find(t => t.id === 't2').columnId).toBe('col-done');
+    expect(tasks.find(t => t.id === 't3').columnId).toBe('col-todo');
+    expect(getKanbanColumns('p1')).toHaveLength(3);
+  });
+
+  test('is a no-op if columns already exist', () => {
+    resetState({
+      projects: [{
+        id: 'p1', name: 'A', path: '/a', folderId: null,
+        kanbanColumns: [{ id: 'col-custom', title: 'Custom', color: '#f00', order: 0 }],
+        tasks: [{ id: 't1', title: 'T1', status: 'done', columnId: 'col-custom', sessionId: null, createdAt: 1, updatedAt: 1 }]
+      }]
+    });
+    migrateTasksToKanban('p1');
+    // Should not overwrite existing columns
+    expect(getKanbanColumns('p1')).toHaveLength(1);
+    expect(getKanbanColumns('p1')[0].id).toBe('col-custom');
   });
 });
