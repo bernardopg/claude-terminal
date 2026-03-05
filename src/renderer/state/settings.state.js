@@ -44,6 +44,7 @@ const defaultSettings = {
   telemetryCategories: { app: true, features: true, errors: true }, // Granular event categories
   telemetryConsentShown: false, // Whether consent prompt was shown
   agentColors: {}, // Custom colors per tool/agent name: { 'Grep': '#ff0000', 'my-agent': '#00ff00' }
+  autoClaudeMdUpdate: true, // Suggest CLAUDE.md updates after chat sessions
 };
 
 const settingsState = new State({ ...defaultSettings });
