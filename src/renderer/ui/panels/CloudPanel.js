@@ -224,7 +224,13 @@ function buildHtml(settings) {
                   <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
                 </svg>
                 <span>${t('cloud.sessionsTitle')}</span>
+                <span class="cp-sessions-count" id="cp-sessions-count" style="display:none"></span>
                 <div class="cp-header-actions">
+                  <span class="cp-sessions-loading" id="cp-sessions-loading" style="display:none">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                    </svg>
+                  </span>
                   <button class="cp-btn-icon" id="cp-sessions-refresh" title="${t('cloud.sessionsRefresh')}">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
@@ -232,10 +238,8 @@ function buildHtml(settings) {
                   </button>
                 </div>
               </div>
-              <div class="cp-section-body">
-                <div id="cp-sessions-list" class="cp-sessions-list">
-                  <div class="cp-sessions-empty">${t('cloud.sessionsEmpty')}</div>
-                </div>
+              <div class="cp-section-body" style="padding:0">
+                <div id="cp-sessions-list" class="cp-sessions-list"></div>
               </div>
             </div>
 
@@ -409,7 +413,7 @@ function setupHandlers(context) {
 
     if (connected) {
       _loadCloudUser();
-      _loadCloudSessions();
+      _loadCloudSessions(true);
       _startSessionsPolling();
       _checkCloudChanges();
       // Sync polling is now handled by CloudSyncService in main process
@@ -508,25 +512,76 @@ function setupHandlers(context) {
   }
 
   // ── Sessions ──
-  async function _loadCloudSessions() {
+  function _timeAgo(ts) {
+    if (!ts) return '';
+    const diff = Math.floor((Date.now() - ts) / 1000);
+    if (diff < 60) return t('cloud.timeJustNow');
+    if (diff < 3600) return t('cloud.timeMinAgo', { count: Math.floor(diff / 60) });
+    if (diff < 86400) return t('cloud.timeHourAgo', { count: Math.floor(diff / 3600) });
+    return t('cloud.timeDayAgo', { count: Math.floor(diff / 86400) });
+  }
+
+  function _shortModel(model) {
+    if (!model) return '';
+    if (model.includes('opus')) return 'Opus';
+    if (model.includes('sonnet')) return 'Sonnet';
+    if (model.includes('haiku')) return 'Haiku';
+    return model.split('-').slice(-1)[0];
+  }
+
+  async function _loadCloudSessions(showLoading = false) {
     const listEl = document.getElementById('cp-sessions-list');
+    const countEl = document.getElementById('cp-sessions-count');
+    const loadingEl = document.getElementById('cp-sessions-loading');
     if (!listEl) return;
+
+    if (showLoading && loadingEl) loadingEl.style.display = '';
+
     try {
       const { sessions } = await api.cloud.getSessions();
+
+      if (loadingEl) loadingEl.style.display = 'none';
+
       if (!sessions || sessions.length === 0) {
+        if (countEl) countEl.style.display = 'none';
         listEl.innerHTML = `<div class="cp-sessions-empty">${t('cloud.sessionsEmpty')}</div>`;
         return;
       }
+
+      const running = sessions.filter(s => s.status === 'running').length;
+      if (countEl) {
+        countEl.textContent = running > 0 ? String(running) : String(sessions.length);
+        countEl.className = 'cp-sessions-count' + (running > 0 ? ' running' : '');
+        countEl.style.display = '';
+      }
+
       listEl.innerHTML = sessions.map(s => {
-        const statusClass = s.status === 'running' ? 'running' : s.status === 'error' ? 'error' : 'idle';
-        const statusLabel = s.status === 'running' ? t('cloud.sessionRunning') : s.status === 'error' ? t('cloud.sessionError') : t('cloud.sessionIdle');
-        const stopBtn = s.status === 'running'
-          ? `<button class="cp-btn-sm cp-btn-danger cp-session-stop" data-id="${s.id}">${t('cloud.sessionStop')}</button>`
-          : `<button class="cp-btn-sm cp-session-stop" data-id="${s.id}" title="${t('cloud.deleteSession')}">\u2715</button>`;
+        const isRunning = s.status === 'running';
+        const isError = s.status === 'error';
+        const statusClass = isRunning ? 'running' : isError ? 'error' : 'idle';
+        const statusLabel = isRunning ? t('cloud.sessionRunning') : isError ? t('cloud.sessionError') : t('cloud.sessionIdle');
+        const modelLabel = _shortModel(s.model);
+        const startedLabel = s.createdAt ? _timeAgo(s.createdAt) : '';
+        const lastLabel = s.lastActivity && s.lastActivity !== s.createdAt ? _timeAgo(s.lastActivity) : '';
+
+        const stopBtn = isRunning
+          ? `<button class="cp-btn-sm cp-btn-danger cp-session-stop" data-id="${_escapeHtml(s.id)}">${t('cloud.sessionStop')}</button>`
+          : `<button class="cp-btn-sm cp-session-delete cp-session-stop" data-id="${_escapeHtml(s.id)}" title="${t('cloud.deleteSession')}">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>`;
+
         return `<div class="cp-session-item">
+          <div class="cp-session-status-dot ${statusClass}"></div>
           <div class="cp-session-info">
-            <span class="cp-session-project">${_escapeHtml(s.projectName)}</span>
-            <span class="cp-session-status ${statusClass}">${statusLabel}</span>
+            <div class="cp-session-top">
+              <span class="cp-session-project">${_escapeHtml(s.projectName)}</span>
+              ${modelLabel ? `<span class="cp-session-model">${_escapeHtml(modelLabel)}</span>` : ''}
+              <span class="cp-session-status-label ${statusClass}">${statusLabel}</span>
+            </div>
+            <div class="cp-session-meta">
+              ${startedLabel ? `<span>${t('cloud.sessionStarted')} ${startedLabel}</span>` : ''}
+              ${lastLabel ? `<span>· ${t('cloud.sessionActivity')} ${lastLabel}</span>` : ''}
+            </div>
           </div>
           ${stopBtn}
         </div>`;
@@ -544,6 +599,7 @@ function setupHandlers(context) {
         });
       });
     } catch {
+      if (loadingEl) loadingEl.style.display = 'none';
       listEl.innerHTML = `<div class="cp-sessions-empty">${t('cloud.sessionsEmpty')}</div>`;
     }
   }
@@ -552,7 +608,7 @@ function setupHandlers(context) {
     _stopSessionsPolling();
     _cloudSessionsInterval = setInterval(() => {
       if (!document.getElementById('cp-sessions-list')) { _stopSessionsPolling(); return; }
-      _loadCloudSessions();
+      _loadCloudSessions(false); // silent poll — no loading spinner
     }, 15000);
   }
 
@@ -563,8 +619,10 @@ function setupHandlers(context) {
   const sessionsRefresh = document.getElementById('cp-sessions-refresh');
   if (sessionsRefresh) {
     sessionsRefresh.addEventListener('click', async () => {
+      sessionsRefresh.disabled = true;
       sessionsRefresh.classList.add('spinning');
-      await _loadCloudSessions();
+      await _loadCloudSessions(true);
+      sessionsRefresh.disabled = false;
       setTimeout(() => sessionsRefresh.classList.remove('spinning'), 400);
     });
   }

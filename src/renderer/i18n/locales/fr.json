@@ -1276,6 +1276,8 @@
     "sessionRunning": "En cours",
     "sessionIdle": "Inactif",
     "sessionError": "Erreur",
+    "sessionStarted": "Démarré",
+    "sessionActivity": "Actif",
     "syncSectionTitle": "Synchronisation",
     "syncNoChanges": "Aucun changement en attente",
     "syncCheckBtn": "Vérifier les changements",

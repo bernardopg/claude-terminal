@@ -616,30 +616,96 @@
   pointer-events: none;
 }
 
+/* ── Sessions header extras ── */
+.cp-sessions-count {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  line-height: 16px;
+}
+
+.cp-sessions-count.running {
+  background: rgba(217, 119, 6, 0.12);
+  color: var(--accent);
+}
+
+.cp-sessions-loading {
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+}
+
+.cp-sessions-loading svg {
+  animation: cp-spin 0.8s linear infinite;
+}
+
 /* ── Sessions List ── */
 .cp-sessions-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
 }
 
 .cp-session-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px;
+  padding: 11px 18px;
+  gap: 12px;
+  border-bottom: 1px solid var(--border-color);
+  transition: background 0.1s;
+}
+
+.cp-session-item:last-child {
+  border-bottom: none;
+}
+
+.cp-session-item:hover {
   background: var(--bg-primary);
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
-  gap: 10px;
+}
+
+/* Status dot */
+.cp-session-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-muted);
+}
+
+.cp-session-status-dot.running {
+  background: var(--accent);
+  box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.15);
+  animation: cp-session-pulse 1.8s ease-in-out infinite;
+}
+
+.cp-session-status-dot.idle {
+  background: var(--text-muted);
+}
+
+.cp-session-status-dot.error {
+  background: var(--danger);
+}
+
+@keyframes cp-session-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.15); }
+  50% { box-shadow: 0 0 0 4px rgba(217, 119, 6, 0.25); }
 }
 
 .cp-session-info {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 3px;
   min-width: 0;
   flex: 1;
+}
+
+.cp-session-top {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
 }
 
 .cp-session-project {
@@ -649,37 +715,62 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex-shrink: 1;
+  min-width: 0;
 }
 
-.cp-session-status {
+.cp-session-model {
   font-size: 10px;
   font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 8px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
   white-space: nowrap;
   flex-shrink: 0;
 }
 
-.cp-session-status.running {
-  background: rgba(217, 119, 6, 0.12);
-  color: var(--accent);
+.cp-session-status-label {
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
-.cp-session-status.idle {
-  background: var(--bg-hover);
-  color: var(--text-secondary);
+.cp-session-status-label.running { color: var(--accent); }
+.cp-session-status-label.idle { color: var(--text-muted); }
+.cp-session-status-label.error { color: var(--danger); }
+
+.cp-session-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.cp-session-status.error {
-  background: rgba(239, 68, 68, 0.12);
-  color: var(--danger);
+.cp-session-delete {
+  color: var(--text-muted) !important;
+  border-color: transparent !important;
+  background: transparent !important;
+  padding: 4px 6px !important;
+  display: flex;
+  align-items: center;
+}
+
+.cp-session-delete:hover {
+  color: var(--danger) !important;
+  background: rgba(239, 68, 68, 0.08) !important;
 }
 
 .cp-sessions-empty {
   font-size: var(--font-xs);
   color: var(--text-muted);
   text-align: center;
-  padding: 20px 0;
+  padding: 24px 18px;
 }
 
 /* ── Sync Section ── */

@@ -1276,6 +1276,8 @@
     "sessionRunning": "Running",
     "sessionIdle": "Idle",
     "sessionError": "Error",
+    "sessionStarted": "Started",
+    "sessionActivity": "Active",
     "syncSectionTitle": "File sync",
     "syncNoChanges": "No pending changes",
     "syncCheckBtn": "Check for changes",
