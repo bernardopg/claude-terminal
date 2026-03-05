@@ -349,6 +349,23 @@ export function createCloudRouter(relay?: RelayServer): Router {
     }
   });
 
+  // ── Download full project as zip ──
+
+  router.get('/projects/:name/download', async (req: AuthRequest, res: Response) => {
+    try {
+      const name = req.params.name as string;
+      const zipStream = await projectManager.downloadProjectZip(req.userName!, name);
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(name)}.zip"`);
+      zipStream.pipe(res);
+      (zipStream as any).on('error', (err: Error) => {
+        if (!res.headersSent) res.status(500).json({ error: err.message });
+      });
+    } catch (err: any) {
+      res.status(404).json({ error: err.message });
+    }
+  });
+
   // ── File hashes (for accurate diff comparison) ──
 
   router.post('/projects/:name/files/hashes', async (req: AuthRequest, res: Response) => {

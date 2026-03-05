@@ -267,6 +267,36 @@ export class ProjectManager {
   }
 
   /**
+   * Stream the full project as a zip archive (excluding build/vendor dirs).
+   */
+  async downloadProjectZip(userName: string, projectName: string): Promise<NodeJS.ReadableStream> {
+    const projectPath = store.getProjectPath(userName, projectName);
+    const exists = await this.projectExists(userName, projectName);
+    if (!exists) throw new Error(`Project "${projectName}" does not exist`);
+
+    const archiver = require('archiver');
+    const archive = archiver('zip', { zlib: { level: 6 } });
+
+    await this._archiveDir(archive, projectPath, projectPath);
+    archive.finalize();
+    return archive;
+  }
+
+  private async _archiveDir(archive: any, baseDir: string, currentDir: string): Promise<void> {
+    const entries = await fs.promises.readdir(currentDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (ProjectManager.EXCLUDE_DIRS.has(entry.name)) continue;
+      const fullPath = path.join(currentDir, entry.name);
+      const relPath = path.relative(baseDir, fullPath).replace(/\\/g, '/');
+      if (entry.isDirectory()) {
+        await this._archiveDir(archive, baseDir, fullPath);
+      } else {
+        archive.file(fullPath, { name: relPath });
+      }
+    }
+  }
+
+  /**
    * Compute SHA256 hash of a single file via streaming.
    */
   private _hashFile(filePath: string): Promise<string> {
