@@ -59,19 +59,23 @@ function wireNotificationConsumer() {
     // Init session context on session start
     eventBus.on(EVENT_TYPES.SESSION_START, (e) => {
       if (e.source !== 'hooks' || !e.projectId) return;
-      sessionContext.set(e.projectId, { toolCount: 0, toolNames: new Set(), lastToolName: null, startTime: Date.now(), notified: false });
+      sessionContext.set(e.projectId, { toolCount: 0, toolNames: new Set(), toolCounts: new Map(), prompts: [], lastToolName: null, startTime: Date.now(), notified: false });
     }),
 
     // Accumulate tool usage (also auto-init context if SESSION_START was missed)
     eventBus.on(EVENT_TYPES.TOOL_START, (e) => {
       if (e.source !== 'hooks' || !e.projectId) return;
       if (!sessionContext.has(e.projectId)) {
-        sessionContext.set(e.projectId, { toolCount: 0, toolNames: new Set(), lastToolName: null, startTime: Date.now(), notified: false });
+        sessionContext.set(e.projectId, { toolCount: 0, toolNames: new Set(), toolCounts: new Map(), prompts: [], lastToolName: null, startTime: Date.now(), notified: false });
       }
       const ctx = sessionContext.get(e.projectId);
       ctx.toolCount++;
       ctx.lastToolName = e.data?.toolName || null;
       if (e.data?.toolName) ctx.toolNames.add(e.data.toolName);
+      const toolName = e.data?.toolName;
+      if (toolName) {
+        ctx.toolCounts.set(toolName, (ctx.toolCounts.get(toolName) || 0) + 1);
+      }
     }),
 
     // Log tool errors
@@ -330,6 +334,48 @@ function wireTabRenameConsumer() {
   );
 }
 
+// ── Consumer: Session Recap (hooks-only — generates AI summary after session ends) ──
+function wireSessionRecapConsumer() {
+  consumerUnsubscribers.push(
+    // Collect user prompts into session context
+    eventBus.on(EVENT_TYPES.PROMPT_SUBMIT, (e) => {
+      if (e.source !== 'hooks' || !e.projectId) return;
+      const ctx = sessionContext.get(e.projectId);
+      if (!ctx) return;
+      const prompt = e.data?.prompt;
+      if (prompt && ctx.prompts.length < 5) {
+        ctx.prompts.push(prompt);
+      }
+    }),
+
+    // On session end: generate recap if session was meaningful
+    eventBus.on(EVENT_TYPES.SESSION_END, (e) => {
+      if (e.source !== 'hooks' || !e.projectId) return;
+      const ctx = sessionContext.get(e.projectId);
+      // Skip trivial sessions (< 2 tool uses)
+      if (!ctx || ctx.toolCount < 2) return;
+
+      const durationMs = Date.now() - (ctx.startTime || Date.now());
+      const enrichedCtx = {
+        toolCounts: Object.fromEntries(ctx.toolCounts),
+        prompts: ctx.prompts || [],
+        durationMs,
+        toolCount: ctx.toolCount
+      };
+
+      // Non-blocking async call
+      try {
+        const SessionRecapService = require('../services/SessionRecapService');
+        SessionRecapService.handleSessionEnd(e.projectId, enrichedCtx).catch(err => {
+          console.warn('[Events] SessionRecap error:', err.message);
+        });
+      } catch (err) {
+        console.warn('[Events] SessionRecapService not available:', err.message);
+      }
+    })
+  );
+}
+
 // ── Debug: wildcard listener (disabled by default to avoid log spam) ──
 // Enable via: window.__CLAUDE_EVENT_DEBUG = true
 function wireDebugListener() {
@@ -400,6 +446,7 @@ function initClaudeEvents() {
   wireTerminalStatusConsumer();
   wireSessionIdCapture();
   wireTabRenameConsumer();
+  wireSessionRecapConsumer();
   wireDebugListener();
 
   // Activate provider
