@@ -1229,6 +1229,7 @@
     "apiKeyPlaceholder": "ctc_...",
     "apiKeyDesc": "Générée par l'admin serveur avec la commande ct-cloud user add",
     "autoConnect": "Auto-connexion",
+    "thisMachine": "Cette machine :",
     "autoConnectDesc": "Se connecter automatiquement au relay cloud au démarrage",
     "connect": "Connecter",
     "disconnect": "Déconnecter",

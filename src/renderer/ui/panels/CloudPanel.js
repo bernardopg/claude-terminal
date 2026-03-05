@@ -71,6 +71,10 @@ function buildHtml(settings) {
               </div>
               <div class="cp-field-hint">${t('cloud.apiKeyDesc')}</div>
             </div>
+            <div class="cloud-machine-id" id="cp-machine-id" style="display:none">
+              <span class="cloud-machine-id-label">${t('cloud.thisMachine')}</span>
+              <code class="cloud-machine-id-value"></code>
+            </div>
             <div class="cp-form-footer">
               <div class="cp-auto">
                 <label class="settings-toggle rp-mini-toggle">
@@ -448,11 +452,20 @@ function setupHandlers(context) {
     });
   }
 
-  // Initial status check
+  // Initial status check + machineId display
   (async () => {
     try {
       const status = await api.cloud.status();
       if (status.connected) _updateStatusUI(true);
+    } catch { /* ignore */ }
+
+    try {
+      const machineId = await api.cloud.getMachineId();
+      const machineIdEl = document.getElementById('cp-machine-id');
+      if (machineIdEl) {
+        machineIdEl.querySelector('.cloud-machine-id-value').textContent = machineId;
+        machineIdEl.style.display = 'flex';
+      }
     } catch { /* ignore */ }
   })();
 
