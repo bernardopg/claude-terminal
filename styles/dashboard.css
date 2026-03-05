@@ -2319,3 +2319,222 @@
   background: var(--bg-tertiary);
   color: var(--text-muted);
 }
+
+/* ── Tasks Section ──────────────────────────────────────────── */
+
+.tasks-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.tasks-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tasks-header h3 svg {
+  width: 14px;
+  height: 14px;
+}
+
+.btn-task-add {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: var(--font-xs);
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-task-add:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.task-add-form {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.task-add-input {
+  flex: 1;
+  padding: 5px 8px;
+  font-size: var(--font-sm);
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.task-add-confirm {
+  padding: 5px 10px;
+  font-size: var(--font-xs);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: #000;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.task-add-cancel {
+  padding: 5px 8px;
+  font-size: var(--font-xs);
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.task-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  transition: border-color 0.15s ease;
+}
+
+.task-item:hover {
+  border-color: var(--bg-hover);
+}
+
+.task-item.in-progress {
+  border-color: var(--accent-dim);
+  background: rgba(217, 119, 6, 0.05);
+}
+
+.task-item.done {
+  opacity: 0.6;
+}
+
+.task-item.done .task-item-title {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.task-item-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.task-item.todo .task-item-status {
+  border: 2px solid var(--text-muted);
+  background: transparent;
+}
+
+.task-item.in-progress .task-item-status {
+  background: var(--accent);
+}
+
+.task-item.done .task-item-status {
+  background: var(--success);
+}
+
+.task-item-title {
+  flex: 1;
+  font-size: var(--font-sm);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.task-item-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.task-item:hover .task-item-actions {
+  opacity: 1;
+}
+
+.btn-task-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 11px;
+}
+
+.btn-task-action:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.btn-task-action.btn-task-start:hover {
+  color: var(--accent);
+}
+
+.btn-task-action.btn-task-complete:hover {
+  color: var(--success);
+}
+
+.btn-task-action.btn-task-delete:hover {
+  color: var(--danger);
+}
+
+.task-session-badge {
+  font-size: var(--font-2xs);
+  padding: 1px 5px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.task-session-badge:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.tasks-empty {
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  text-align: center;
+  padding: 10px 0;
+}
