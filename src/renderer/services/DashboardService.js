@@ -6,7 +6,7 @@
 // Use preload API instead of direct ipcRenderer
 const api = window.electron_api;
 const { fs, path } = window.electron_nodeModules;
-const { projectsState, setGitPulling, setGitPushing, setGitMerging, setMergeInProgress, getGitOperation, getProjectTimes, getProjectSessions, getFolder, getProject, countProjectsRecursive } = require('../state');
+const { projectsState, setGitPulling, setGitPushing, setGitMerging, setMergeInProgress, getGitOperation, getProjectTimes, getProjectSessions, getFolder, getProject, countProjectsRecursive, getTasks } = require('../state');
 const { escapeHtml } = require('../utils');
 const { sanitizeColor } = require('../utils/color');
 const { formatDuration } = require('../utils/format');
@@ -678,6 +678,71 @@ function buildChangedFilesHtml(files) {
         ${buildFileListHtml(files.staged, t('git.staged'), 'staged')}
         ${buildFileListHtml(files.unstaged, t('git.unstaged'), 'unstaged')}
         ${buildFileListHtml(files.untracked, t('git.untracked'), 'untracked')}
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Build Tasks section HTML
+ * @param {Object} project
+ * @returns {string}
+ */
+function buildTasksHtml(project) {
+  const tasks = getTasks(project.id);
+
+  const taskItems = tasks.length > 0
+    ? tasks.map(task => {
+        const statusClass = task.status === 'in_progress' ? 'in-progress' : task.status;
+        const sessionBadge = task.sessionId
+          ? `<span class="task-session-badge" data-task-session="${escapeHtml(task.sessionId)}" title="${escapeHtml(task.sessionId)}">${task.sessionId.slice(0, 8)}…</span>`
+          : '';
+
+        const startBtn = task.status === 'todo'
+          ? `<button class="btn-task-action btn-task-start" data-task-id="${escapeHtml(task.id)}" data-action="start" title="${t('tasks.start')}">▶</button>`
+          : '';
+
+        const completeBtn = task.status === 'in_progress'
+          ? `<button class="btn-task-action btn-task-complete" data-task-id="${escapeHtml(task.id)}" data-action="complete" title="${t('tasks.complete')}">✓</button>`
+          : '';
+
+        const linkBtn = task.status === 'in_progress' && !task.sessionId
+          ? `<button class="btn-task-action btn-task-link" data-task-id="${escapeHtml(task.id)}" data-action="link" title="${t('tasks.linkSession')}">🔗</button>`
+          : '';
+
+        const deleteBtn = `<button class="btn-task-action btn-task-delete" data-task-id="${escapeHtml(task.id)}" data-action="delete" title="${t('tasks.delete')}">✕</button>`;
+
+        return `
+          <div class="task-item ${statusClass}" data-task-id="${escapeHtml(task.id)}">
+            <span class="task-item-status"></span>
+            <span class="task-item-title">${escapeHtml(task.title)}</span>
+            ${sessionBadge}
+            <div class="task-item-actions">
+              ${startBtn}${completeBtn}${linkBtn}${deleteBtn}
+            </div>
+          </div>
+        `;
+      }).join('')
+    : `<div class="tasks-empty">${t('tasks.noTasks')}</div>`;
+
+  return `
+    <div class="dashboard-section">
+      <div class="tasks-header">
+        <h3>
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+          ${t('tasks.title')}
+        </h3>
+        <button class="btn-task-add" id="task-btn-add">
+          + ${t('tasks.add')}
+        </button>
+      </div>
+      <div id="task-add-form" class="task-add-form" style="display:none">
+        <input class="task-add-input" id="task-add-input" type="text" placeholder="${t('tasks.addPlaceholder')}" maxlength="120">
+        <button class="task-add-confirm" id="task-add-confirm">↵</button>
+        <button class="task-add-cancel" id="task-add-cancel">✕</button>
+      </div>
+      <div class="task-list" id="task-list">
+        ${taskItems}
       </div>
     </div>
   `;
@@ -1415,6 +1480,7 @@ function renderDashboardHtml(container, project, data, options, isRefreshing = f
 
     <div class="dashboard-grid" data-animate="3">
       <div class="dashboard-col">
+        ${buildTasksHtml(project)}
         ${buildGitStatusHtml(gitInfo)}
         ${buildWorkflowRunsHtml(workflowRuns)}
         ${buildPullRequestsHtml(pullRequests)}
