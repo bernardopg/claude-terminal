@@ -10,11 +10,14 @@ const { t } = require('../../i18n');
 const { showConfirm } = require('../components/Modal');
 
 /**
- * Escape a SQL identifier (table/column name) by wrapping in backticks
- * and doubling any backtick inside the name.
+ * Escape a SQL identifier (table/column name).
+ * PostgreSQL and SQLite use double quotes; MySQL uses backticks.
  */
-function escapeIdentifier(name) {
-  return '`' + String(name).replace(/`/g, '``') + '`';
+function escapeIdentifier(name, dbType) {
+  if (dbType === 'mysql') {
+    return '`' + String(name).replace(/`/g, '``') + '`';
+  }
+  return '"' + String(name).replace(/"/g, '""') + '"';
 }
 
 /**
@@ -622,6 +625,7 @@ async function commitCellEdit(input) {
   // Find primary key for WHERE clause
   const pkCol = tableMeta.columns.find(c => c.primaryKey);
   const isMongo = conn && conn.type === 'mongodb';
+  const dbType = conn ? conn.type : 'sqlite';
 
   if (isMongo) {
     ctx.showToast({ type: 'warning', title: t('database.browserEditNotSupported') });
@@ -632,19 +636,21 @@ async function commitCellEdit(input) {
   let whereClause = '';
   if (pkCol) {
     const pkVal = data.rows[row][pkCol.name];
-    whereClause = `WHERE ${escapeIdentifier(pkCol.name)} = ${escapeSqlValue(pkVal)}`;
+    whereClause = `WHERE ${escapeIdentifier(pkCol.name, dbType)} = ${escapeSqlValue(pkVal)}`;
   } else {
     // No PK — use all columns for WHERE
     const conditions = data.columns.map(c => {
       const v = data.rows[row][c];
-      if (v === null || v === undefined) return `${escapeIdentifier(c)} IS NULL`;
-      return `${escapeIdentifier(c)} = ${escapeSqlValue(v)}`;
+      if (v === null || v === undefined) return `${escapeIdentifier(c, dbType)} IS NULL`;
+      return `${escapeIdentifier(c, dbType)} = ${escapeSqlValue(v)}`;
     });
-    whereClause = `WHERE ${conditions.join(' AND ')} LIMIT 1`;
+    whereClause = dbType === 'mysql'
+      ? `WHERE ${conditions.join(' AND ')} LIMIT 1`
+      : `WHERE ${conditions.join(' AND ')}`;
   }
 
   const setVal = newVal === '' ? 'NULL' : escapeSqlValue(newVal);
-  const sql = `UPDATE ${escapeIdentifier(panelState.browserSelectedTable)} SET ${escapeIdentifier(col)} = ${setVal} ${whereClause}`;
+  const sql = `UPDATE ${escapeIdentifier(panelState.browserSelectedTable, dbType)} SET ${escapeIdentifier(col, dbType)} = ${setVal} ${whereClause}`;
 
   try {
     const result = await ctx.api.database.executeQuery({ id: activeId, sql });
@@ -705,13 +711,14 @@ function insertNewRow() {
     const inputs = document.querySelectorAll('.db-insert-input');
     const colNames = [];
     const values = [];
+    const dbType = conn ? conn.type : 'sqlite';
     inputs.forEach(input => {
       const val = input.value.trim();
       const nullable = input.dataset.nullable === 'true';
       // Skip empty nullable fields (they'll use default/NULL)
       if (val === '' && nullable) return;
       if (val === '') return;
-      colNames.push(escapeIdentifier(input.dataset.col));
+      colNames.push(escapeIdentifier(input.dataset.col, dbType));
       values.push(escapeSqlValue(val));
     });
 
@@ -720,7 +727,7 @@ function insertNewRow() {
       return;
     }
 
-    const sql = `INSERT INTO ${escapeIdentifier(panelState.browserSelectedTable)} (${colNames.join(', ')}) VALUES (${values.join(', ')})`;
+    const sql = `INSERT INTO ${escapeIdentifier(panelState.browserSelectedTable, dbType)} (${colNames.join(', ')}) VALUES (${values.join(', ')})`;
     try {
       const result = await ctx.api.database.executeQuery({ id: activeId, sql });
       if (result.error) {
@@ -768,20 +775,23 @@ async function deleteRow(rowIdx) {
 
   if (!confirmed) return;
 
+  const dbType = conn ? conn.type : 'sqlite';
   let whereClause = '';
   if (pkCol) {
     const pkVal = row[pkCol.name];
-    whereClause = `WHERE ${escapeIdentifier(pkCol.name)} = ${escapeSqlValue(pkVal)}`;
+    whereClause = `WHERE ${escapeIdentifier(pkCol.name, dbType)} = ${escapeSqlValue(pkVal)}`;
   } else {
     const conditions = data.columns.map(c => {
       const v = row[c];
-      if (v === null || v === undefined) return `${escapeIdentifier(c)} IS NULL`;
-      return `${escapeIdentifier(c)} = ${escapeSqlValue(v)}`;
+      if (v === null || v === undefined) return `${escapeIdentifier(c, dbType)} IS NULL`;
+      return `${escapeIdentifier(c, dbType)} = ${escapeSqlValue(v)}`;
     });
-    whereClause = `WHERE ${conditions.join(' AND ')} LIMIT 1`;
+    whereClause = dbType === 'mysql'
+      ? `WHERE ${conditions.join(' AND ')} LIMIT 1`
+      : `WHERE ${conditions.join(' AND ')}`;
   }
 
-  const sql = `DELETE FROM ${escapeIdentifier(panelState.browserSelectedTable)} ${whereClause}`;
+  const sql = `DELETE FROM ${escapeIdentifier(panelState.browserSelectedTable, dbType)} ${whereClause}`;
   try {
     const result = await ctx.api.database.executeQuery({ id: activeId, sql });
     if (result.error) {
@@ -807,6 +817,7 @@ async function loadTableData(tableName) {
   renderContent();
 
   const isMongo = conn && conn.type === 'mongodb';
+  const dbType = conn ? conn.type : 'sqlite';
   const page = panelState.browserPage;
   const pageSize = panelState.browserPageSize;
   const offset = page * pageSize;
@@ -821,15 +832,18 @@ async function loadTableData(tableName) {
     const schema = state2.getDatabaseSchema(activeId);
     const tableMeta = schema?.tables?.find(t => t.name === tableName);
     if (tableMeta && tableMeta.columns.length > 0) {
-      const escaped = searchTerm.replace(/'/g, "''").replace(/%/g, '\\%').replace(/_/g, '\\_');
+      // Use '!' as LIKE escape char (works on MySQL, PostgreSQL, SQLite)
+      const escaped = searchTerm.replace(/'/g, "''").replace(/%/g, '!%').replace(/_/g, '!_');
+      // MySQL CAST target is CHAR; PostgreSQL and SQLite use TEXT
+      const castType = dbType === 'mysql' ? 'CHAR' : 'TEXT';
       const conditions = tableMeta.columns.map(col => {
-        return `CAST(${escapeIdentifier(col.name)} AS CHAR) LIKE '%${escaped}%'`;
+        return `CAST(${escapeIdentifier(col.name, dbType)} AS ${castType}) LIKE '%${escaped}%' ESCAPE '!'`;
       });
       searchWhere = ` WHERE (${conditions.join(' OR ')})`;
     }
   }
 
-  const escapedTable = escapeIdentifier(tableName);
+  const escapedTable = escapeIdentifier(tableName, dbType);
   let sql, countSql;
   if (isMongo) {
     // Use $regex per-field search — safe against NoSQL injection (no $where/JS eval)
@@ -850,7 +864,7 @@ async function loadTableData(tableName) {
     }
     countSql = null;
   } else {
-    const orderBy = sortCol ? ` ORDER BY ${escapeIdentifier(sortCol)} ${sortDir === 'DESC' ? 'DESC' : 'ASC'}` : '';
+    const orderBy = sortCol ? ` ORDER BY ${escapeIdentifier(sortCol, dbType)} ${sortDir === 'DESC' ? 'DESC' : 'ASC'}` : '';
     sql = `SELECT * FROM ${escapedTable}${searchWhere}${orderBy} LIMIT ${pageSize} OFFSET ${offset}`;
     countSql = `SELECT COUNT(*) as cnt FROM ${escapedTable}${searchWhere}`;
   }
@@ -897,7 +911,7 @@ async function loadSchema(id) {
 
 // ==================== Query Tab ====================
 
-function getQueryTemplates(isMongo) {
+function getQueryTemplates(isMongo, dbType) {
   if (isMongo) {
     return [
       { label: 'Find All',     icon: '&#x25B6;', sql: 'db.collection.find({}).limit(50)',        cat: 'read' },
@@ -910,6 +924,24 @@ function getQueryTemplates(isMongo) {
       { label: 'Distinct',     icon: '&#x2662;', sql: 'db.collection.distinct("field")',          cat: 'read' },
     ];
   }
+
+  // DB-specific templates
+  let createTable, indexes, describe;
+  if (dbType === 'postgresql') {
+    createTable = 'CREATE TABLE new_table (\n  id SERIAL PRIMARY KEY,\n  name VARCHAR(255) NOT NULL,\n  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n);';
+    indexes     = "SELECT indexname, indexdef\nFROM pg_indexes\nWHERE tablename = 'table_name';";
+    describe    = "SELECT column_name, data_type, is_nullable, column_default\nFROM information_schema.columns\nWHERE table_name = 'table_name'\nORDER BY ordinal_position;";
+  } else if (dbType === 'sqlite') {
+    createTable = 'CREATE TABLE new_table (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  name TEXT NOT NULL,\n  created_at DATETIME DEFAULT CURRENT_TIMESTAMP\n);';
+    indexes     = 'PRAGMA index_list(table_name);';
+    describe    = 'PRAGMA table_info(table_name);';
+  } else {
+    // mysql (default)
+    createTable = 'CREATE TABLE new_table (\n  id INT PRIMARY KEY AUTO_INCREMENT,\n  name VARCHAR(255) NOT NULL,\n  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n);';
+    indexes     = 'SHOW INDEX FROM table_name;';
+    describe    = 'DESCRIBE table_name;';
+  }
+
   return [
     { label: 'SELECT',        icon: '&#x25B6;', sql: 'SELECT * FROM table_name\nLIMIT 100;',     cat: 'read' },
     { label: 'WHERE',         icon: '&#x1F50D;', sql: "SELECT * FROM table_name\nWHERE column = 'value'\nLIMIT 100;", cat: 'read' },
@@ -919,10 +951,10 @@ function getQueryTemplates(isMongo) {
     { label: 'INSERT',        icon: '&#x2B;',   sql: "INSERT INTO table_name (col1, col2)\nVALUES ('val1', 'val2');", cat: 'write' },
     { label: 'UPDATE',        icon: '&#x270E;', sql: "UPDATE table_name\nSET column = 'new_value'\nWHERE id = 1;", cat: 'write' },
     { label: 'DELETE',        icon: '&#x2716;', sql: 'DELETE FROM table_name\nWHERE id = 1;',     cat: 'danger' },
-    { label: 'CREATE TABLE',  icon: '&#x2295;', sql: 'CREATE TABLE new_table (\n  id INT PRIMARY KEY AUTO_INCREMENT,\n  name VARCHAR(255) NOT NULL,\n  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n);', cat: 'ddl' },
+    { label: 'CREATE TABLE',  icon: '&#x2295;', sql: createTable,                                  cat: 'ddl' },
     { label: 'ALTER TABLE',   icon: '&#x2699;', sql: 'ALTER TABLE table_name\nADD COLUMN new_col VARCHAR(255);', cat: 'ddl' },
-    { label: 'INDEXES',       icon: '&#x26A1;', sql: 'SHOW INDEX FROM table_name;',               cat: 'read' },
-    { label: 'DESCRIBE',      icon: '&#x2139;', sql: 'DESCRIBE table_name;',                      cat: 'read' },
+    { label: 'INDEXES',       icon: '&#x26A1;', sql: indexes,                                      cat: 'read' },
+    { label: 'DESCRIBE',      icon: '&#x2139;', sql: describe,                                     cat: 'read' },
   ];
 }
 
@@ -940,7 +972,7 @@ function renderQuery(container) {
   const placeholder = isMongo ? t('database.mongoPlaceholder') : t('database.queryPlaceholder');
   const currentQuery = state.getCurrentQuery();
   const queryResult = state.getQueryResult(activeId);
-  const templates = getQueryTemplates(isMongo);
+  const templates = getQueryTemplates(isMongo, conn ? conn.type : 'mysql');
 
   // Template chips
   const templatesHtml = templates.map((tpl, i) => {

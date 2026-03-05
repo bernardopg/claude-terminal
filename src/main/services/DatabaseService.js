@@ -510,8 +510,8 @@ class DatabaseService {
   _getSqliteSchema(db) {
     const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all();
     return tables.map(t => {
-      // Escape identifier: double any embedded double-quotes
-      const escapedName = '"' + t.name.replace(/"/g, '""') + '"';
+      // Use single-quoted string literal for PRAGMA (safer across SQLite versions)
+      const escapedName = "'" + t.name.replace(/'/g, "''") + "'";
       const columns = db.prepare(`PRAGMA table_info(${escapedName})`).all();
       return {
         name: t.name,
