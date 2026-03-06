@@ -22,6 +22,11 @@ let hookSessionCount = 0;
 // projectId -> { toolCount, toolNames: Set, lastToolName, startTime, notified }
 const sessionContext = new Map();
 
+// ── Dedup set for SESSION_END notifications (hooks-only) ──
+// Both Stop and SessionEnd hooks fire SESSION_END — track which projects were
+// already notified to avoid showing "done" twice in quick succession.
+const notifiedSessions = new Set(); // projectId
+
 // ── Last-active Claude tab tracking (for multi-tab session ID capture) ──
 // projectId -> terminalId (the tab that was most recently focused)
 const lastActiveClaudeTab = new Map();
@@ -81,9 +86,19 @@ function wireNotificationConsumer() {
     }),
 
     // Session end = definitive "Claude is done" → show notification
-    // This is the ONLY place we notify to avoid duplicates with claude:done (TaskCompleted)
+    // This is the ONLY place we notify to avoid duplicates with claude:done (TaskCompleted).
+    // Guard: only fire once per session — Stop and SessionEnd hooks both emit SESSION_END,
+    // so the second emission is skipped via notifiedSessions dedup set.
     eventBus.on(EVENT_TYPES.SESSION_END, (e) => {
       if (e.source !== 'hooks') return;
+      if (!e.projectId) return;
+      // Dedup: both Stop and SessionEnd hooks fire SESSION_END — only notify once
+      if (notifiedSessions.has(e.projectId)) {
+        notifiedSessions.delete(e.projectId);
+        return;
+      }
+      notifiedSessions.add(e.projectId);
+      setTimeout(() => notifiedSessions.delete(e.projectId), 10000); // auto-cleanup after 10s
       const ctx = sessionContext.get(e.projectId);
       // Clean up regardless
       sessionContext.delete(e.projectId);
@@ -110,18 +125,44 @@ function wireNotificationConsumer() {
           labels: { show: t('terminals.notifBtnShow') }
         });
       }
+    }),
+
+    // Claude's native Notification hook (e.g., /compact progress, system messages)
+    // Previously this event was emitted but had no consumer — notifications were silently dropped.
+    eventBus.on(EVENT_TYPES.NOTIFICATION, (e) => {
+      if (e.source !== 'hooks') return;
+      const title = e.data?.title || 'Claude';
+      const body = e.data?.message || '';
+      if (!body) return;
+      const terminalId = resolveTerminalId(e.projectId);
+      if (notificationFn) {
+        notificationFn('info', title, body, terminalId);
+      }
     })
   );
 }
 
 /**
  * Build a rich notification body from session context.
+ * Shows tool count, unique tool names, and session duration.
  */
 function buildNotificationBody(ctx, t) {
   if (ctx.toolCount > 0) {
-    const uniqueTools = [...ctx.toolNames].slice(0, 3).join(', ');
-    const extra = ctx.toolNames.size > 3 ? ` +${ctx.toolNames.size - 3}` : '';
-    return t('terminals.notifToolsDone', { count: ctx.toolCount }) + ` (${uniqueTools}${extra})`;
+    const uniqueNames = [...ctx.toolNames];
+    const displayed = uniqueNames.slice(0, 3).join(', ');
+    const extra = uniqueNames.length > 3 ? ` +${uniqueNames.length - 3}` : '';
+    let body = t('terminals.notifToolsDone', { count: ctx.toolCount });
+    body += ` (${displayed}${extra})`;
+    // Append duration if session lasted more than a few seconds
+    if (ctx.startTime) {
+      const secs = Math.round((Date.now() - ctx.startTime) / 1000);
+      if (secs >= 5) {
+        const mins = Math.floor(secs / 60);
+        const s = secs % 60;
+        body += mins > 0 ? ` • ${mins}m${s > 0 ? s + 's' : ''}` : ` • ${s}s`;
+      }
+    }
+    return body;
   }
   return t('terminals.notifDone');
 }
@@ -233,21 +274,78 @@ function wireAttentionConsumer() {
       const projectName = resolveProjectName(e.projectId);
       const terminalId = resolveTerminalId(e.projectId);
 
+      // AskUserQuestion: build interactive answer buttons from Claude's options
+      // SDK structure: toolInput.questions[0].question + toolInput.questions[0].options[].label
+      if (toolName.toLowerCase() === 'askuserquestion' && e.data?.toolInput) {
+        const { questions } = e.data.toolInput;
+        const firstQ = Array.isArray(questions) ? questions[0] : null;
+        const body = firstQ?.question || t(`terminals.${match.key}`);
+        const rawOpts = Array.isArray(firstQ?.options) ? firstQ.options.slice(0, 3) : [];
+        const buttons = rawOpts.length > 0
+          ? [
+              ...rawOpts.map((opt, i) => {
+                const label = (typeof opt === 'object' ? (opt.label || '') : String(opt)).slice(0, 32);
+                const value = typeof opt === 'object' ? (opt.label || String(opt)) : String(opt);
+                return { label, action: 'answer', value, style: i === 0 ? 'primary' : 'secondary' };
+              }),
+              { label: t('terminals.notifBtnOther'), action: 'show', style: 'ghost' }
+            ]
+          : [{ label: t('terminals.notifBtnShow'), action: 'show', style: 'primary' }];
+
+        if (notificationFn) {
+          notificationFn(match.type, projectName || 'Claude Terminal', body, terminalId, {
+            buttons,
+            autoDismiss: 0 // don't auto-dismiss while waiting for an answer
+          });
+        }
+        return;
+      }
+
       if (notificationFn) {
         notificationFn(match.type, projectName || 'Claude Terminal', t(`terminals.${match.key}`), terminalId);
       }
     }),
 
-    // PermissionRequest → Claude needs permission (skipped if question already notified)
+    // PermissionRequest → Claude needs permission (Allow / Deny buttons)
     eventBus.on(EVENT_TYPES.CLAUDE_PERMISSION, (e) => {
       if (e.source !== 'hooks' || !e.projectId) return;
-      if (!shouldNotify(e.projectId)) return;
+      const requestId = e.data?.requestId || null;
+
+      if (!shouldNotify(e.projectId)) {
+        // Deduped: a question/plan notification was recently shown for this project.
+        // Auto-allow the permission immediately so the hook handler isn't blocked for 30 seconds.
+        // (The user is already responding via the question notification or the terminal.)
+        if (requestId) {
+          try {
+            window.electron_api.hooks.resolvePermission(requestId, 'allow');
+          } catch (err) {
+            console.error('[Events] Failed to auto-resolve deduped permission:', err);
+          }
+        }
+        return;
+      }
 
       const projectName = resolveProjectName(e.projectId);
       const terminalId = resolveTerminalId(e.projectId);
+      const tool = e.data?.tool || null;
+
+      const body = tool
+        ? `${t('terminals.notifPermission')} — ${tool}`
+        : t('terminals.notifPermission');
+
+      const buttons = [
+        { label: t('terminals.notifBtnAllow'), action: 'allow', style: 'primary' },
+        { label: t('terminals.notifBtnDeny'),  action: 'deny',  style: 'danger'  }
+      ];
 
       if (notificationFn) {
-        notificationFn('permission', projectName || 'Claude Terminal', t('terminals.notifPermission'), terminalId);
+        notificationFn('permission', projectName || 'Claude Terminal', body, terminalId, {
+          buttons,
+          autoDismiss: requestId ? 0 : 15000, // no auto-dismiss when we can block Claude
+          meta: { requestId }
+        });
+      } else {
+        console.error('[Events] notificationFn not set — permission notification lost for requestId=' + requestId);
       }
     })
   );

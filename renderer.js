@@ -376,25 +376,52 @@ async function _tryCloudAutoConnect() {
 }
 
 // ========== NOTIFICATIONS ==========
-function showNotification(type, title, body, terminalId) {
+function showNotification(type, title, body, terminalId, extraOptions) {
   if (!isNotificationsEnabled()) return;
   if (document.hasFocus() && terminalsState.get().activeTerminal === terminalId) return;
-  const labels = { show: t('terminals.notifBtnShow') };
-  api.notification.show({ type: type || 'done', title, body, terminalId, autoDismiss: 8000, labels });
+  const { buttons, autoDismiss, meta } = extraOptions || {};
+  const defaultButtons = [{ label: t('terminals.notifBtnShow'), action: 'show', style: 'primary' }];
+  api.notification.show({
+    type: type || 'done',
+    title,
+    body,
+    terminalId,
+    autoDismiss: autoDismiss !== undefined ? autoDismiss : 8000,
+    buttons: buttons || defaultButtons,
+    meta: Object.assign({ notifType: type || 'done' }, meta || {})
+  });
 }
 
-api.notification.onClicked(({ terminalId }) => {
+api.notification.onClicked(({ terminalId, answerText }) => {
   if (terminalId) {
-    // 1. Switch to claude tab first so terminal containers are visible
+    if (answerText) {
+      // Answer silently — no UI switch, window stays in background
+      const questionCard = document.querySelector('.chat-question-card:not(.resolved)');
+      if (questionCard) {
+        const options = questionCard.querySelectorAll('.chat-question-option');
+        for (const opt of options) {
+          if (opt.dataset.label === answerText) {
+            opt.click();
+            break;
+          }
+        }
+        const submitBtn = questionCard.querySelector('.chat-question-submit');
+        if (submitBtn) submitBtn.click();
+      } else {
+        // Fallback: PTY terminal session — type the answer as keyboard input
+        api.terminal.input(terminalId, answerText + '\r');
+      }
+      return;
+    }
+
+    // No answer (action: show) — bring window to front and switch to terminal
     document.querySelector('[data-tab="claude"]')?.click();
-    // 2. Switch to the terminal's project so it becomes visible
     const termData = terminalsState.get().terminals.get(terminalId);
     if (termData && termData.projectIndex != null) {
       setSelectedProjectFilter(termData.projectIndex);
       ProjectList.render();
       TerminalManager.filterByProject(termData.projectIndex);
     }
-    // 3. Activate the specific terminal (needs tab + project to be set first)
     TerminalManager.setActiveTerminal(terminalId);
   }
 });

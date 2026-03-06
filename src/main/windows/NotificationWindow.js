@@ -11,16 +11,34 @@ const activeNotifications = new Map(); // notifId -> { window, height }
 let notifIdCounter = 0;
 
 const WIDTH = 400;
-const HEIGHT = 100;
+const BASE_HEIGHT = 100;
 const GAP = 8;
 const MARGIN = 16;
 const MAX_NOTIFICATIONS = 5;
 
 /**
+ * Calculate notification window height based on button count.
+ * More buttons = taller window (they wrap to a second row).
+ */
+function calcHeight(buttons) {
+  if (!buttons || buttons.length <= 2) return BASE_HEIGHT;
+  return BASE_HEIGHT + 28; // extra row for 3-4 buttons
+}
+
+/**
  * Show a notification window
  */
-function showNotification({ title, body, terminalId, autoDismiss = 8000, labels }) {
+function showNotification({ title, body, terminalId, autoDismiss = 8000, labels, buttons, meta }) {
   const notifId = ++notifIdCounter;
+
+  // Normalize buttons: support legacy labels.show format and missing buttons
+  let normalizedButtons = buttons;
+  if (!normalizedButtons || normalizedButtons.length === 0) {
+    const showLabel = (labels && labels.show) ? labels.show : 'Show';
+    normalizedButtons = [{ label: showLabel, action: 'show', style: 'primary' }];
+  }
+
+  const height = calcHeight(normalizedButtons);
 
   // Evict oldest if at capacity
   if (activeNotifications.size >= MAX_NOTIFICATIONS) {
@@ -30,7 +48,7 @@ function showNotification({ title, body, terminalId, autoDismiss = 8000, labels 
 
   const win = new BrowserWindow({
     width: WIDTH,
-    height: HEIGHT,
+    height,
     frame: false,
     transparent: true,
     resizable: false,
@@ -47,7 +65,8 @@ function showNotification({ title, body, terminalId, autoDismiss = 8000, labels 
     }
   });
 
-  const data = encodeURIComponent(JSON.stringify({ title, body, terminalId, notifId, autoDismiss, labels }));
+  const notifMeta = Object.assign({}, meta || {});
+  const data = encodeURIComponent(JSON.stringify({ title, body, terminalId, notifId, autoDismiss, buttons: normalizedButtons, meta: notifMeta }));
   const htmlPath = path.join(__dirname, '..', '..', '..', 'notification.html');
   win.loadFile(htmlPath, { search: `data=${data}` });
 
@@ -61,7 +80,7 @@ function showNotification({ title, body, terminalId, autoDismiss = 8000, labels 
     repositionAll();
   });
 
-  activeNotifications.set(notifId, { window: win, height: HEIGHT });
+  activeNotifications.set(notifId, { window: win, height });
   repositionAll();
 
   return notifId;
@@ -112,8 +131,15 @@ function dismissNotification(notifId) {
 function registerNotificationHandlers() {
   // Action handler — only performs the action, does NOT dismiss.
   // The notification.html handles its own exit animation then sends 'notification-dismiss'.
-  ipcMain.on('notification-action', (event, { action, terminalId }) => {
-    if (action === 'show') {
+  ipcMain.on('notification-action', (event, { action, terminalId, value, requestId }) => {
+    if (action === 'answer') {
+      // Send answer silently — no focus, no window show
+      const mainWindow = getMainWindow();
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('notification-clicked', { terminalId, answerText: value || null });
+      }
+    } else if (action === 'show') {
+      // Bring main window to focus and switch to the right terminal
       const mainWindow = getMainWindow();
       if (mainWindow && !mainWindow.isDestroyed()) {
         if (mainWindow.isMinimized()) mainWindow.restore();
@@ -123,9 +149,17 @@ function registerNotificationHandlers() {
         mainWindow.setAlwaysOnTop(false);
         setTimeout(() => {
           if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('notification-clicked', { terminalId });
+            mainWindow.webContents.send('notification-clicked', { terminalId, answerText: null });
           }
         }, 300);
+      }
+    } else if (action === 'allow' || action === 'deny') {
+      // Resolve a pending PermissionRequest hook (blocking wait in hook handler)
+      try {
+        const HookEventServer = require('../services/HookEventServer');
+        HookEventServer.resolvePendingPermission(requestId, action);
+      } catch (e) {
+        console.error('[NotificationWindow] Failed to resolve permission:', e);
       }
     }
   });

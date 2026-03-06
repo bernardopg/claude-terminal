@@ -36,6 +36,16 @@ function registerHooksHandlers() {
   ipcMain.handle('hooks-verify', () => {
     return HooksService.verifyAndRepairHooks();
   });
+
+  // Resolve a pending PermissionRequest from the renderer side
+  // (e.g., when a question notification was deduped and we need to unblock the hook handler)
+  ipcMain.on('hooks-resolve-permission', (event, { requestId, decision }) => {
+    if (!requestId) return;
+    const resolved = hookEventServer.resolvePendingPermission(requestId, decision || 'allow');
+    if (!resolved) {
+      console.debug(`[HooksIPC] No pending permission found for requestId=${requestId}`);
+    }
+  });
 }
 
 module.exports = {
