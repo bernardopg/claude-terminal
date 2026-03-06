@@ -290,15 +290,92 @@ function getPluginReadme(marketplaceName, pluginName) {
 }
 
 /**
- * Install a plugin via Claude CLI
+ * Install a plugin natively: read marketplace catalog → copy files → register in installed_plugins.json
  */
-function installPlugin(marketplace, pluginName) {
+async function installPlugin(marketplace, pluginName) {
   console.debug(`[PluginService] installPlugin: ${pluginName}@${marketplace}`);
-  return runPluginCommand(
-    `/plugin install ${pluginName}@${marketplace}`,
-    ['installed successfully', 'plugin installed', 'successfully installed', 'already installed'],
-    ['not found', 'failed to install', 'error installing']
-  );
+
+  try {
+    // Find marketplace entry
+    let marketplacesData = {};
+    if (fs.existsSync(marketplacesFile)) {
+      try { marketplacesData = JSON.parse(fs.readFileSync(marketplacesFile, 'utf8')); } catch { /* ignore */ }
+    }
+
+    const mpInfo = marketplacesData[marketplace];
+    if (!mpInfo) {
+      return { success: false, error: `Marketplace '${marketplace}' not found. Add it first.` };
+    }
+
+    const mpLocation = mpInfo.installLocation;
+
+    // Read marketplace catalog
+    const catalogPath = path.join(mpLocation, '.claude-plugin', 'marketplace.json');
+    if (!fs.existsSync(catalogPath)) {
+      return { success: false, error: `Catalog not found at ${catalogPath}` };
+    }
+
+    let catalog;
+    try { catalog = JSON.parse(fs.readFileSync(catalogPath, 'utf8')); } catch (e) {
+      return { success: false, error: `Failed to parse catalog: ${e.message}` };
+    }
+
+    const pluginEntry = (catalog.plugins || []).find(p => p.name === pluginName);
+    if (!pluginEntry) {
+      return { success: false, error: `Plugin '${pluginName}' not found in marketplace` };
+    }
+
+    // Resolve source path (relative to marketplace root)
+    const sourcePath = pluginEntry.source
+      ? path.resolve(mpLocation, pluginEntry.source)
+      : path.join(mpLocation, 'plugins', pluginName);
+
+    if (!fs.existsSync(sourcePath)) {
+      return { success: false, error: `Plugin source not found at ${sourcePath}` };
+    }
+
+    // Prepare install dir in cache
+    const key = `${pluginName}@${marketplace}`;
+    const installPath = path.join(cacheDir, key);
+
+    if (!fs.existsSync(cacheDir)) {
+      fs.mkdirSync(cacheDir, { recursive: true });
+    }
+
+    // Copy plugin files (fresh copy)
+    if (fs.existsSync(installPath)) {
+      fs.rmSync(installPath, { recursive: true, force: true });
+    }
+    fs.cpSync(sourcePath, installPath, { recursive: true });
+
+    // Update installed_plugins.json atomically
+    let installed = { plugins: {} };
+    if (fs.existsSync(installedFile)) {
+      try { installed = JSON.parse(fs.readFileSync(installedFile, 'utf8')); } catch { /* ignore */ }
+    }
+    if (!installed.plugins) installed.plugins = {};
+
+    const now = new Date().toISOString();
+    const existingEntry = installed.plugins[key]?.[0];
+    installed.plugins[key] = [{
+      installPath,
+      version: pluginEntry.version || '',
+      scope: 'user',
+      installedAt: existingEntry?.installedAt || now,
+      lastUpdated: now,
+      gitCommitSha: '',
+      marketplace
+    }];
+
+    const tmp = installedFile + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(installed, null, 2), 'utf8');
+    fs.renameSync(tmp, installedFile);
+
+    return { success: true };
+  } catch (e) {
+    console.error('[PluginService] installPlugin error:', e);
+    return { success: false, error: e.message };
+  }
 }
 
 
