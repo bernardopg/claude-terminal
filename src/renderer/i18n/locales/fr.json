@@ -1838,5 +1838,67 @@
     "trigger": {
       "label": "Déclencheur"
     }
+  },
+  "parallel": {
+    "tabTitle": "Tâches",
+    "title": "Gestionnaire de tâches parallèles",
+    "subtitle": "Décomposez une fonctionnalité en sous-tâches parallèles, chacune dans un worktree git isolé.",
+    "form": {
+      "projectLabel": "Projet",
+      "goalLabel": "Objectif de la fonctionnalité",
+      "goalPlaceholder": "Décrivez la fonctionnalité à implémenter en parallèle (ex. : \"Ajouter la connexion OAuth2 avec Google et GitHub\")...",
+      "maxTasksLabel": "Tâches max",
+      "modelLabel": "Modèle",
+      "effortLabel": "Effort",
+      "startBtn": "Lancer les tâches parallèles",
+      "startingBtn": "Démarrage..."
+    },
+    "effort": {
+      "low": "Faible",
+      "medium": "Moyen",
+      "high": "Élevé"
+    },
+    "phase": {
+      "decomposing": "Décomposition en cours avec Claude...",
+      "creating-worktrees": "Création des worktrees isolés...",
+      "running": "En cours ({done}/{total} tâches terminées)",
+      "done": "Toutes les tâches sont terminées",
+      "failed": "Échec de l'exécution",
+      "cancelled": "Annulé"
+    },
+    "status": {
+      "pending": "En attente",
+      "creating": "Création",
+      "running": "En cours",
+      "done": "Terminé",
+      "failed": "Échec",
+      "cancelled": "Annulé"
+    },
+    "card": {
+      "viewDiff": "Voir le diff",
+      "openTerminal": "Ouvrir le terminal"
+    },
+    "cancelBtn": "Annuler",
+    "cleanupBtn": "Supprimer les worktrees",
+    "newRunBtn": "Nouvelle exécution",
+    "merge": {
+      "title": "Aide à la fusion",
+      "hint": "Vérifiez chaque branche, puis fusionnez-les une par une dans {mainBranch}.",
+      "viewDiff": "Voir le diff"
+    },
+    "diff": {
+      "title": "Diff",
+      "close": "Fermer"
+    },
+    "errors": {
+      "noGoal": "Veuillez saisir un objectif.",
+      "noProject": "Veuillez sélectionner un projet.",
+      "startFailed": "Échec du démarrage.",
+      "noDiff": "Aucun diff disponible."
+    },
+    "cleanup": {
+      "success": "Worktrees supprimés avec succès.",
+      "error": "Échec de la suppression des worktrees."
+    }
   }
 }
