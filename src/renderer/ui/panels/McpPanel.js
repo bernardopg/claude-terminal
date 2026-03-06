@@ -840,11 +840,11 @@ async function installMcpFromRegistry(serverName) {
   testMcpConnection(serverName, configCopy).then((testResult) => {
     if (testResult === 'failed') {
       if (ctx.showToast) {
-        ctx.showToast({ type: 'warning', title: `${escapeHtml(displayName)}: ${t('mcpRegistry.connectionFailed')}` });
+        ctx.showToast({ type: 'warning', title: `${displayName}: ${t('mcpRegistry.connectionFailed')}` });
       }
     } else if (testResult === 'connected') {
       if (ctx.showToast) {
-        ctx.showToast({ type: 'success', title: `${escapeHtml(displayName)}: ${t('mcpRegistry.connectionSuccess')}` });
+        ctx.showToast({ type: 'success', title: `${displayName}: ${t('mcpRegistry.connectionSuccess')}` });
       }
     }
     // timeout / http / exited: no extra toast needed
