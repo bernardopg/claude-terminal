@@ -22,6 +22,11 @@ let hookSessionCount = 0;
 // projectId -> { toolCount, toolNames: Set, lastToolName, startTime, notified }
 const sessionContext = new Map();
 
+// ── Dedup set for SESSION_END notifications (hooks-only) ──
+// Both Stop and SessionEnd hooks fire SESSION_END — track which projects were
+// already notified to avoid showing "done" twice in quick succession.
+const notifiedSessions = new Set(); // projectId
+
 // ── Last-active Claude tab tracking (for multi-tab session ID capture) ──
 // projectId -> terminalId (the tab that was most recently focused)
 const lastActiveClaudeTab = new Map();
@@ -81,9 +86,19 @@ function wireNotificationConsumer() {
     }),
 
     // Session end = definitive "Claude is done" → show notification
-    // This is the ONLY place we notify to avoid duplicates with claude:done (TaskCompleted)
+    // This is the ONLY place we notify to avoid duplicates with claude:done (TaskCompleted).
+    // Guard: only fire once per session — Stop and SessionEnd hooks both emit SESSION_END,
+    // so the second emission is skipped via notifiedSessions dedup set.
     eventBus.on(EVENT_TYPES.SESSION_END, (e) => {
       if (e.source !== 'hooks') return;
+      if (!e.projectId) return;
+      // Dedup: both Stop and SessionEnd hooks fire SESSION_END — only notify once
+      if (notifiedSessions.has(e.projectId)) {
+        notifiedSessions.delete(e.projectId);
+        return;
+      }
+      notifiedSessions.add(e.projectId);
+      setTimeout(() => notifiedSessions.delete(e.projectId), 10000); // auto-cleanup after 10s
       const ctx = sessionContext.get(e.projectId);
       // Clean up regardless
       sessionContext.delete(e.projectId);
@@ -109,6 +124,19 @@ function wireNotificationConsumer() {
           autoDismiss: 8000,
           labels: { show: t('terminals.notifBtnShow') }
         });
+      }
+    }),
+
+    // Claude's native Notification hook (e.g., /compact progress, system messages)
+    // Previously this event was emitted but had no consumer — notifications were silently dropped.
+    eventBus.on(EVENT_TYPES.NOTIFICATION, (e) => {
+      if (e.source !== 'hooks') return;
+      const title = e.data?.title || 'Claude';
+      const body = e.data?.message || '';
+      if (!body) return;
+      const terminalId = resolveTerminalId(e.projectId);
+      if (notificationFn) {
+        notificationFn('info', title, body, terminalId);
       }
     })
   );
@@ -277,11 +305,24 @@ function wireAttentionConsumer() {
     // PermissionRequest → Claude needs permission (Allow / Deny buttons)
     eventBus.on(EVENT_TYPES.CLAUDE_PERMISSION, (e) => {
       if (e.source !== 'hooks' || !e.projectId) return;
-      if (!shouldNotify(e.projectId)) return;
+      const requestId = e.data?.requestId || null;
+
+      if (!shouldNotify(e.projectId)) {
+        // Deduped: a question/plan notification was recently shown for this project.
+        // Auto-allow the permission immediately so the hook handler isn't blocked for 30 seconds.
+        // (The user is already responding via the question notification or the terminal.)
+        if (requestId) {
+          try {
+            window.electron_api.hooks.resolvePermission(requestId, 'allow');
+          } catch (err) {
+            console.error('[Events] Failed to auto-resolve deduped permission:', err);
+          }
+        }
+        return;
+      }
 
       const projectName = resolveProjectName(e.projectId);
       const terminalId = resolveTerminalId(e.projectId);
-      const requestId = e.data?.requestId || null;
       const tool = e.data?.tool || null;
 
       const body = tool
@@ -299,6 +340,8 @@ function wireAttentionConsumer() {
           autoDismiss: requestId ? 0 : 15000, // no auto-dismiss when we can block Claude
           meta: { requestId }
         });
+      } else {
+        console.error('[Events] notificationFn not set — permission notification lost for requestId=' + requestId);
       }
     })
   );

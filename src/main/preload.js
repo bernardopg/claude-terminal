@@ -326,7 +326,8 @@ contextBridge.exposeInMainWorld('electron_api', {
     remove: () => ipcRenderer.invoke('hooks-remove'),
     status: () => ipcRenderer.invoke('hooks-status'),
     verify: () => ipcRenderer.invoke('hooks-verify'),
-    onEvent: createListener('hook-event')
+    onEvent: createListener('hook-event'),
+    resolvePermission: (requestId, decision) => ipcRenderer.send('hooks-resolve-permission', { requestId, decision })
   },
 
   // ==================== REMOTE CONTROL ====================
