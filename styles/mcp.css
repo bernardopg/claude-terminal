@@ -811,3 +811,14 @@
   gap: 8px;
   margin-top: 16px;
 }
+
+/* Load more button */
+.mcp-registry-load-more-wrapper {
+  display: flex;
+  justify-content: center;
+  padding: 16px 0 8px;
+}
+
+.mcp-registry-load-more-wrapper .btn-secondary {
+  min-width: 160px;
+}

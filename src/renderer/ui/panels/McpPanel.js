@@ -19,6 +19,8 @@ let mcpState = {
   registryInitialized: false,
   registry: {
     servers: [],
+    nextCursor: null,
+    isLoadingMore: false,
     searchResults: [],
     searchQuery: '',
     searchCache: new Map(),
@@ -501,9 +503,10 @@ async function searchMcpRegistry(query) {
   if (cachedResults) {
     mcpState.registry.searchResults = cachedResults;
     await renderMcpRegistryCards(cachedResults, t('mcpRegistry.searchResults'));
-  } else {
-    list.innerHTML = `<div class="marketplace-loading"><div class="spinner"></div>${t('common.loading')}</div>`;
+    return;
   }
+
+  list.innerHTML = `<div class="marketplace-loading"><div class="spinner"></div>${t('common.loading')}</div>`;
 
   try {
     const result = await ctx.api.mcpRegistry.search(query, 30);
@@ -511,40 +514,64 @@ async function searchMcpRegistry(query) {
 
     const newServers = result.servers || [];
     mcpState.registry.searchCache.set(query, newServers);
-
-    if (JSON.stringify(newServers) !== JSON.stringify(mcpState.registry.searchResults)) {
-      mcpState.registry.searchResults = newServers;
-      await renderMcpRegistryCards(newServers, t('mcpRegistry.searchResults'));
-    }
+    mcpState.registry.searchResults = newServers;
+    // Always render — clears spinner even when result is empty
+    await renderMcpRegistryCards(newServers, t('mcpRegistry.searchResults'));
   } catch (e) {
-    if (!cachedResults) {
-      list.innerHTML = `<div class="marketplace-empty"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg><h3>${t('common.error')}</h3><p>${escapeHtml(e.message)}</p></div>`;
-    }
+    list.innerHTML = `<div class="marketplace-empty"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg><h3>${t('common.error')}</h3><p>${escapeHtml(e.message)}</p></div>`;
   }
 }
 
 async function loadMcpRegistryBrowse() {
   const list = document.getElementById('mcp-list');
 
+  // If we already have servers cached, render them immediately while refreshing in background
   if (mcpState.registry.servers.length > 0) {
     await renderMcpRegistryCards(mcpState.registry.servers, t('mcpRegistry.available'));
-  } else {
-    list.innerHTML = `<div class="marketplace-loading"><div class="spinner"></div>${t('common.loading')}</div>`;
+    return;
   }
+
+  list.innerHTML = `<div class="marketplace-loading"><div class="spinner"></div>${t('common.loading')}</div>`;
 
   try {
     const result = await ctx.api.mcpRegistry.browse(50);
     if (!result.success) throw new Error(result.error);
 
     const newServers = result.servers || [];
-    if (JSON.stringify(newServers) !== JSON.stringify(mcpState.registry.servers)) {
-      mcpState.registry.servers = newServers;
-      await renderMcpRegistryCards(newServers, t('mcpRegistry.available'));
-    }
+    mcpState.registry.servers = newServers;
+    mcpState.registry.nextCursor = result.nextCursor || null;
+    // Always render — even if empty, this clears the spinner
+    await renderMcpRegistryCards(newServers, t('mcpRegistry.available'));
   } catch (e) {
-    if (mcpState.registry.servers.length === 0) {
-      list.innerHTML = `<div class="marketplace-empty"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg><h3>${t('common.error')}</h3><p>${escapeHtml(e.message)}</p></div>`;
+    list.innerHTML = `<div class="marketplace-empty"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg><h3>${t('common.error')}</h3><p>${escapeHtml(e.message)}</p></div>`;
+  }
+}
+
+async function loadMoreMcpRegistryServers() {
+  if (!mcpState.registry.nextCursor || mcpState.registry.isLoadingMore) return;
+  mcpState.registry.isLoadingMore = true;
+
+  const btn = document.getElementById('mcp-registry-load-more');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = t('common.loading');
+  }
+
+  try {
+    const result = await ctx.api.mcpRegistry.browse(50, mcpState.registry.nextCursor);
+    if (!result.success) throw new Error(result.error);
+
+    const moreServers = result.servers || [];
+    mcpState.registry.servers = [...mcpState.registry.servers, ...moreServers];
+    mcpState.registry.nextCursor = result.nextCursor || null;
+    await renderMcpRegistryCards(mcpState.registry.servers, t('mcpRegistry.available'));
+  } catch (e) {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = t('mcpRegistry.loadMore');
     }
+  } finally {
+    mcpState.registry.isLoadingMore = false;
   }
 }
 
@@ -585,7 +612,22 @@ async function renderMcpRegistryCards(servers, sectionTitle) {
   html += filtered.map(server => renderRegistryCard(server)).join('');
 
   html += `</div></div>`;
+
+  // Show "Load more" button only for browse mode (not search) when there is a next page
+  const isSearchMode = !!mcpState.registry.searchQuery;
+  if (!isSearchMode && mcpState.registry.nextCursor) {
+    html += `<div class="mcp-registry-load-more-wrapper">
+      <button class="btn-secondary" id="mcp-registry-load-more">${t('mcpRegistry.loadMore')}</button>
+    </div>`;
+  }
+
   list.innerHTML = html;
+
+  // Bind "Load more" handler
+  const loadMoreBtn = document.getElementById('mcp-registry-load-more');
+  if (loadMoreBtn) {
+    loadMoreBtn.addEventListener('click', () => loadMoreMcpRegistryServers());
+  }
 
   bindMcpRegistryCardHandlers();
   bindCategoryFilterHandlers(servers, sectionTitle);

@@ -1064,6 +1064,7 @@
     "serverType": "Type",
     "connectionSuccess": "Connected successfully",
     "connectionFailed": "Check configuration — could not connect",
+    "loadMore": "Load more servers",
     "category": {
       "all": "All",
       "database": "Database",
