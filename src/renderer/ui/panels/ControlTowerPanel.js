@@ -134,6 +134,17 @@ function _activeAgentCount() {
 
 // ── Event bus wiring ─────────────────────────────────────────────────────────
 
+function _projectHasChatTerminal(projectId) {
+  try {
+    const { terminalsState } = require('../../state/terminals.state');
+    const terminals = terminalsState.get().terminals;
+    for (const [, td] of terminals) {
+      if (td.project?.id === projectId && td.mode === 'chat') return true;
+    }
+  } catch { /* ignore */ }
+  return false;
+}
+
 function _wireEventBus() {
   let eventBus, EVENT_TYPES;
   try {
@@ -145,12 +156,20 @@ function _wireEventBus() {
   _unsubscribers.push(
     eventBus.on(EVENT_TYPES.SESSION_START, (e) => {
       if (!e.projectId) return;
+
+      // Skip if this project runs in chat mode — covered by chat IPC events
+      if (_projectHasChatTerminal(e.projectId)) {
+        console.log('[CT] hooks SESSION_START skipped (chat mode):', e.projectId);
+        return;
+      }
+
       const project = _resolveProject(e.projectId);
       if (!project) return;
 
       // Find the terminal for this project to get the terminalId
       const terminalId = _findTerminalForProject(e.projectId);
       const key = `hooks:${e.projectId}`;
+      console.log('[CT] hooks SESSION_START → key:', key, '| existing:', _agents.has(key));
 
       if (!_agents.has(key)) {
         _agents.set(key, {
@@ -178,7 +197,9 @@ function _wireEventBus() {
 
     eventBus.on(EVENT_TYPES.TOOL_START, (e) => {
       if (!e.projectId) return;
+      if (_projectHasChatTerminal(e.projectId)) return;
       const key = `hooks:${e.projectId}`;
+      console.log('[CT] hooks TOOL_START → key:', key, 'tool:', e.data?.toolName);
       if (!_agents.has(key)) {
         // Auto-create if SESSION_START was missed
         const project = _resolveProject(e.projectId);
@@ -289,6 +310,7 @@ function _wireChatEvents() {
   _chatMessageUnlistener = api.chat.onMessage(({ sessionId, message }) => {
     if (!sessionId) return;
     const key = `chat:${sessionId}`;
+    console.log('[CT] chat onMessage → key:', key, 'type:', message?.type, '| existing:', _agents.has(key));
 
     // Ensure agent entry exists
     if (!_agents.has(key)) {
@@ -450,7 +472,11 @@ function _scanTerminals() {
       // Chat mode sessions are tracked via IPC events
       if (td.mode === 'chat') return;
 
+      // Hooks already tracks this project — skip to avoid duplicate
+      if (td.project?.id && _agents.has(`hooks:${td.project.id}`)) return;
+
       const key = `terminal:${id}`;
+      console.log('[CT] scanTerminals → key:', key, 'status:', td.status);
       if (!_agents.has(key)) {
         const status = td.status === 'working' ? 'THINKING' : 'IDLE';
         _agents.set(key, {
