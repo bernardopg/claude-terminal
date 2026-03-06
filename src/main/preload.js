@@ -317,7 +317,8 @@ contextBridge.exposeInMainWorld('electron_api', {
     generateTabName: (params) => ipcRenderer.invoke('chat-generate-tab-name', params),
     loadHistory: (params) => ipcRenderer.invoke('chat-load-history', params),
     generateSkillAgent: (params) => ipcRenderer.invoke('chat-generate-skill-agent', params),
-    cancelGeneration: (params) => ipcRenderer.send('chat-cancel-generation', params)
+    cancelGeneration: (params) => ipcRenderer.send('chat-cancel-generation', params),
+    generateSuggestions: (params) => ipcRenderer.invoke('chat-generate-suggestions', params)
   },
 
   // ==================== HOOKS ====================

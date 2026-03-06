@@ -1069,6 +1069,7 @@
     "placeholder": "Demandez quelque chose à Claude...",
     "suggestTodos": "Trouve et traite les {count} TODO dans le code [Tab]",
     "suggestGit": "Propose un commit pour les {count} fichiers modifiés [Tab]",
+    "suggestionsLabel": "Suggestions",
     "queuePlaceholder": "Envoyer un message en file d'attente...",
     "thinking": "Réflexion",
     "toolCall": "Appel d'outil",
