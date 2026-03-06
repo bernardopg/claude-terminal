@@ -1,0 +1,534 @@
+/* ══════════════════════════════════════════════════════════════════════════════
+   Parallel Task Manager
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Panel layout ─────────────────────────────────────────────────────────── */
+
+.parallel-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+/* ── Form ─────────────────────────────────────────────────────────────────── */
+
+.parallel-form {
+  flex: 1;
+  overflow-y: auto;
+  padding: 28px 32px;
+  max-width: 800px;
+}
+
+.parallel-form-header {
+  margin-bottom: 24px;
+}
+
+.parallel-title {
+  font-size: var(--font-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 6px 0;
+}
+
+.parallel-subtitle {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.parallel-form-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.parallel-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.parallel-label {
+  font-size: var(--font-xs);
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.parallel-select {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.parallel-select:hover,
+.parallel-select:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.parallel-select--sm {
+  padding: 5px 8px;
+  font-size: var(--font-xs);
+}
+
+.parallel-goal-input {
+  width: 100%;
+  min-height: 90px;
+  resize: vertical;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  padding: 10px 12px;
+  line-height: 1.5;
+  font-family: inherit;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+
+.parallel-goal-input:hover,
+.parallel-goal-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.parallel-goal-input::placeholder {
+  color: var(--text-muted);
+}
+
+.parallel-options-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.parallel-option-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Max tasks toggle buttons */
+.parallel-btn-group {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.parallel-opt-btn {
+  background: var(--bg-secondary);
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: var(--font-sm);
+  padding: 5px 12px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.parallel-opt-btn:not(:last-child) {
+  border-right: 1px solid var(--border-color);
+}
+
+.parallel-opt-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.parallel-opt-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Start button */
+.parallel-start-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  cursor: pointer;
+  font-size: var(--font-sm);
+  font-weight: 500;
+  padding: 7px 16px;
+  transition: background 0.15s, opacity 0.15s;
+  white-space: nowrap;
+  margin-top: auto; /* align to bottom of options row */
+}
+
+.parallel-start-btn:hover {
+  background: var(--accent-hover);
+}
+
+.parallel-start-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Board ────────────────────────────────────────────────────────────────── */
+
+.parallel-board {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Phase bar */
+.parallel-phase-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.parallel-phase-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.parallel-phase-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.parallel-phase-dot.running {
+  background: var(--accent);
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+
+.parallel-phase-dot.done {
+  background: var(--success);
+}
+
+.parallel-phase-dot.failed {
+  background: var(--danger);
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+.parallel-phase-label {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.parallel-phase-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.parallel-action-btn {
+  background: var(--danger);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  cursor: pointer;
+  font-size: var(--font-xs);
+  padding: 4px 10px;
+  transition: opacity 0.15s;
+}
+
+.parallel-action-btn:hover {
+  opacity: 0.85;
+}
+
+.parallel-action-btn--secondary {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.parallel-action-btn--secondary:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+/* Kanban grid */
+.parallel-kanban {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  align-content: start;
+}
+
+/* Empty state / spinner */
+.parallel-empty-state {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+.parallel-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Task cards ───────────────────────────────────────────────────────────── */
+
+.parallel-task-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.2s;
+}
+
+.parallel-task-card.status-running {
+  border-color: var(--accent);
+}
+
+.parallel-task-card.status-done {
+  border-color: var(--success);
+}
+
+.parallel-task-card.status-failed {
+  border-color: var(--danger);
+}
+
+.parallel-task-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.parallel-task-title {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+/* Status badges */
+.parallel-task-badge {
+  font-size: var(--font-2xs);
+  padding: 2px 7px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.badge-pending   { background: var(--bg-tertiary);              color: var(--text-muted); }
+.badge-creating  { background: rgba(59,130,246,0.15);           color: var(--info); }
+.badge-running   { background: rgba(217,119,6,0.2);             color: var(--accent); }
+.badge-done      { background: rgba(34,197,94,0.15);            color: var(--success); }
+.badge-failed    { background: rgba(239,68,68,0.15);            color: var(--danger); }
+.badge-cancelled { background: var(--bg-tertiary);              color: var(--text-muted); }
+
+/* Branch chip */
+.parallel-task-branch {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+}
+
+.parallel-task-branch code {
+  font-size: var(--font-2xs);
+  font-family: monospace;
+  background: var(--bg-tertiary);
+  padding: 1px 5px;
+  border-radius: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+}
+
+/* Description */
+.parallel-task-desc {
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* Output log */
+.parallel-task-output {
+  background: var(--bg-primary);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  max-height: 110px;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.parallel-task-output pre {
+  margin: 0;
+  font-size: 0.6rem;
+  font-family: monospace;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Error */
+.parallel-task-error {
+  font-size: var(--font-xs);
+  color: var(--danger);
+  background: rgba(239,68,68,0.08);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+}
+
+/* Card footer */
+.parallel-task-footer {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+/* Small buttons */
+.parallel-btn-sm {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: var(--font-xs);
+  padding: 3px 8px;
+  transition: background 0.12s, color 0.12s;
+}
+
+.parallel-btn-sm:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.parallel-btn-diff:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ── Merge section ────────────────────────────────────────────────────────── */
+
+.parallel-merge-section {
+  padding: 16px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.parallel-merge-title {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 6px 0;
+}
+
+.parallel-merge-hint {
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+  margin: 0 0 12px 0;
+}
+
+.parallel-merge-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.parallel-merge-item {
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.parallel-merge-branch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.parallel-merge-branch {
+  font-size: var(--font-xs);
+  font-family: monospace;
+  color: var(--accent);
+}
+
+.parallel-merge-cmds {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.parallel-merge-cmd {
+  font-size: var(--font-2xs);
+  font-family: monospace;
+  background: var(--bg-primary);
+  padding: 3px 8px;
+  border-radius: 3px;
+  color: var(--text-secondary);
+  user-select: all;
+}
+
+/* ── Diff modal ───────────────────────────────────────────────────────────── */
+
+.parallel-diff-modal {
+  max-height: 65vh;
+  overflow: auto;
+}
+
+.parallel-diff-modal .diff-view {
+  font-size: 0.7rem;
+  line-height: 1.5;
+  white-space: pre;
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.parallel-diff-modal .diff-add  { color: var(--success); display: block; }
+.parallel-diff-modal .diff-del  { color: var(--danger);  display: block; }
+.parallel-diff-modal .diff-hunk { color: var(--info);    display: block; }
