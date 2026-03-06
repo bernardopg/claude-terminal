@@ -394,38 +394,35 @@ function showNotification(type, title, body, terminalId, extraOptions) {
 
 api.notification.onClicked(({ terminalId, answerText }) => {
   if (terminalId) {
-    // 1. Switch to claude tab first so terminal containers are visible
+    if (answerText) {
+      // Answer silently — no UI switch, window stays in background
+      const questionCard = document.querySelector('.chat-question-card:not(.resolved)');
+      if (questionCard) {
+        const options = questionCard.querySelectorAll('.chat-question-option');
+        for (const opt of options) {
+          if (opt.dataset.label === answerText) {
+            opt.click();
+            break;
+          }
+        }
+        const submitBtn = questionCard.querySelector('.chat-question-submit');
+        if (submitBtn) submitBtn.click();
+      } else {
+        // Fallback: PTY terminal session — type the answer as keyboard input
+        api.terminal.input(terminalId, answerText + '\r');
+      }
+      return;
+    }
+
+    // No answer (action: show) — bring window to front and switch to terminal
     document.querySelector('[data-tab="claude"]')?.click();
-    // 2. Switch to the terminal's project so it becomes visible
     const termData = terminalsState.get().terminals.get(terminalId);
     if (termData && termData.projectIndex != null) {
       setSelectedProjectFilter(termData.projectIndex);
       ProjectList.render();
       TerminalManager.filterByProject(termData.projectIndex);
     }
-    // 3. Activate the specific terminal (needs tab + project to be set first)
     TerminalManager.setActiveTerminal(terminalId);
-    // 4. If an answer was selected in the notification, respond in chat or terminal
-    if (answerText) {
-      setTimeout(() => {
-        // If a chat SDK question card is pending, answer it directly (no terminal input needed)
-        const questionCard = document.querySelector('.chat-question-card:not(.resolved)');
-        if (questionCard) {
-          const options = questionCard.querySelectorAll('.chat-question-option');
-          for (const opt of options) {
-            if (opt.dataset.label === answerText) {
-              opt.click();
-              break;
-            }
-          }
-          const submitBtn = questionCard.querySelector('.chat-question-submit');
-          if (submitBtn) submitBtn.click();
-        } else {
-          // Fallback: PTY terminal session — type the answer as keyboard input
-          api.terminal.input(terminalId, answerText + '\r');
-        }
-      }, 300);
-    }
   }
 });
 

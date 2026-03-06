@@ -132,8 +132,14 @@ function registerNotificationHandlers() {
   // Action handler — only performs the action, does NOT dismiss.
   // The notification.html handles its own exit animation then sends 'notification-dismiss'.
   ipcMain.on('notification-action', (event, { action, terminalId, value, requestId }) => {
-    if (action === 'show' || action === 'answer') {
-      // Show main window and switch to the right terminal
+    if (action === 'answer') {
+      // Send answer silently — no focus, no window show
+      const mainWindow = getMainWindow();
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('notification-clicked', { terminalId, answerText: value || null });
+      }
+    } else if (action === 'show') {
+      // Bring main window to focus and switch to the right terminal
       const mainWindow = getMainWindow();
       if (mainWindow && !mainWindow.isDestroyed()) {
         if (mainWindow.isMinimized()) mainWindow.restore();
@@ -143,10 +149,7 @@ function registerNotificationHandlers() {
         mainWindow.setAlwaysOnTop(false);
         setTimeout(() => {
           if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('notification-clicked', {
-              terminalId,
-              answerText: action === 'answer' ? (value || null) : null
-            });
+            mainWindow.webContents.send('notification-clicked', { terminalId, answerText: null });
           }
         }, 300);
       }
