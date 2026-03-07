@@ -1,7 +1,7 @@
 /**
  * ParallelTaskPanel
- * Full-page visual board for orchestrating parallel Claude coding tasks on isolated git worktrees.
- * Flow: describe goal → Claude decomposes → tasks run in parallel worktrees → merge assistance
+ * Orchestrates multiple concurrent parallel Claude coding runs.
+ * Form is always accessible; each run appears as a collapsible card below.
  */
 
 'use strict';
@@ -11,9 +11,10 @@ const { t } = require('../../i18n');
 const { getSetting, setSetting } = require('../../state/settings.state');
 const {
   parallelTaskState,
-  getActiveRun,
-  setActiveRun,
-  clearActiveRun,
+  getRuns,
+  getRunById,
+  addRun,
+  removeRun,
   setHistory,
   initParallelListeners,
 } = require('../../state/parallelTask.state');
@@ -23,6 +24,9 @@ const {
 let ctx = null;
 let _initialized = false;
 let _unsubscribe = null;
+let _formCollapsed = false;
+let _runCounter = 0;
+let _runNumbers = new Map();
 
 // ─── Init & Load ──────────────────────────────────────────────────────────────
 
@@ -38,10 +42,7 @@ async function load() {
     _initialized = true;
   }
 
-  // Refresh project selector
   _populateProjectSelector();
-
-  // Load run history for the currently opened project
   _loadHistory();
 }
 
@@ -56,170 +57,128 @@ function _render() {
   container.innerHTML = `
     <div class="parallel-panel">
 
-      <!-- Form view (shown when no active run) -->
-      <div class="parallel-form-view" id="parallel-form-view">
-
-        <!-- Header -->
-        <div class="parallel-header">
-          <div class="parallel-header-left">
-            <div class="parallel-header-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="22" height="22">
-                <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-                <path d="M2 17l10 5 10-5"/>
-                <path d="M2 12l10 5 10-5"/>
-              </svg>
-            </div>
-            <div>
-              <h1 class="parallel-header-title">${t('parallel.title')}</h1>
-              <p class="parallel-header-subtitle">${t('parallel.subtitle')}</p>
-            </div>
+      <!-- Static header -->
+      <div class="parallel-header">
+        <div class="parallel-header-left">
+          <div class="parallel-header-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="22" height="22">
+              <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+              <path d="M2 17l10 5 10-5"/>
+              <path d="M2 12l10 5 10-5"/>
+            </svg>
+          </div>
+          <div>
+            <h1 class="parallel-header-title">${t('parallel.title')}</h1>
+            <p class="parallel-header-subtitle">${t('parallel.subtitle')}</p>
           </div>
         </div>
+      </div>
 
-        <!-- Form content -->
-        <div class="parallel-form-content">
-
-          <!-- Left: Goal input -->
-          <div class="parallel-form-main">
-            <div class="parallel-field">
-              <label class="parallel-label">${t('parallel.form.projectLabel')}</label>
-              <div class="pt-select pt-select--full" id="parallel-project-select" data-value="">
-                <div class="pt-select-trigger">
-                  <span class="pt-select-value">— select project —</span>
-                  <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M7 10l5 5 5-5z"/></svg>
-                </div>
-                <div class="pt-select-dropdown"></div>
-              </div>
-            </div>
-
-            <div class="parallel-field parallel-field--grow">
-              <label class="parallel-label" for="parallel-goal-input">${t('parallel.form.goalLabel')}</label>
-              <textarea
-                id="parallel-goal-input"
-                class="parallel-goal-input"
-                placeholder="${t('parallel.form.goalPlaceholder')}"
-              ></textarea>
-            </div>
+      <!-- New Run form (collapsible) -->
+      <div class="pt-form-section" id="pt-form-section">
+        <button class="pt-form-toggle" id="pt-form-toggle">
+          <div class="pt-form-toggle-left">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="11" height="11">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            <span>New Run</span>
           </div>
+          <svg class="pt-form-chevron" id="pt-form-chevron" viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+            <path d="M7 10l5 5 5-5z"/>
+          </svg>
+        </button>
 
-          <!-- Right: Config sidebar -->
-          <div class="parallel-form-sidebar">
+        <div class="pt-form-body" id="pt-form-body">
+          <div class="parallel-form-content">
 
-            <div class="parallel-config-card">
-              <div class="parallel-config-section">
-                <label class="parallel-label">${t('parallel.form.maxTasksLabel')}</label>
-                <div class="parallel-agents-control">
-                  <input
-                    type="range"
-                    id="parallel-agents-slider"
-                    class="parallel-agents-slider"
-                    min="1"
-                    max="10"
-                    value="${escapeHtml(String(savedMaxTasks))}"
-                    step="1"
-                  />
-                  <div class="parallel-agents-display">
-                    <span id="parallel-agents-value" class="parallel-agents-value">${savedMaxTasks}</span>
-                    <span class="parallel-agents-unit">agents</span>
-                  </div>
-                </div>
-                <div class="parallel-agents-ticks">
-                  <span>1</span><span>3</span><span>5</span><span>7</span><span>10</span>
-                </div>
-              </div>
-
-              <div class="parallel-config-section">
-                <label class="parallel-label">${t('parallel.form.modelLabel')}</label>
-                <div class="pt-select pt-select--full" id="parallel-model-select" data-value="claude-sonnet-4-6">
+            <!-- Left: Goal input -->
+            <div class="parallel-form-main">
+              <div class="parallel-field">
+                <label class="parallel-label">${t('parallel.form.projectLabel')}</label>
+                <div class="pt-select pt-select--full" id="parallel-project-select" data-value="">
                   <div class="pt-select-trigger">
-                    <span class="pt-select-value">Sonnet 4.6 — Balanced</span>
+                    <span class="pt-select-value">— select project —</span>
                     <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M7 10l5 5 5-5z"/></svg>
                   </div>
-                  <div class="pt-select-dropdown">
-                    <div class="pt-select-option" data-value="claude-haiku-4-5-20251001">Haiku 4.5 — Fastest</div>
-                    <div class="pt-select-option is-selected" data-value="claude-sonnet-4-6">Sonnet 4.6 — Balanced</div>
-                    <div class="pt-select-option" data-value="claude-opus-4-6">Opus 4.6 — Most capable</div>
-                  </div>
+                  <div class="pt-select-dropdown"></div>
                 </div>
               </div>
 
-              <div class="parallel-config-section">
-                <label class="parallel-label">${t('parallel.form.effortLabel')}</label>
-                <div class="pt-select pt-select--full" id="parallel-effort-select" data-value="high">
-                  <div class="pt-select-trigger">
-                    <span class="pt-select-value">${t('parallel.effort.high')}</span>
-                    <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M7 10l5 5 5-5z"/></svg>
-                  </div>
-                  <div class="pt-select-dropdown">
-                    <div class="pt-select-option" data-value="low">${t('parallel.effort.low')}</div>
-                    <div class="pt-select-option" data-value="medium">${t('parallel.effort.medium')}</div>
-                    <div class="pt-select-option is-selected" data-value="high">${t('parallel.effort.high')}</div>
-                  </div>
-                </div>
+              <div class="parallel-field parallel-field--grow">
+                <label class="parallel-label" for="parallel-goal-input">${t('parallel.form.goalLabel')}</label>
+                <textarea
+                  id="parallel-goal-input"
+                  class="parallel-goal-input"
+                  placeholder="${t('parallel.form.goalPlaceholder')}"
+                ></textarea>
               </div>
-
-              <button id="parallel-start-btn" class="parallel-start-btn">
-                <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
-                  <path d="M8 5v14l11-7z"/>
-                </svg>
-                ${t('parallel.form.startBtn')}
-              </button>
             </div>
 
-            <!-- Info card -->
-            <div class="parallel-info-card">
-              <h4 class="parallel-info-title">How it works</h4>
-              <ol class="parallel-info-steps">
-                <li>Claude decomposes your goal into independent sub-tasks</li>
-                <li>Each sub-task runs in an isolated git worktree on its own branch</li>
-                <li>All agents run in parallel, independently</li>
-                <li>Review diffs and merge each branch when ready</li>
-              </ol>
+            <!-- Right: Config sidebar -->
+            <div class="parallel-form-sidebar">
+              <div class="parallel-config-card">
+                <div class="parallel-config-section">
+                  <label class="parallel-label">${t('parallel.form.maxTasksLabel')}</label>
+                  <div class="parallel-agents-control">
+                    <input
+                      type="range"
+                      id="parallel-agents-slider"
+                      class="parallel-agents-slider"
+                      min="1" max="10" value="${escapeHtml(String(savedMaxTasks))}" step="1"
+                    />
+                    <div class="parallel-agents-display">
+                      <span id="parallel-agents-value" class="parallel-agents-value">${savedMaxTasks}</span>
+                      <span class="parallel-agents-unit">agents</span>
+                    </div>
+                  </div>
+                  <div class="parallel-agents-ticks">
+                    <span>1</span><span>3</span><span>5</span><span>7</span><span>10</span>
+                  </div>
+                </div>
+
+                <div class="parallel-config-section">
+                  <label class="parallel-label">${t('parallel.form.modelLabel')}</label>
+                  <div class="pt-select pt-select--full" id="parallel-model-select" data-value="claude-sonnet-4-6">
+                    <div class="pt-select-trigger">
+                      <span class="pt-select-value">Sonnet 4.6 — Balanced</span>
+                      <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M7 10l5 5 5-5z"/></svg>
+                    </div>
+                    <div class="pt-select-dropdown">
+                      <div class="pt-select-option" data-value="claude-haiku-4-5-20251001">Haiku 4.5 — Fastest</div>
+                      <div class="pt-select-option is-selected" data-value="claude-sonnet-4-6">Sonnet 4.6 — Balanced</div>
+                      <div class="pt-select-option" data-value="claude-opus-4-6">Opus 4.6 — Most capable</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="parallel-config-section">
+                  <label class="parallel-label">${t('parallel.form.effortLabel')}</label>
+                  <div class="pt-select pt-select--full" id="parallel-effort-select" data-value="high">
+                    <div class="pt-select-trigger">
+                      <span class="pt-select-value">${t('parallel.effort.high')}</span>
+                      <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M7 10l5 5 5-5z"/></svg>
+                    </div>
+                    <div class="pt-select-dropdown">
+                      <div class="pt-select-option" data-value="low">${t('parallel.effort.low')}</div>
+                      <div class="pt-select-option" data-value="medium">${t('parallel.effort.medium')}</div>
+                      <div class="pt-select-option is-selected" data-value="high">${t('parallel.effort.high')}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <button id="parallel-start-btn" class="parallel-start-btn">
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>
+                  ${t('parallel.form.startBtn')}
+                </button>
+              </div>
             </div>
 
           </div>
         </div>
       </div>
 
-      <!-- Board view (shown during / after active run) -->
-      <div class="parallel-board-view" id="parallel-board-view" style="display:none">
-
-        <!-- Board header -->
-        <div class="parallel-board-header" id="parallel-board-header">
-          <div class="parallel-board-header-left">
-            <div class="parallel-phase-dot" id="parallel-phase-dot"></div>
-            <div class="parallel-board-header-info">
-              <span class="parallel-board-phase-label" id="parallel-phase-label"></span>
-              <span class="parallel-board-goal-label" id="parallel-board-goal-label"></span>
-            </div>
-          </div>
-          <div class="parallel-board-header-right">
-            <button class="parallel-header-action-btn parallel-header-action-btn--danger" id="parallel-cancel-btn" style="display:none">
-              <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M18 6L6 18M6 6l12 12"/></svg>
-              ${t('parallel.cancelBtn')}
-            </button>
-            <button class="parallel-header-action-btn" id="parallel-cleanup-btn" style="display:none">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
-              ${t('parallel.cleanupBtn')}
-            </button>
-            <button class="parallel-header-action-btn" id="parallel-new-run-btn" style="display:none">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              ${t('parallel.newRunBtn')}
-            </button>
-          </div>
-        </div>
-
-        <!-- Progress bar -->
-        <div class="parallel-progress-bar-wrapper" id="parallel-progress-wrapper" style="display:none">
-          <div class="parallel-progress-bar" id="parallel-progress-bar"></div>
-        </div>
-
-        <!-- Task grid -->
-        <div class="parallel-task-grid" id="parallel-kanban"></div>
-
-        <!-- Merge section -->
-        <div class="parallel-merge-section" id="parallel-merge-section" style="display:none"></div>
-      </div>
+      <!-- Runs list -->
+      <div class="pt-runs-list" id="pt-runs-list"></div>
 
     </div>
   `;
@@ -228,6 +187,11 @@ function _render() {
 }
 
 function _wireEvents() {
+  // Form collapse toggle
+  document.getElementById('pt-form-toggle')?.addEventListener('click', () => {
+    _setFormCollapsed(!_formCollapsed);
+  });
+
   // Agents slider
   const slider = document.getElementById('parallel-agents-slider');
   const valueDisplay = document.getElementById('parallel-agents-value');
@@ -245,61 +209,70 @@ function _wireEvents() {
   // Start run
   document.getElementById('parallel-start-btn')?.addEventListener('click', _handleStart);
 
-  // Cancel run
-  document.getElementById('parallel-cancel-btn')?.addEventListener('click', async () => {
-    const run = getActiveRun();
-    if (!run) return;
-    await ctx.api.parallel.cancelRun({ runId: run.id });
-  });
-
-  // Cleanup worktrees
-  document.getElementById('parallel-cleanup-btn')?.addEventListener('click', async () => {
-    const run = getActiveRun();
-    if (!run) return;
-    const result = await ctx.api.parallel.cleanupRun({ runId: run.id, projectPath: run.projectPath });
-    if (result.success) {
-      clearActiveRun();
-      _showBoardView(false);
-      _showFormView(true);
-      _showToast(t('parallel.cleanup.success'), 'success');
-    } else {
-      _showToast(result.error || t('parallel.cleanup.error'), 'error');
-    }
-  });
-
-  // New run button (after completion)
-  document.getElementById('parallel-new-run-btn')?.addEventListener('click', () => {
-    clearActiveRun();
-    _showBoardView(false);
-    _showFormView(true);
-  });
-
-  // Event delegation for task card buttons
-  document.getElementById('parallel-kanban')?.addEventListener('click', async (e) => {
-    const diffBtn = e.target.closest('.parallel-btn-diff');
-    if (diffBtn) {
-      const taskId = diffBtn.dataset.taskId;
-      await _handleViewDiff(taskId);
-      return;
-    }
-
-    const termBtn = e.target.closest('.parallel-btn-terminal');
-    if (termBtn) {
-      const worktreePath = termBtn.dataset.worktreePath;
-      if (worktreePath && ctx.openTerminalAtPath) {
-        ctx.openTerminalAtPath(worktreePath);
+  // Event delegation on runs list
+  const runsList = document.getElementById('pt-runs-list');
+  if (runsList) {
+    runsList.addEventListener('click', async (e) => {
+      // Run toggle button (collapse/expand)
+      const toggleBtn = e.target.closest('.pt-run-toggle-btn');
+      if (toggleBtn) {
+        _toggleRunCard(toggleBtn.dataset.runId);
+        return;
       }
-      return;
-    }
-  });
 
-  // Same delegation for merge section
-  document.getElementById('parallel-merge-section')?.addEventListener('click', async (e) => {
-    const diffBtn = e.target.closest('.parallel-btn-diff');
-    if (diffBtn) {
-      await _handleViewDiff(diffBtn.dataset.taskId);
-    }
-  });
+      // Action buttons (cancel, cleanup, remove)
+      const actionBtn = e.target.closest('[data-action]');
+      if (actionBtn) {
+        const { action, runId } = actionBtn.dataset;
+
+        if (action === 'cancel') {
+          await ctx.api.parallel.cancelRun({ runId });
+          return;
+        }
+        if (action === 'cleanup') {
+          const run = getRunById(runId);
+          if (!run) return;
+          const result = await ctx.api.parallel.cleanupRun({ runId, projectPath: run.projectPath });
+          if (result.success) {
+            _showToast(t('parallel.cleanup.success'), 'success');
+          } else {
+            _showToast(result.error || t('parallel.cleanup.error'), 'error');
+          }
+          return;
+        }
+        if (action === 'remove') {
+          removeRun(runId);
+          return;
+        }
+      }
+
+      // Task diff button
+      const diffBtn = e.target.closest('.parallel-btn-diff');
+      if (diffBtn) {
+        const runCard = diffBtn.closest('[data-run-id]');
+        await _handleViewDiff(runCard?.dataset.runId, diffBtn.dataset.taskId);
+        return;
+      }
+
+      // Task terminal button
+      const termBtn = e.target.closest('.parallel-btn-terminal');
+      if (termBtn) {
+        const worktreePath = termBtn.dataset.worktreePath;
+        if (worktreePath && ctx.openTerminalAtPath) ctx.openTerminalAtPath(worktreePath);
+        return;
+      }
+    });
+  }
+}
+
+// ─── Form collapse ────────────────────────────────────────────────────────────
+
+function _setFormCollapsed(collapsed) {
+  _formCollapsed = collapsed;
+  const body = document.getElementById('pt-form-body');
+  const chevron = document.getElementById('pt-form-chevron');
+  if (body) body.style.display = collapsed ? 'none' : '';
+  if (chevron) chevron.style.transform = collapsed ? 'rotate(-90deg)' : '';
 }
 
 // ─── Custom select helpers ────────────────────────────────────────────────────
@@ -355,31 +328,23 @@ async function _handleStart() {
     return;
   }
 
-  const maxTasks = parseInt(
-    document.getElementById('parallel-agents-slider')?.value || '3',
-    10
-  );
+  const maxTasks = parseInt(document.getElementById('parallel-agents-slider')?.value || '3', 10);
   const model = _getSelectValue('parallel-model-select') || 'claude-sonnet-4-6';
   const effort = _getSelectValue('parallel-effort-select') || 'high';
 
-  // Persist the chosen max tasks
   setSetting('parallelMaxAgents', maxTasks);
 
-  // Get current branch
   const branchResult = await ctx.api.git.currentBranch({ projectPath }).catch(() => null);
   const mainBranch = (branchResult?.branch || branchResult) || 'main';
 
   const btn = document.getElementById('parallel-start-btn');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = t('parallel.form.startingBtn');
-  }
+  if (btn) { btn.disabled = true; btn.textContent = t('parallel.form.startingBtn'); }
 
   const result = await ctx.api.parallel.startRun({ projectPath, mainBranch, goal, maxTasks, model, effort });
 
   if (btn) {
     btn.disabled = false;
-    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M8 5v14l11-7z"/></svg> ${t('parallel.form.startBtn')}`;
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg> ${t('parallel.form.startBtn')}`;
   }
 
   if (!result.success) {
@@ -387,8 +352,8 @@ async function _handleStart() {
     return;
   }
 
-  // Create initial run object in state
-  setActiveRun({
+  // Add to state
+  addRun({
     id: result.runId,
     projectPath,
     mainBranch,
@@ -399,96 +364,183 @@ async function _handleStart() {
     tasks: [],
     startedAt: Date.now(),
     endedAt: null,
-    error: null
+    error: null,
   });
 
-  _showFormView(false);
-  _showBoardView(true);
-  _updateBoard();
+  // Collapse form and clear goal input
+  _setFormCollapsed(true);
+  const goalInput = document.getElementById('parallel-goal-input');
+  if (goalInput) goalInput.value = '';
 }
 
-// ─── Board update (called on every state change) ──────────────────────────────
+// ─── Board update ──────────────────────────────────────────────────────────────
 
 function _updateBoard() {
-  const run = getActiveRun();
-  if (!run) return;
+  const runs = getRuns();
+  const listEl = document.getElementById('pt-runs-list');
+  if (!listEl) return;
 
-  _updateBoardHeader(run);
-  _updateProgressBar(run);
-  _updateKanban(run);
-  _updateMergeSection(run);
+  // Create cards for new runs (newest at top)
+  runs.forEach(run => {
+    if (!_runNumbers.has(run.id)) {
+      _runNumbers.set(run.id, ++_runCounter);
+    }
+    let card = document.getElementById(`pt-run-card-${run.id}`);
+    if (!card) {
+      card = _createRunCard(run);
+      listEl.insertBefore(card, listEl.firstChild);
+    }
+    _updateRunCard(run);
+  });
+
+  // Remove cards for runs no longer in state
+  listEl.querySelectorAll('.pt-run-card').forEach(card => {
+    if (!runs.find(r => r.id === card.dataset.runId)) card.remove();
+  });
 }
 
-function _updateBoardHeader(run) {
-  const phaseLabel = document.getElementById('parallel-phase-label');
-  const goalLabel = document.getElementById('parallel-board-goal-label');
-  const phaseDot = document.getElementById('parallel-phase-dot');
-  const cancelBtn = document.getElementById('parallel-cancel-btn');
-  const cleanupBtn = document.getElementById('parallel-cleanup-btn');
-  const newRunBtn = document.getElementById('parallel-new-run-btn');
+function _createRunCard(run) {
+  const card = document.createElement('div');
+  card.className = 'pt-run-card';
+  card.id = `pt-run-card-${run.id}`;
+  card.dataset.runId = run.id;
 
-  const done = (run.tasks || []).filter(t => t.status === 'done').length;
-  const total = (run.tasks || []).length;
+  const num = String(_runNumbers.get(run.id) || 1).padStart(2, '0');
+  const goalShort = run.goal
+    ? run.goal.slice(0, 72) + (run.goal.length > 72 ? '...' : '')
+    : '';
 
-  let label = t(`parallel.phase.${run.phase}`, { done, total });
-  if (run.phase === 'running' && total > 0) {
-    label = t('parallel.phase.running', { done, total });
+  card.innerHTML = `
+    <div class="pt-run-header">
+      <div class="pt-run-header-left">
+        <span class="pt-run-num">#${num}</span>
+        <div class="pt-run-phase-dot" id="pt-phasedot-${run.id}"></div>
+        <span class="pt-run-goal-text">${escapeHtml(goalShort)}</span>
+      </div>
+      <div class="pt-run-header-right">
+        <span class="pt-run-phase-label" id="pt-phase-label-${run.id}"></span>
+        <button class="pt-run-action-btn pt-run-action-btn--cancel" data-action="cancel" data-run-id="${run.id}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="9" height="9"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          Cancel
+        </button>
+        <button class="pt-run-action-btn pt-run-action-btn--cleanup" data-action="cleanup" data-run-id="${run.id}" style="display:none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="9" height="9"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
+          Cleanup
+        </button>
+        <button class="pt-run-action-btn pt-run-action-btn--remove" data-action="remove" data-run-id="${run.id}" style="display:none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="9" height="9"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          Remove
+        </button>
+        <button class="pt-run-toggle-btn" data-run-id="${run.id}" title="Toggle">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13"><path d="M7 10l5 5 5-5z"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Progress bar -->
+    <div class="pt-run-progress-wrapper" id="pt-progress-${run.id}" style="display:none">
+      <div class="pt-run-progress-bar" id="pt-progress-bar-${run.id}"></div>
+    </div>
+
+    <!-- Collapsible body -->
+    <div class="pt-run-body" id="pt-run-body-${run.id}">
+      <div class="pt-run-kanban" id="pt-kanban-${run.id}"></div>
+      <div class="pt-run-merge" id="pt-merge-${run.id}" style="display:none"></div>
+    </div>
+  `;
+
+  return card;
+}
+
+function _toggleRunCard(runId) {
+  const card = document.getElementById(`pt-run-card-${runId}`);
+  if (!card) return;
+  const collapsed = card.classList.toggle('is-collapsed');
+  const btn = card.querySelector('.pt-run-toggle-btn svg');
+  if (btn) btn.style.transform = collapsed ? 'rotate(-90deg)' : '';
+}
+
+function _updateRunCard(run) {
+  _updateRunHeader(run);
+  _updateRunProgress(run);
+  _updateRunKanban(run);
+  _updateRunMerge(run);
+}
+
+function _updateRunHeader(run) {
+  const card = document.getElementById(`pt-run-card-${run.id}`);
+  if (!card) return;
+
+  const tasks = run.tasks || [];
+  const done = tasks.filter(t => t.status === 'done').length;
+  const total = tasks.length;
+  const isActive = ['decomposing', 'reviewing', 'creating-worktrees', 'running'].includes(run.phase);
+  const isFinished = ['done', 'failed', 'cancelled'].includes(run.phase);
+
+  const dot = document.getElementById(`pt-phasedot-${run.id}`);
+  if (dot) {
+    dot.className = 'pt-run-phase-dot';
+    if (isActive) dot.classList.add('running');
+    else if (run.phase === 'done') dot.classList.add('done');
+    else if (isFinished) dot.classList.add('failed');
   }
-  if (run.error) {
-    label = run.error;
+
+  const label = document.getElementById(`pt-phase-label-${run.id}`);
+  if (label) {
+    let text = t(`parallel.phase.${run.phase}`, { done, total }) || run.phase;
+    if (run.phase === 'running' && total > 0) text = t('parallel.phase.running', { done, total });
+    if (run.error) text = run.error.slice(0, 60);
+    label.textContent = text;
+    label.className = `pt-run-phase-label phase-${run.phase}`;
   }
 
-  if (phaseLabel) phaseLabel.textContent = label;
-  if (goalLabel) {
-    goalLabel.textContent = run.goal ? `"${run.goal.slice(0, 80)}${run.goal.length > 80 ? '...' : ''}"` : '';
-  }
-
-  const isRunning = run.phase === 'decomposing' || run.phase === 'creating-worktrees' || run.phase === 'running' || run.phase === 'reviewing';
-  const isFinished = run.phase === 'done' || run.phase === 'failed' || run.phase === 'cancelled';
-
-  if (phaseDot) {
-    phaseDot.className = 'parallel-phase-dot';
-    if (isRunning) phaseDot.classList.add('running');
-    else if (run.phase === 'done') phaseDot.classList.add('done');
-    else if (run.phase === 'failed') phaseDot.classList.add('failed');
-  }
-
-  if (cancelBtn) cancelBtn.style.display = isRunning ? '' : 'none';
+  const cancelBtn = card.querySelector('.pt-run-action-btn--cancel');
+  const cleanupBtn = card.querySelector('.pt-run-action-btn--cleanup');
+  const removeBtn = card.querySelector('.pt-run-action-btn--remove');
+  if (cancelBtn) cancelBtn.style.display = isActive ? '' : 'none';
   if (cleanupBtn) cleanupBtn.style.display = isFinished ? '' : 'none';
-  if (newRunBtn) newRunBtn.style.display = isFinished ? '' : 'none';
+  if (removeBtn) removeBtn.style.display = isFinished ? '' : 'none';
+
+  card.dataset.phase = run.phase;
 }
 
-function _updateProgressBar(run) {
-  const wrapper = document.getElementById('parallel-progress-wrapper');
-  const bar = document.getElementById('parallel-progress-bar');
+function _updateRunProgress(run) {
+  const wrapper = document.getElementById(`pt-progress-${run.id}`);
+  const bar = document.getElementById(`pt-progress-bar-${run.id}`);
   if (!wrapper || !bar) return;
 
   const tasks = run.tasks || [];
   const total = tasks.length;
 
-  if (total === 0 || run.phase === 'decomposing') {
+  if (total === 0 || run.phase === 'decomposing' || run.phase === 'reviewing') {
     wrapper.style.display = 'none';
     return;
   }
 
   wrapper.style.display = '';
-  const done = tasks.filter(t => t.status === 'done' || t.status === 'failed' || t.status === 'cancelled').length;
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-  bar.style.width = `${pct}%`;
-  bar.className = 'parallel-progress-bar';
+  const done = tasks.filter(t => ['done', 'failed', 'cancelled'].includes(t.status)).length;
+  bar.style.width = `${Math.round((done / total) * 100)}%`;
+  bar.className = 'pt-run-progress-bar';
   if (run.phase === 'done') bar.classList.add('done');
   else if (run.phase === 'failed') bar.classList.add('failed');
 }
 
-function _updateKanban(run) {
-  const kanban = document.getElementById('parallel-kanban');
+function _updateRunKanban(run) {
+  const kanban = document.getElementById(`pt-kanban-${run.id}`);
   if (!kanban) return;
 
-  // ── Review phase: show proposed tasks for approval ────────────────────────
   if (run.phase === 'reviewing') {
-    kanban.innerHTML = _buildReviewPanel(run);
-    _wireReviewEvents(run);
+    // Only re-render if not already showing review panel for this run
+    if (!kanban.querySelector('.pt-review-panel')) {
+      kanban.innerHTML = _buildReviewPanel(run);
+      _wireReviewEvents(run);
+    }
     return;
+  }
+
+  // If we were showing the review panel, clear it
+  if (kanban.querySelector('.pt-review-panel')) {
+    kanban.innerHTML = '';
   }
 
   const tasks = run.tasks || [];
@@ -518,7 +570,6 @@ function _updateKanban(run) {
     return;
   }
 
-  // Build or update each task card
   tasks.forEach(task => {
     let card = kanban.querySelector(`[data-task-id="${task.id}"]`);
     if (!card) {
@@ -532,13 +583,12 @@ function _updateKanban(run) {
     }
   });
 
-  // Remove cards for tasks that no longer exist
   kanban.querySelectorAll('[data-task-id]').forEach(card => {
-    if (!tasks.find(t => t.id === card.dataset.taskId)) {
-      card.remove();
-    }
+    if (!tasks.find(t => t.id === card.dataset.taskId)) card.remove();
   });
 }
+
+// ─── Task card ────────────────────────────────────────────────────────────────
 
 function _buildTaskCard(task) {
   const outputLines = _formatOutput(task.output);
@@ -546,7 +596,6 @@ function _buildTaskCard(task) {
   const isFinished = task.status === 'done' || task.status === 'failed';
   const isRunning = task.status === 'running';
 
-  // Extract index from task.id (e.g. "run-1234-task-2" → "02")
   const idxMatch = task.id && task.id.match(/task-(\d+)/);
   const taskIndex = idxMatch ? String(parseInt(idxMatch[1], 10)).padStart(2, '0') : '--';
 
@@ -586,17 +635,14 @@ function _buildTaskCard(task) {
 }
 
 function _patchTaskCard(card, task) {
-  // Update card border status class
   card.className = `parallel-task-card status-${task.status}`;
 
-  // Update status badge
   const badge = card.querySelector('.parallel-task-badge');
   if (badge) {
     badge.textContent = t(`parallel.status.${task.status}`) || task.status;
     badge.className = `parallel-task-badge badge-${task.status}`;
   }
 
-  // Update running indicator
   const outputWrap = card.querySelector(`#output-wrap-${task.id}`);
   if (outputWrap) {
     const runningInd = outputWrap.querySelector('.parallel-task-running-indicator');
@@ -604,38 +650,32 @@ function _patchTaskCard(card, task) {
     if (isRunning && !runningInd) {
       const ind = document.createElement('div');
       ind.className = 'parallel-task-running-indicator';
-      ind.innerHTML = '<span></span><span></span><span></span>';
+      ind.innerHTML = '<span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>';
       outputWrap.prepend(ind);
     } else if (!isRunning && runningInd) {
       runningInd.remove();
     }
   }
 
-  // Update output content
   const outputEl = card.querySelector(`#output-${task.id} pre`);
   if (outputEl) {
-    const formatted = _formatOutput(task.output);
-    outputEl.textContent = formatted;
+    outputEl.textContent = _formatOutput(task.output);
     const outputBox = card.querySelector(`#output-${task.id}`);
     if (outputBox) outputBox.scrollTop = outputBox.scrollHeight;
   }
 
-  // Show/hide footer
   const footer = card.querySelector(`#footer-${task.id}`);
   if (footer) {
-    const isFinished = task.status === 'done' || task.status === 'failed';
-    footer.style.display = isFinished ? '' : 'none';
+    footer.style.display = (task.status === 'done' || task.status === 'failed') ? '' : 'none';
   }
 
-  // Show/update error
   let errorEl = card.querySelector('.parallel-task-error');
   if (task.error) {
     if (!errorEl) {
       errorEl = document.createElement('div');
       errorEl.className = 'parallel-task-error';
-      const footer = card.querySelector('.parallel-task-footer');
-      if (footer) footer.before(errorEl);
-      else card.appendChild(errorEl);
+      const f = card.querySelector('.parallel-task-footer');
+      if (f) f.before(errorEl); else card.appendChild(errorEl);
     }
     errorEl.textContent = task.error;
   } else if (errorEl) {
@@ -647,6 +687,7 @@ function _patchTaskCard(card, task) {
 
 function _buildReviewPanel(run) {
   const proposed = run.proposedTasks || [];
+  const rid = run.id;
   return `
     <div class="pt-review-panel">
       <div class="pt-review-header">
@@ -682,23 +723,23 @@ function _buildReviewPanel(run) {
       <div class="pt-review-feedback">
         <div class="pt-review-feedback-label">Modification request <span class="pt-review-optional">(optional)</span></div>
         <textarea
-          id="pt-review-feedback-input"
+          id="pt-review-feedback-${rid}"
           class="pt-review-feedback-input"
-          placeholder="e.g. «  split task 0 into two — one for the model, one for the controller »"
+          placeholder="e.g. « split task 0 into two — one for the model, one for the controller »"
           rows="2"
         ></textarea>
       </div>
 
       <div class="pt-review-actions">
-        <button class="pt-review-btn pt-review-btn--cancel" id="pt-review-cancel">
+        <button class="pt-review-btn pt-review-btn--cancel" id="pt-review-cancel-${rid}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><path d="M18 6L6 18M6 6l12 12"/></svg>
           Cancel
         </button>
-        <button class="pt-review-btn pt-review-btn--refine" id="pt-review-refine">
+        <button class="pt-review-btn pt-review-btn--refine" id="pt-review-refine-${rid}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
           Re-generate
         </button>
-        <button class="pt-review-btn pt-review-btn--confirm" id="pt-review-confirm">
+        <button class="pt-review-btn pt-review-btn--confirm" id="pt-review-confirm-${rid}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><polyline points="20 6 9 17 4 12"/></svg>
           Launch ${proposed.length} task${proposed.length !== 1 ? 's' : ''}
         </button>
@@ -709,25 +750,26 @@ function _buildReviewPanel(run) {
 
 function _wireReviewEvents(run) {
   const proposed = run.proposedTasks || [];
+  const rid = run.id;
 
-  document.getElementById('pt-review-confirm')?.addEventListener('click', async () => {
-    const result = await ctx.api.parallel.confirmRun({ runId: run.id, tasks: proposed });
+  document.getElementById(`pt-review-confirm-${rid}`)?.addEventListener('click', async () => {
+    const result = await ctx.api.parallel.confirmRun({ runId: rid, tasks: proposed });
     if (!result.success) _showToast(result.error || 'Confirm failed', 'error');
   });
 
-  document.getElementById('pt-review-cancel')?.addEventListener('click', async () => {
-    await ctx.api.parallel.cancelRun({ runId: run.id });
+  document.getElementById(`pt-review-cancel-${rid}`)?.addEventListener('click', async () => {
+    await ctx.api.parallel.cancelRun({ runId: rid });
   });
 
-  document.getElementById('pt-review-refine')?.addEventListener('click', async () => {
-    const feedback = document.getElementById('pt-review-feedback-input')?.value?.trim();
+  document.getElementById(`pt-review-refine-${rid}`)?.addEventListener('click', async () => {
+    const feedback = document.getElementById(`pt-review-feedback-${rid}`)?.value?.trim();
     if (!feedback) {
       _showToast('Enter a modification request first', 'warning');
       return;
     }
-    const btn = document.getElementById('pt-review-refine');
+    const btn = document.getElementById(`pt-review-refine-${rid}`);
     if (btn) { btn.disabled = true; btn.textContent = 'Regenerating...'; }
-    const result = await ctx.api.parallel.refineRun({ runId: run.id, feedback });
+    const result = await ctx.api.parallel.refineRun({ runId: rid, feedback });
     if (!result.success) {
       _showToast(result.error || 'Refine failed', 'error');
       if (btn) { btn.disabled = false; btn.textContent = 'Re-generate'; }
@@ -735,8 +777,10 @@ function _wireReviewEvents(run) {
   });
 }
 
-function _updateMergeSection(run) {
-  const mergeSection = document.getElementById('parallel-merge-section');
+// ─── Merge section ────────────────────────────────────────────────────────────
+
+function _updateRunMerge(run) {
+  const mergeSection = document.getElementById(`pt-merge-${run.id}`);
   if (!mergeSection) return;
 
   if (run.phase !== 'done') {
@@ -783,8 +827,8 @@ function _updateMergeSection(run) {
 
 // ─── View diff ────────────────────────────────────────────────────────────────
 
-async function _handleViewDiff(taskId) {
-  const run = getActiveRun();
+async function _handleViewDiff(runId, taskId) {
+  const run = getRunById(runId);
   if (!run) return;
 
   const task = (run.tasks || []).find(t => t.id === taskId);
@@ -813,31 +857,15 @@ function _renderDiff(diff) {
   return diff
     .split('\n')
     .map(line => {
-      if (line.startsWith('+') && !line.startsWith('+++')) {
-        return `<span class="diff-add">${escapeHtml(line)}</span>`;
-      }
-      if (line.startsWith('-') && !line.startsWith('---')) {
-        return `<span class="diff-del">${escapeHtml(line)}</span>`;
-      }
-      if (line.startsWith('@@')) {
-        return `<span class="diff-hunk">${escapeHtml(line)}</span>`;
-      }
+      if (line.startsWith('+') && !line.startsWith('+++')) return `<span class="diff-add">${escapeHtml(line)}</span>`;
+      if (line.startsWith('-') && !line.startsWith('---')) return `<span class="diff-del">${escapeHtml(line)}</span>`;
+      if (line.startsWith('@@')) return `<span class="diff-hunk">${escapeHtml(line)}</span>`;
       return escapeHtml(line);
     })
     .join('\n');
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function _showFormView(visible) {
-  const el = document.getElementById('parallel-form-view');
-  if (el) el.style.display = visible ? '' : 'none';
-}
-
-function _showBoardView(visible) {
-  const el = document.getElementById('parallel-board-view');
-  if (el) el.style.display = visible ? '' : 'none';
-}
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function _populateProjectSelector() {
   const sel = document.getElementById('parallel-project-select');
@@ -873,9 +901,7 @@ async function _loadHistory() {
 
 function _formatOutput(output) {
   if (!output) return '';
-  // Show last 20 lines
-  const lines = output.split('\n');
-  return lines.slice(-20).join('\n');
+  return output.split('\n').slice(-20).join('\n');
 }
 
 function _showToast(msg, type) {

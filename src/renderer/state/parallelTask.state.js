@@ -1,10 +1,10 @@
 /**
  * Parallel Task State Module
- * Manages active parallel runs and recent run history.
+ * Manages multiple concurrent parallel runs.
  *
  * Shape:
- *   activeRun   Object|null  — the currently active parallel run
- *   history     Object[]     — lightweight summaries of recent runs (loaded from disk)
+ *   runs     Object[]  — all active and recently completed runs
+ *   history  Object[]  — lightweight summaries of past runs (from disk)
  */
 
 'use strict';
@@ -14,7 +14,7 @@ const { State } = require('./State');
 // ─── Initial state ────────────────────────────────────────────────────────────
 
 const initialState = {
-  activeRun: null,
+  runs: [],
   history: [],
 };
 
@@ -22,22 +22,26 @@ const parallelTaskState = new State(initialState);
 
 // ─── Selectors ────────────────────────────────────────────────────────────────
 
-function getActiveRun() {
-  return parallelTaskState.get().activeRun;
+function getRuns() {
+  return parallelTaskState.get().runs;
 }
 
 function getHistory() {
   return parallelTaskState.get().history;
 }
 
-// ─── Mutators ─────────────────────────────────────────────────────────────────
-
-function setActiveRun(run) {
-  parallelTaskState.setProp('activeRun', run);
+function getRunById(runId) {
+  return parallelTaskState.get().runs.find(r => r.id === runId) || null;
 }
 
-function clearActiveRun() {
-  parallelTaskState.setProp('activeRun', null);
+// ─── Mutators ─────────────────────────────────────────────────────────────────
+
+function addRun(run) {
+  parallelTaskState.setProp('runs', [...parallelTaskState.get().runs, run]);
+}
+
+function removeRun(runId) {
+  parallelTaskState.setProp('runs', parallelTaskState.get().runs.filter(r => r.id !== runId));
 }
 
 function setHistory(runs) {
@@ -45,39 +49,47 @@ function setHistory(runs) {
 }
 
 function setRunPhase(runId, phase, extra = {}) {
-  const run = parallelTaskState.get().activeRun;
-  if (!run || run.id !== runId) return;
-  parallelTaskState.setProp('activeRun', { ...run, phase, ...extra });
+  const runs = parallelTaskState.get().runs;
+  const idx = runs.findIndex(r => r.id === runId);
+  if (idx < 0) return;
+  parallelTaskState.setProp('runs', runs.map((r, i) =>
+    i === idx ? { ...r, phase, ...extra } : r
+  ));
 }
 
 /**
- * Insert or update a task within the active run.
- * @param {string} runId
- * @param {Object} taskData — partial task object (must include id)
+ * Insert or update a task within a run.
  */
 function upsertTask(runId, taskData) {
-  const run = parallelTaskState.get().activeRun;
-  if (!run || run.id !== runId) return;
+  const runs = parallelTaskState.get().runs;
+  const idx = runs.findIndex(r => r.id === runId);
+  if (idx < 0) return;
+  const run = runs[idx];
   const tasks = run.tasks || [];
-  const idx = tasks.findIndex(t => t.id === taskData.id);
-  const nextTasks = idx >= 0
-    ? tasks.map((t, i) => i === idx ? { ...t, ...taskData } : t)
+  const ti = tasks.findIndex(t => t.id === taskData.id);
+  const nextTasks = ti >= 0
+    ? tasks.map((t, i) => i === ti ? { ...t, ...taskData } : t)
     : [...tasks, { output: '', error: null, ...taskData }];
-  parallelTaskState.setProp('activeRun', { ...run, tasks: nextTasks });
+  parallelTaskState.setProp('runs', runs.map((r, i) =>
+    i === idx ? { ...r, tasks: nextTasks } : r
+  ));
 }
 
 /**
  * Append a text chunk to a task's output. Caps at 50 KB.
  */
 function appendTaskOutput(runId, taskId, chunk) {
-  const run = parallelTaskState.get().activeRun;
-  if (!run || run.id !== runId) return;
+  const runs = parallelTaskState.get().runs;
+  const idx = runs.findIndex(r => r.id === runId);
+  if (idx < 0) return;
+  const run = runs[idx];
   const tasks = (run.tasks || []).map(t => {
     if (t.id !== taskId) return t;
-    const next = ((t.output || '') + chunk).slice(-50000);
-    return { ...t, output: next };
+    return { ...t, output: ((t.output || '') + chunk).slice(-50000) };
   });
-  parallelTaskState.setProp('activeRun', { ...run, tasks });
+  parallelTaskState.setProp('runs', runs.map((r, i) =>
+    i === idx ? { ...r, tasks } : r
+  ));
 }
 
 // ─── IPC event listeners ──────────────────────────────────────────────────────
@@ -96,8 +108,8 @@ function initParallelListeners() {
   if (!api) return;
 
   api.onRunStatus(({ runId, phase, error, endedAt, proposedTasks }) => {
-    const run = parallelTaskState.get().activeRun;
-    if (run && run.id === runId) {
+    const run = getRunById(runId);
+    if (run) {
       setRunPhase(runId, phase, {
         error: error || null,
         endedAt: endedAt || run.endedAt || null,
@@ -120,11 +132,12 @@ function initParallelListeners() {
 module.exports = {
   parallelTaskState,
   // Selectors
-  getActiveRun,
+  getRuns,
   getHistory,
+  getRunById,
   // Mutators
-  setActiveRun,
-  clearActiveRun,
+  addRun,
+  removeRun,
   setHistory,
   setRunPhase,
   upsertTask,
