@@ -157,6 +157,12 @@ function createChatView(wrapperEl, project, options = {}) {
   let slashSelectedIndex = -1; // currently highlighted item in slash dropdown
   const unsubscribers = [];
 
+  // ── Session recap tracking (for chat-mode sessions) ──
+  let recapToolCount = 0;
+  const recapToolCounts = {}; // { toolName: count }
+  const recapUserPrompts = []; // first 5 user prompts
+  const recapSessionStartTime = Date.now();
+
   // ── Lightbox state ──
   let lightboxEl = null;
   let lightboxImages = [];
@@ -1480,6 +1486,8 @@ function createChatView(wrapperEl, project, options = {}) {
     if ((!text && !hasImages && !hasMentions) || sendLock) return;
 
     sendLock = true;
+    // Track user prompt for session recap (first 5 prompts)
+    if (text && recapUserPrompts.length < 5) recapUserPrompts.push(text);
     if (project?.id) heartbeat(project.id, 'chat');
     api.telemetry?.sendFeature?.({ feature: 'chat:message', metadata: {} });
 
@@ -3108,6 +3116,9 @@ function createChatView(wrapperEl, project, options = {}) {
         } else if (block.type === 'tool_use') {
           finalizeStreamBlock();
           currentMsgHasToolUse = true;
+          // Track for session recap
+          recapToolCount++;
+          recapToolCounts[block.name] = (recapToolCounts[block.name] || 0) + 1;
           const blockIdx = event.index ?? blockIndex;
           // TodoWrite, Task & AskUserQuestion get special UI — no generic tool card
           if (block.name === 'TodoWrite') {
@@ -3728,6 +3739,19 @@ function createChatView(wrapperEl, project, options = {}) {
 
   return {
     destroy() {
+      // Emit session recap event before closing (chat-mode sessions only)
+      if (recapToolCount >= 2 && project?.id) {
+        try {
+          const { getEventBus, EVENT_TYPES: ET } = require('../../events');
+          getEventBus().emit(ET.SESSION_END, {
+            reason: 'chat_close',
+            toolCount: recapToolCount,
+            toolCounts: recapToolCounts,
+            prompts: recapUserPrompts,
+            durationMs: Date.now() - recapSessionStartTime
+          }, { projectId: project.id, projectPath: project.path || '', source: 'chat' });
+        } catch (e) { /* events not ready */ }
+      }
       if (sessionId) api.chat.close({ sessionId });
       for (const unsub of unsubscribers) {
         if (typeof unsub === 'function') unsub();

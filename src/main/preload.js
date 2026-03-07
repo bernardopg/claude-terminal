@@ -125,7 +125,8 @@ contextBridge.exposeInMainWorld('electron_api', {
     worktreeUnlock: (params) => ipcRenderer.invoke('git-worktree-unlock', params),
     worktreePrune: (params) => ipcRenderer.invoke('git-worktree-prune', params),
     worktreeDetect: (params) => ipcRenderer.invoke('git-worktree-detect', params),
-    worktreeDiff: (params) => ipcRenderer.invoke('git-worktree-diff', params)
+    worktreeDiff: (params) => ipcRenderer.invoke('git-worktree-diff', params),
+    generateSessionRecap: (context) => ipcRenderer.invoke('git-generate-session-recap', context),
   },
 
   // ==================== WEBAPP ====================

@@ -5,7 +5,7 @@
 
 const { ipcMain } = require('electron');
 const { execGit, getGitInfo, getGitInfoFull, getGitStatusQuick, getGitStatusDetailed, gitPull, gitPush, gitMerge, gitMergeAbort, gitMergeContinue, getMergeConflicts, isMergeInProgress, gitClone, gitStageFiles, gitCommit, getProjectStats, getBranches, getCurrentBranch, checkoutBranch, createBranch, deleteBranch, getCommitHistory, getFileDiff, getCommitDetail, cherryPick, revertCommit, gitUnstageFiles, stashApply, stashDrop, gitStashSave, getWorktrees, createWorktree, removeWorktree, lockWorktree, unlockWorktree, pruneWorktrees, detectWorktree, diffWorktreeBranches } = require('../utils/git');
-const { generateCommitMessage } = require('../utils/commitMessageGenerator');
+const { generateCommitMessage, generateSessionRecap } = require('../utils/commitMessageGenerator');
 const GitHubAuthService = require('../services/GitHubAuthService');
 const { sendFeaturePing } = require('../services/TelemetryService');
 
@@ -225,6 +225,17 @@ function registerGitHandlers() {
       return { success: false, error: e.message };
     }
   });
+
+  // Generate session recap via GitHub Models API
+  ipcMain.handle('git-generate-session-recap', async (_event, context) => {
+    try {
+      const githubToken = await GitHubAuthService.getToken();
+      return await generateSessionRecap(context, githubToken);
+    } catch (e) {
+      return { summary: null, source: 'error' };
+    }
+  });
+
   // ========== WORKTREES ==========
 
   // List worktrees
