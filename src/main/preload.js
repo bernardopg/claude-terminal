@@ -551,6 +551,8 @@ contextBridge.exposeInMainWorld('electron_api', {
   parallel: {
     startRun:    (p) => ipcRenderer.invoke('parallel-run-start', p),
     cancelRun:   (p) => ipcRenderer.invoke('parallel-run-cancel', p),
+    confirmRun:  (p) => ipcRenderer.invoke('parallel-run-confirm', p),
+    refineRun:   (p) => ipcRenderer.invoke('parallel-run-refine', p),
     cleanupRun:  (p) => ipcRenderer.invoke('parallel-run-cleanup', p),
     getHistory:  (p) => ipcRenderer.invoke('parallel-history', p),
     onRunStatus:  createListener('parallel-run-status'),

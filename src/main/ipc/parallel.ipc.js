@@ -41,6 +41,26 @@ function registerParallelHandlers(mainWindow) {
     }
   });
 
+  // Confirm proposed tasks and proceed to execution
+  ipcMain.handle('parallel-run-confirm', async (_e, { runId, tasks }) => {
+    try {
+      return parallelTaskService.confirmRun(runId, tasks);
+    } catch (err) {
+      console.error('[parallel-run-confirm]', err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
+  // Request re-decomposition with user feedback
+  ipcMain.handle('parallel-run-refine', async (_e, { runId, feedback }) => {
+    try {
+      return parallelTaskService.refineRun(runId, feedback);
+    } catch (err) {
+      console.error('[parallel-run-refine]', err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
   // Load run history for a project
   ipcMain.handle('parallel-history', async (_e, { projectPath } = {}) => {
     try {

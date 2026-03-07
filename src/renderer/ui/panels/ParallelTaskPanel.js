@@ -385,7 +385,7 @@ function _updateBoardHeader(run) {
     goalLabel.textContent = run.goal ? `"${run.goal.slice(0, 80)}${run.goal.length > 80 ? '...' : ''}"` : '';
   }
 
-  const isRunning = run.phase === 'decomposing' || run.phase === 'creating-worktrees' || run.phase === 'running';
+  const isRunning = run.phase === 'decomposing' || run.phase === 'creating-worktrees' || run.phase === 'running' || run.phase === 'reviewing';
   const isFinished = run.phase === 'done' || run.phase === 'failed' || run.phase === 'cancelled';
 
   if (phaseDot) {
@@ -425,6 +425,13 @@ function _updateProgressBar(run) {
 function _updateKanban(run) {
   const kanban = document.getElementById('parallel-kanban');
   if (!kanban) return;
+
+  // ── Review phase: show proposed tasks for approval ────────────────────────
+  if (run.phase === 'reviewing') {
+    kanban.innerHTML = _buildReviewPanel(run);
+    _wireReviewEvents(run);
+    return;
+  }
 
   const tasks = run.tasks || [];
 
@@ -576,6 +583,98 @@ function _patchTaskCard(card, task) {
   } else if (errorEl) {
     errorEl.remove();
   }
+}
+
+// ─── Review panel ─────────────────────────────────────────────────────────────
+
+function _buildReviewPanel(run) {
+  const proposed = run.proposedTasks || [];
+  return `
+    <div class="pt-review-panel">
+      <div class="pt-review-header">
+        <div class="pt-review-header-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
+            <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+          </svg>
+        </div>
+        <div>
+          <p class="pt-review-title">Review proposed tasks</p>
+          <p class="pt-review-subtitle">${proposed.length} sub-task${proposed.length !== 1 ? 's' : ''} — confirm to launch or request changes</p>
+        </div>
+      </div>
+
+      <div class="pt-review-task-list">
+        ${proposed.map((task, i) => `
+          <div class="pt-review-task-item">
+            <div class="pt-review-task-num">${String(i).padStart(2, '0')}</div>
+            <div class="pt-review-task-body">
+              <div class="pt-review-task-title">${escapeHtml(task.title)}</div>
+              <div class="pt-review-task-desc">${escapeHtml(task.description || '')}</div>
+              <div class="pt-review-task-branch">
+                <svg viewBox="0 0 16 16" fill="currentColor" width="9" height="9">
+                  <path d="M11.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122V6A2.5 2.5 0 019 8.5H7.5a1 1 0 000 2h1.25a2.25 2.25 0 110 1.5H7.5a2.5 2.5 0 01-2.5-2.5v-2A2.25 2.25 0 110 5.5a2.25 2.25 0 012.25 2.25v.5h4.25V5.25A2.25 2.25 0 019.5 3.25z"/>
+                </svg>
+                <code>${escapeHtml(task.branchSuffix || task.title || '')}</code>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+
+      <div class="pt-review-feedback">
+        <div class="pt-review-feedback-label">Modification request <span class="pt-review-optional">(optional)</span></div>
+        <textarea
+          id="pt-review-feedback-input"
+          class="pt-review-feedback-input"
+          placeholder="e.g. «  split task 0 into two — one for the model, one for the controller »"
+          rows="2"
+        ></textarea>
+      </div>
+
+      <div class="pt-review-actions">
+        <button class="pt-review-btn pt-review-btn--cancel" id="pt-review-cancel">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          Cancel
+        </button>
+        <button class="pt-review-btn pt-review-btn--refine" id="pt-review-refine">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          Re-generate
+        </button>
+        <button class="pt-review-btn pt-review-btn--confirm" id="pt-review-confirm">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><polyline points="20 6 9 17 4 12"/></svg>
+          Launch ${proposed.length} task${proposed.length !== 1 ? 's' : ''}
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function _wireReviewEvents(run) {
+  const proposed = run.proposedTasks || [];
+
+  document.getElementById('pt-review-confirm')?.addEventListener('click', async () => {
+    const result = await ctx.api.parallel.confirmRun({ runId: run.id, tasks: proposed });
+    if (!result.success) _showToast(result.error || 'Confirm failed', 'error');
+  });
+
+  document.getElementById('pt-review-cancel')?.addEventListener('click', async () => {
+    await ctx.api.parallel.cancelRun({ runId: run.id });
+  });
+
+  document.getElementById('pt-review-refine')?.addEventListener('click', async () => {
+    const feedback = document.getElementById('pt-review-feedback-input')?.value?.trim();
+    if (!feedback) {
+      _showToast('Enter a modification request first', 'warning');
+      return;
+    }
+    const btn = document.getElementById('pt-review-refine');
+    if (btn) { btn.disabled = true; btn.textContent = 'Regenerating...'; }
+    const result = await ctx.api.parallel.refineRun({ runId: run.id, feedback });
+    if (!result.success) {
+      _showToast(result.error || 'Refine failed', 'error');
+      if (btn) { btn.disabled = false; btn.textContent = 'Re-generate'; }
+    }
+  });
 }
 
 function _updateMergeSection(run) {

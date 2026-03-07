@@ -95,12 +95,13 @@ function initParallelListeners() {
   const api = window.electron_api?.parallel;
   if (!api) return;
 
-  api.onRunStatus(({ runId, phase, error, endedAt }) => {
+  api.onRunStatus(({ runId, phase, error, endedAt, proposedTasks }) => {
     const run = parallelTaskState.get().activeRun;
     if (run && run.id === runId) {
       setRunPhase(runId, phase, {
         error: error || null,
-        endedAt: endedAt || run.endedAt || null
+        endedAt: endedAt || run.endedAt || null,
+        ...(proposedTasks !== undefined && { proposedTasks }),
       });
     }
   });

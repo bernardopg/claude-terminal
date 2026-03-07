@@ -52,12 +52,57 @@ class ParallelTaskService {
     const active = this._active.get(runId);
     if (!active) return { success: false, error: 'Run not found or already finished' };
 
+    // Unblock review if waiting
+    if (active.reviewResolver) {
+      active.reviewResolver({ action: 'cancel' });
+      active.reviewResolver = null;
+    }
     for (const [, ac] of active.abortControllers) {
       try { ac.abort(); } catch (_) {}
     }
     this._active.delete(runId);
     this._send('parallel-run-status', { runId, phase: 'cancelled' });
     return { success: true };
+  }
+
+  /**
+   * Confirm the proposed tasks and proceed to execution.
+   * @param {string} runId
+   * @param {Object[]} tasks - confirmed task list (may be the original proposedTasks unchanged)
+   */
+  confirmRun(runId, tasks) {
+    const active = this._active.get(runId);
+    if (!active?.reviewResolver) return { success: false, error: 'No pending review' };
+    const resolver = active.reviewResolver;
+    active.reviewResolver = null;
+    resolver({ action: 'confirm', tasks });
+    return { success: true };
+  }
+
+  /**
+   * Request a re-decomposition with user feedback.
+   * @param {string} runId
+   * @param {string} feedback - natural language modification request
+   */
+  refineRun(runId, feedback) {
+    const active = this._active.get(runId);
+    if (!active?.reviewResolver) return { success: false, error: 'No pending review' };
+    const resolver = active.reviewResolver;
+    active.reviewResolver = null;
+    resolver({ action: 'refine', feedback });
+    return { success: true };
+  }
+
+  /** Pause execution until user confirms or cancels the review. */
+  _waitForReview(runId) {
+    return new Promise((resolve) => {
+      const active = this._active.get(runId);
+      if (active) {
+        active.reviewResolver = resolve;
+      } else {
+        resolve({ action: 'cancel' });
+      }
+    });
   }
 
   cancelAllRuns() {
@@ -98,22 +143,44 @@ class ParallelTaskService {
   // ─── Private orchestration ──────────────────────────────────────────────────
 
   async _executeRun({ runId, projectPath, mainBranch, goal, maxTasks, model, effort }) {
-    // ── Phase 1: Decompose ───────────────────────────────────────────────────
-    this._send('parallel-run-status', { runId, phase: 'decomposing' });
-
     let tasks;
-    try {
-      tasks = await this._decomposeTasks({ runId, projectPath, goal, maxTasks, model, effort });
-    } catch (err) {
-      this._send('parallel-run-status', { runId, phase: 'failed', error: `Decomposition failed: ${err.message}` });
-      this._active.delete(runId);
-      return;
-    }
+    let feedback = null;
 
-    if (!tasks || tasks.length === 0) {
-      this._send('parallel-run-status', { runId, phase: 'failed', error: 'No tasks generated' });
-      this._active.delete(runId);
-      return;
+    // ── Phase 1 (+1b loop): Decompose → Review → Refine ─────────────────────
+    while (true) {
+      this._send('parallel-run-status', { runId, phase: 'decomposing' });
+
+      try {
+        tasks = await this._decomposeTasks({ projectPath, goal, maxTasks, model, effort, feedback });
+      } catch (err) {
+        this._send('parallel-run-status', { runId, phase: 'failed', error: `Decomposition failed: ${err.message}` });
+        this._active.delete(runId);
+        return;
+      }
+
+      if (!tasks || tasks.length === 0) {
+        this._send('parallel-run-status', { runId, phase: 'failed', error: 'No tasks generated' });
+        this._active.delete(runId);
+        return;
+      }
+
+      // Pause for user review
+      this._send('parallel-run-status', { runId, phase: 'reviewing', proposedTasks: tasks });
+
+      const decision = await this._waitForReview(runId);
+
+      if (!this._active.has(runId) || decision.action === 'cancel') {
+        return; // cancelRun already sent the status + cleaned up
+      }
+
+      if (decision.action === 'refine') {
+        feedback = decision.feedback;
+        continue; // re-decompose with feedback
+      }
+
+      // action === 'confirm'
+      tasks = decision.tasks || tasks;
+      break;
     }
 
     // ── Phase 2: Create worktrees (sequential to avoid git lock contention) ──
@@ -200,8 +267,8 @@ class ParallelTaskService {
     });
   }
 
-  async _decomposeTasks({ projectPath, goal, maxTasks, model, effort }) {
-    const prompt = this._buildDecomposePrompt(goal, maxTasks);
+  async _decomposeTasks({ projectPath, goal, maxTasks, model, effort, feedback }) {
+    const prompt = this._buildDecomposePrompt(goal, maxTasks, feedback);
 
     // Run decomposition — parse JSON from the text output (more reliable than structured output)
     const result = await chatService.runSinglePrompt({
@@ -325,10 +392,10 @@ class ParallelTaskService {
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
 
-  _buildDecomposePrompt(goal, maxTasks) {
+  _buildDecomposePrompt(goal, maxTasks, feedback) {
     return `You are a senior software architect helping decompose a feature into parallel implementation tasks.
 
-Feature goal: ${goal}
+Feature goal: ${goal}${feedback ? `\n\nRevision request from the user: ${feedback}\n\nRevise the task breakdown according to this feedback.` : ''}
 
 Decompose this into ${maxTasks} or fewer INDEPENDENT sub-tasks that can be implemented simultaneously without conflicting file edits (no two tasks should write to the same file).
 
