@@ -187,6 +187,7 @@ const { loadSessionData, clearProjectSessions, saveTerminalSessions } = require(
   }
 
   initI18n(settingsState.get().language); // Initialize i18n with saved language preference
+  _applyTabsOrder(); // Restore custom tab order before applying visibility
   applyPinnedTabs(); // Apply sidebar tab visibility from settings
   _initSidebarDragDrop(); // Enable drag & drop reordering in sidebar
 
@@ -2383,7 +2384,6 @@ document.querySelectorAll('.nav-tab[data-tab]').forEach(tab => {
 const _ALL_TABS_ORDER = ['claude', 'git', 'database', 'mcp', 'plugins', 'skills', 'agents', 'workflows', 'dashboard', 'timetracking', 'memory', 'cloud-panel'];
 
 function applyPinnedTabs() {
-  _applyTabsOrder();
   const pinned = settingsState.get().pinnedTabs || _ALL_TABS_ORDER;
   let hiddenCount = 0;
 
