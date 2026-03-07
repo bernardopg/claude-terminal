@@ -2446,7 +2446,7 @@ document.querySelectorAll('.nav-tab[data-tab]').forEach(tab => {
 });
 
 // ========== PINNED TABS SYSTEM ==========
-const _ALL_TABS_ORDER = ['claude', 'git', 'database', 'mcp', 'plugins', 'skills', 'agents', 'workflows', 'dashboard', 'timetracking', 'memory', 'cloud-panel'];
+const _ALL_TABS_ORDER = ['claude', 'git', 'database', 'mcp', 'plugins', 'skills', 'agents', 'workflows', 'control-tower', 'dashboard', 'timetracking', 'session-replay', 'memory', 'cloud-panel'];
 
 function applyPinnedTabs() {
   const pinned = settingsState.get().pinnedTabs || _ALL_TABS_ORDER;
