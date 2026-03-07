@@ -82,8 +82,14 @@ function _render() {
           <!-- Left: Goal input -->
           <div class="parallel-form-main">
             <div class="parallel-field">
-              <label class="parallel-label" for="parallel-project-select">${t('parallel.form.projectLabel')}</label>
-              <select id="parallel-project-select" class="parallel-select parallel-select--full"></select>
+              <label class="parallel-label">${t('parallel.form.projectLabel')}</label>
+              <div class="pt-select pt-select--full" id="parallel-project-select" data-value="">
+                <div class="pt-select-trigger">
+                  <span class="pt-select-value">— select project —</span>
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M7 10l5 5 5-5z"/></svg>
+                </div>
+                <div class="pt-select-dropdown"></div>
+              </div>
             </div>
 
             <div class="parallel-field parallel-field--grow">
@@ -123,21 +129,33 @@ function _render() {
               </div>
 
               <div class="parallel-config-section">
-                <label class="parallel-label" for="parallel-model-select">${t('parallel.form.modelLabel')}</label>
-                <select id="parallel-model-select" class="parallel-select parallel-select--full">
-                  <option value="claude-haiku-4-5-20251001">Haiku 4.5 — Fastest</option>
-                  <option value="claude-sonnet-4-6" selected>Sonnet 4.6 — Balanced</option>
-                  <option value="claude-opus-4-6">Opus 4.6 — Most capable</option>
-                </select>
+                <label class="parallel-label">${t('parallel.form.modelLabel')}</label>
+                <div class="pt-select pt-select--full" id="parallel-model-select" data-value="claude-sonnet-4-6">
+                  <div class="pt-select-trigger">
+                    <span class="pt-select-value">Sonnet 4.6 — Balanced</span>
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M7 10l5 5 5-5z"/></svg>
+                  </div>
+                  <div class="pt-select-dropdown">
+                    <div class="pt-select-option" data-value="claude-haiku-4-5-20251001">Haiku 4.5 — Fastest</div>
+                    <div class="pt-select-option is-selected" data-value="claude-sonnet-4-6">Sonnet 4.6 — Balanced</div>
+                    <div class="pt-select-option" data-value="claude-opus-4-6">Opus 4.6 — Most capable</div>
+                  </div>
+                </div>
               </div>
 
               <div class="parallel-config-section">
-                <label class="parallel-label" for="parallel-effort-select">${t('parallel.form.effortLabel')}</label>
-                <select id="parallel-effort-select" class="parallel-select parallel-select--full">
-                  <option value="low">${t('parallel.effort.low')}</option>
-                  <option value="medium">${t('parallel.effort.medium')}</option>
-                  <option value="high" selected>${t('parallel.effort.high')}</option>
-                </select>
+                <label class="parallel-label">${t('parallel.form.effortLabel')}</label>
+                <div class="pt-select pt-select--full" id="parallel-effort-select" data-value="high">
+                  <div class="pt-select-trigger">
+                    <span class="pt-select-value">${t('parallel.effort.high')}</span>
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M7 10l5 5 5-5z"/></svg>
+                  </div>
+                  <div class="pt-select-dropdown">
+                    <div class="pt-select-option" data-value="low">${t('parallel.effort.low')}</div>
+                    <div class="pt-select-option" data-value="medium">${t('parallel.effort.medium')}</div>
+                    <div class="pt-select-option is-selected" data-value="high">${t('parallel.effort.high')}</div>
+                  </div>
+                </div>
               </div>
 
               <button id="parallel-start-btn" class="parallel-start-btn">
@@ -221,6 +239,9 @@ function _wireEvents() {
     });
   }
 
+  // Custom selects
+  _initCustomSelects();
+
   // Start run
   document.getElementById('parallel-start-btn')?.addEventListener('click', _handleStart);
 
@@ -281,6 +302,44 @@ function _wireEvents() {
   });
 }
 
+// ─── Custom select helpers ────────────────────────────────────────────────────
+
+function _getSelectValue(id) {
+  return document.getElementById(id)?.dataset?.value || '';
+}
+
+function _initCustomSelects() {
+  const panel = document.getElementById('tab-tasks');
+  if (!panel) return;
+
+  panel.querySelectorAll('.pt-select').forEach(sel => {
+    const trigger = sel.querySelector('.pt-select-trigger');
+    const dropdown = sel.querySelector('.pt-select-dropdown');
+    if (!trigger || !dropdown) return;
+
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = sel.classList.contains('is-open');
+      panel.querySelectorAll('.pt-select.is-open').forEach(s => s.classList.remove('is-open'));
+      if (!isOpen) sel.classList.add('is-open');
+    });
+
+    dropdown.addEventListener('click', (e) => {
+      const option = e.target.closest('.pt-select-option');
+      if (!option) return;
+      sel.dataset.value = option.dataset.value;
+      sel.querySelector('.pt-select-value').textContent = option.textContent;
+      dropdown.querySelectorAll('.pt-select-option').forEach(o => o.classList.remove('is-selected'));
+      option.classList.add('is-selected');
+      sel.classList.remove('is-open');
+    });
+  });
+
+  document.addEventListener('click', () => {
+    panel.querySelectorAll('.pt-select.is-open').forEach(s => s.classList.remove('is-open'));
+  });
+}
+
 // ─── Start handler ────────────────────────────────────────────────────────────
 
 async function _handleStart() {
@@ -290,8 +349,7 @@ async function _handleStart() {
     return;
   }
 
-  const projectSelect = document.getElementById('parallel-project-select');
-  const projectPath = projectSelect?.value;
+  const projectPath = _getSelectValue('parallel-project-select');
   if (!projectPath) {
     _showToast(t('parallel.errors.noProject'), 'error');
     return;
@@ -301,8 +359,8 @@ async function _handleStart() {
     document.getElementById('parallel-agents-slider')?.value || '3',
     10
   );
-  const model = document.getElementById('parallel-model-select')?.value || 'claude-sonnet-4-6';
-  const effort = document.getElementById('parallel-effort-select')?.value || 'high';
+  const model = _getSelectValue('parallel-model-select') || 'claude-sonnet-4-6';
+  const effort = _getSelectValue('parallel-effort-select') || 'high';
 
   // Persist the chosen max tasks
   setSetting('parallelMaxAgents', maxTasks);
@@ -782,16 +840,26 @@ function _showBoardView(visible) {
 }
 
 function _populateProjectSelector() {
-  const select = document.getElementById('parallel-project-select');
-  if (!select || !ctx) return;
+  const sel = document.getElementById('parallel-project-select');
+  if (!sel || !ctx) return;
 
   const projects = ctx.projectsState?.get()?.projects || [];
   const openedId = ctx.projectsState?.get()?.openedProjectId;
+  const filtered = projects.filter(p => p.path);
+  const selected = filtered.find(p => p.id === openedId) || filtered[0];
 
-  select.innerHTML = projects
-    .filter(p => p.path)
-    .map(p => `<option value="${escapeHtml(p.path)}" ${p.id === openedId ? 'selected' : ''}>${escapeHtml(p.name || p.path)}</option>`)
+  const dropdown = sel.querySelector('.pt-select-dropdown');
+  const valueEl = sel.querySelector('.pt-select-value');
+  if (!dropdown) return;
+
+  dropdown.innerHTML = filtered
+    .map(p => `<div class="pt-select-option${p.id === openedId ? ' is-selected' : ''}" data-value="${escapeHtml(p.path)}">${escapeHtml(p.name || p.path)}</div>`)
     .join('');
+
+  if (selected) {
+    sel.dataset.value = selected.path;
+    if (valueEl) valueEl.textContent = selected.name || selected.path;
+  }
 }
 
 async function _loadHistory() {
