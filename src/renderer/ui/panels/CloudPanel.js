@@ -71,6 +71,10 @@ function buildHtml(settings) {
               </div>
               <div class="cp-field-hint">${t('cloud.apiKeyDesc')}</div>
             </div>
+            <div class="cloud-machine-id" id="cp-machine-id" style="display:none">
+              <span class="cloud-machine-id-label">${t('cloud.thisMachine')}</span>
+              <code class="cloud-machine-id-value"></code>
+            </div>
             <div class="cp-form-footer">
               <div class="cp-auto">
                 <label class="settings-toggle rp-mini-toggle">
@@ -222,6 +226,19 @@ function buildHtml(settings) {
                 </details>
               </div>
             </div>
+
+          <!-- Project cloud key overrides -->
+          <div class="cp-section">
+            <div class="cp-section-header">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+              </svg>
+              <span>${t('cloud.projectKeysTitle')}</span>
+            </div>
+            <div class="cp-project-keys-list" id="cp-project-keys-list">
+              <div class="cp-field-hint">${t('cloud.projectKeysHint')}</div>
+            </div>
+          </div>
 
           </div>
 
@@ -479,13 +496,60 @@ function setupHandlers(context) {
     });
   }
 
-  // Initial status check
+  // Initial status check + machineId display
   (async () => {
     try {
       const status = await api.cloud.status();
       if (status.connected) _updateStatusUI(true);
     } catch { /* ignore */ }
+
+    try {
+      const machineId = await api.cloud.getMachineId();
+      const machineIdEl = document.getElementById('cp-machine-id');
+      if (machineIdEl) {
+        machineIdEl.querySelector('.cloud-machine-id-value').textContent = machineId;
+        machineIdEl.style.display = 'flex';
+      }
+    } catch { /* ignore */ }
+
+    _renderProjectKeysList();
   })();
+
+  // ── Project cloud key overrides ──
+  function _renderProjectKeysList() {
+    const list = document.getElementById('cp-project-keys-list');
+    if (!list || !_ctx?.projectsState) return;
+    const { projects } = _ctx.projectsState.get();
+    if (!projects || projects.length === 0) return;
+
+    list.innerHTML = projects.map(p => {
+      const name = p.name || window.electron_nodeModules.path.basename(p.path || '');
+      const override = _escapeHtml(p.cloudProjectKey || '');
+      return `
+        <div class="cp-project-key-row" data-project-id="${p.id}">
+          <span class="cp-project-key-name" title="${_escapeHtml(p.path || '')}">${_escapeHtml(name)}</span>
+          <input type="text" class="cp-input cp-project-key-input"
+            placeholder="${_escapeHtml(t('cloud.projectKeyPlaceholder'))}"
+            value="${override}" data-project-id="${p.id}">
+        </div>`;
+    }).join('');
+
+    list.querySelectorAll('.cp-project-key-input').forEach(input => {
+      let saveTimer = null;
+      input.addEventListener('input', () => {
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(async () => {
+          const projectId = input.dataset.projectId;
+          const value = input.value.trim();
+          try {
+            await api.project.setCloudKey(projectId, value || null);
+          } catch (e) {
+            console.warn('[CloudPanel] Failed to save cloudProjectKey:', e.message);
+          }
+        }, 500);
+      });
+    });
+  }
 
   // ── User profile ──
   async function _loadCloudUser() {
@@ -834,7 +898,7 @@ function setupHandlers(context) {
               btn.textContent = t('cloud.syncApply');
               return;
             }
-            await api.cloud.downloadChanges({ projectName: projName, localProjectPath: localProject.path });
+            await api.cloud.downloadChanges({ projectName: projName, localProjectPath: localProject.path, cloudProjectKey: projName });
             const Toast = require('../../ui/components/Toast');
             Toast.show(t('cloud.syncApplied'), 'success');
             await _checkCloudChanges();

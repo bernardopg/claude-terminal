@@ -2532,3 +2532,43 @@
   flex-shrink: 0;
 }
 
+
+.cloud-machine-id {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+}
+.cloud-machine-id-value {
+  font-family: monospace;
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+}
+
+.cp-project-keys-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+.cp-project-key-row {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  align-items: center;
+  gap: 8px;
+}
+.cp-project-key-name {
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cp-project-key-input {
+  font-size: var(--font-xs);
+  padding: 3px 6px;
+}

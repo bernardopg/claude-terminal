@@ -386,6 +386,7 @@ contextBridge.exposeInMainWorld('electron_api', {
     scanTodos: (projectPath) => ipcRenderer.invoke('scan-todos', projectPath),
     stats: (projectPath) => ipcRenderer.invoke('project-stats', projectPath),
     onQuickActionRun: createListener('quickaction:run'),
+    setCloudKey: (projectId, cloudProjectKey) => ipcRenderer.invoke('project:set-cloud-key', { projectId, cloudProjectKey }),
   },
 
   // ==================== CLAUDE ====================
@@ -481,6 +482,7 @@ contextBridge.exposeInMainWorld('electron_api', {
     deleteProject: (params) => ipcRenderer.invoke('cloud:delete-project', params),
     syncSkills: () => ipcRenderer.invoke('cloud:sync-skills'),
     importProject: (params) => ipcRenderer.invoke('cloud:import-project', params),
+    getMachineId: () => ipcRenderer.invoke('cloud:get-machine-id'),
   },
 
   // ==================== USAGE ====================

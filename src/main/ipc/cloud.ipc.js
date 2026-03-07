@@ -18,6 +18,7 @@ const { settingsFile } = require('../utils/paths');
 const { execGit } = require('../utils/git');
 const { getTokenForGit } = require('../services/GitHubAuthService');
 const { hashFiles } = require('../utils/fileHash');
+const { getMachineId } = require('../utils/machineId');
 
 let mainWindow = null;
 
@@ -41,6 +42,77 @@ function _getCloudConfig() {
   const key = settings.cloudApiKey;
   if (!url || !key) throw new Error('Cloud not configured');
   return { url: url.replace(/\/$/, ''), key };
+}
+
+// ── Machine-scoped project key helpers ──────────────────────────────────────
+
+/**
+ * Get the effective cloud project key for a given local project.
+ * If the project has an explicit cloudProjectKey override, use it.
+ * Otherwise, use {machineId}-{projectName}.
+ * @param {string} projectName - local project name
+ * @param {string|null} [cloudProjectKeyOverride] - from project.cloudProjectKey
+ * @returns {string}
+ */
+function _getCloudProjectKey(projectName, cloudProjectKeyOverride) {
+  if (cloudProjectKeyOverride && typeof cloudProjectKeyOverride === 'string') {
+    return cloudProjectKeyOverride;
+  }
+  const machineId = getMachineId();
+  return `${machineId}-${projectName}`;
+}
+
+/** Cache to avoid re-running migration per project per session */
+const _migratedProjects = new Set();
+
+/**
+ * Transparent migration: if {machineId}-{name} doesn't exist but bare {name} does,
+ * rename the old project to the new scoped name (first PC wins).
+ * No-op if already migrated this session or if new name already exists.
+ * @param {string} url - cloud server URL
+ * @param {string} key - API key
+ * @param {string} cloudKey - the new scoped key (e.g. "pc-yanis-a1b2c3d4-my-app")
+ * @param {string} projectName - bare project name (e.g. "my-app")
+ */
+async function _migrateProjectIfNeeded(url, key, cloudKey, projectName) {
+  // Skip if cloudKey === projectName (override mode, not machine-scoped)
+  if (cloudKey === projectName) return;
+  // Skip if already checked this session
+  if (_migratedProjects.has(cloudKey)) return;
+  _migratedProjects.add(cloudKey);
+
+  try {
+    // 1. Check if new scoped name already exists
+    const checkNew = await _fetchCloud(`${url}/api/projects`, {
+      headers: { 'Authorization': `Bearer ${key}` },
+    });
+    if (!checkNew.ok) return;
+    const { projects } = await checkNew.json();
+    const names = (projects || []).map(p => p.name);
+
+    if (names.includes(cloudKey)) return; // Already migrated or fresh install
+
+    // 2. Check if old bare name exists
+    if (!names.includes(projectName)) return; // Nothing to migrate
+
+    // 3. Rename old → new (first PC wins)
+    console.log(`[Cloud] Migrating project "${projectName}" → "${cloudKey}"`);
+    const renameResp = await _fetchCloud(`${url}/api/projects/${encodeURIComponent(projectName)}`, {
+      method: 'PATCH',
+      headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newName: cloudKey }),
+    });
+    if (renameResp.ok) {
+      console.log(`[Cloud] Migration OK: "${projectName}" → "${cloudKey}"`);
+    } else {
+      // Another PC may have claimed it between our check and rename — that's fine
+      console.warn(`[Cloud] Migration skipped (race or error): ${renameResp.status}`);
+      _migratedProjects.delete(cloudKey); // Allow retry next time
+    }
+  } catch (e) {
+    console.warn('[Cloud] Migration check failed:', e.message);
+    _migratedProjects.delete(cloudKey);
+  }
 }
 
 function registerCloudHandlers() {
@@ -98,19 +170,25 @@ function registerCloudHandlers() {
     return cloudRelayClient.getStatus();
   });
 
+  ipcMain.handle('cloud:get-machine-id', async () => {
+    return getMachineId();
+  });
+
   ipcMain.on('cloud:send', (_event, data) => {
     cloudRelayClient.send(data);
   });
 
   // ── Project upload ──
 
-  ipcMain.handle('cloud:upload-project', async (_event, { projectName, projectPath }) => {
+  ipcMain.handle('cloud:upload-project', async (_event, { projectName, projectPath, cloudProjectKey }) => {
     if (_uploadLocks.has(projectName)) {
       throw new Error(`Upload already in progress for "${projectName}"`);
     }
     _uploadLocks.add(projectName);
 
     const { url, key } = _getCloudConfig();
+    const cloudKey = _getCloudProjectKey(projectName, cloudProjectKey);
+    if (!cloudProjectKey) await _migrateProjectIfNeeded(url, key, cloudKey, projectName);
     const zipPath = path.join(os.tmpdir(), `ct-upload-${Date.now()}.zip`);
 
     try {
@@ -125,8 +203,8 @@ function registerCloudHandlers() {
       const FormData = require('form-data');
       const { PassThrough } = require('stream');
       const formData = new FormData();
-      formData.append('name', projectName);
-      formData.append('zip', fs.createReadStream(zipPath), { filename: `${projectName}.zip`, contentType: 'application/zip' });
+      formData.append('name', cloudKey);
+      formData.append('zip', fs.createReadStream(zipPath), { filename: `${cloudKey}.zip`, contentType: 'application/zip' });
 
       const zipSize = fs.statSync(zipPath).size;
       const totalMB = Math.round(zipSize / 1024 / 1024);
@@ -228,7 +306,7 @@ function registerCloudHandlers() {
 
   // ── Upload project via git clone (faster than ZIP for GitHub repos) ──
 
-  ipcMain.handle('cloud:upload-project-git', async (_event, { projectName, projectPath }) => {
+  ipcMain.handle('cloud:upload-project-git', async (_event, { projectName, projectPath, cloudProjectKey }) => {
     if (_uploadLocks.has(projectName)) {
       throw new Error(`Upload already in progress for "${projectName}"`);
     }
@@ -236,6 +314,8 @@ function registerCloudHandlers() {
 
     try {
       const { url, key } = _getCloudConfig();
+      const cloudKey = _getCloudProjectKey(projectName, cloudProjectKey);
+      if (!cloudProjectKey) await _migrateProjectIfNeeded(url, key, cloudKey, projectName);
 
       // Get GitHub token
       const token = await getTokenForGit();
@@ -263,7 +343,7 @@ function registerCloudHandlers() {
       const cloneResp = await _fetchCloud(`${url}/api/projects/clone`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-        body: JSON.stringify({ name: projectName, cloneUrl }),
+        body: JSON.stringify({ name: cloudKey, cloneUrl }),
       }, 5 * 60 * 1000);
 
       if (!cloneResp.ok) {
@@ -309,7 +389,7 @@ function registerCloudHandlers() {
         }
 
         const http = url.startsWith('https') ? require('https') : require('http');
-        const urlObj = new URL(`${url}/api/projects/${encodeURIComponent(projectName)}/patch`);
+        const urlObj = new URL(`${url}/api/projects/${encodeURIComponent(cloudKey)}/patch`);
         const formLength = await new Promise((res, rej) => formData.getLength((err, len) => err ? rej(err) : res(len)));
 
         await new Promise((resolve, reject) => {
@@ -344,9 +424,10 @@ function registerCloudHandlers() {
 
   // ── Delete project from cloud ──
 
-  ipcMain.handle('cloud:delete-project', async (_event, { projectId, projectName }) => {
+  ipcMain.handle('cloud:delete-project', async (_event, { projectId, projectName, cloudProjectKey }) => {
     const { url, key } = _getCloudConfig();
-    const resp = await _fetchCloud(`${url}/api/projects/${encodeURIComponent(projectName)}`, {
+    const cloudKey = _getCloudProjectKey(projectName, cloudProjectKey);
+    const resp = await _fetchCloud(`${url}/api/projects/${encodeURIComponent(cloudKey)}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${key}` },
     });
@@ -419,6 +500,7 @@ function registerCloudHandlers() {
     try {
       const { url, key } = _getCloudConfig();
       const headers = { 'Authorization': `Bearer ${key}` };
+      const machineId = getMachineId();
 
       const projectsResp = await _fetchCloud(`${url}/api/projects`, { headers });
       if (!projectsResp.ok) return { changes: [] };
@@ -426,6 +508,7 @@ function registerCloudHandlers() {
 
       const allChanges = [];
       for (const project of projects) {
+        if (!project.name.startsWith(`${machineId}-`)) continue; // filtre machine
         const changesResp = await _fetchCloud(`${url}/api/projects/${encodeURIComponent(project.name)}/changes`, { headers });
         if (!changesResp.ok) continue;
         const { changes } = await changesResp.json();
@@ -444,12 +527,13 @@ function registerCloudHandlers() {
 
   // ── Download and apply changes ──
 
-  ipcMain.handle('cloud:download-changes', async (_event, { projectName, localProjectPath }) => {
+  ipcMain.handle('cloud:download-changes', async (_event, { projectName, localProjectPath, cloudProjectKey }) => {
     const { url, key } = _getCloudConfig();
+    const cloudKey = _getCloudProjectKey(projectName, cloudProjectKey);
     const headers = { 'Authorization': `Bearer ${key}` };
 
     // Download changes zip (longer timeout for file transfer)
-    const resp = await _fetchCloud(`${url}/api/projects/${encodeURIComponent(projectName)}/changes/download`, { headers }, FETCH_DOWNLOAD_TIMEOUT_MS);
+    const resp = await _fetchCloud(`${url}/api/projects/${encodeURIComponent(cloudKey)}/changes/download`, { headers }, FETCH_DOWNLOAD_TIMEOUT_MS);
     if (!resp.ok) throw new Error('Failed to download changes');
 
     const zipPath = path.join(os.tmpdir(), `ct-sync-${Date.now()}.zip`);
@@ -471,7 +555,7 @@ function registerCloudHandlers() {
 
     // Only acknowledge AFTER verified successful extraction
     if (extracted) {
-      await _fetchCloud(`${url}/api/projects/${encodeURIComponent(projectName)}/changes/ack`, {
+      await _fetchCloud(`${url}/api/projects/${encodeURIComponent(cloudKey)}/changes/ack`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
       });
@@ -482,8 +566,9 @@ function registerCloudHandlers() {
 
   // ── Takeover a running cloud session ──
 
-  ipcMain.handle('cloud:takeover-session', async (_event, { sessionId, projectName, localProjectPath }) => {
+  ipcMain.handle('cloud:takeover-session', async (_event, { sessionId, projectName, localProjectPath, cloudProjectKey }) => {
     const { url, key } = _getCloudConfig();
+    const cloudKey = _getCloudProjectKey(projectName, cloudProjectKey);
     const headers = { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' };
 
     // Interrupt the cloud session
@@ -493,13 +578,13 @@ function registerCloudHandlers() {
 
     // Download any file changes
     try {
-      const changesResp = await _fetchCloud(`${url}/api/projects/${encodeURIComponent(projectName)}/changes`, {
+      const changesResp = await _fetchCloud(`${url}/api/projects/${encodeURIComponent(cloudKey)}/changes`, {
         headers: { 'Authorization': `Bearer ${key}` },
       });
       const { changes } = await changesResp.json();
 
       if (changes && changes.length > 0 && localProjectPath) {
-        const resp = await _fetchCloud(`${url}/api/projects/${encodeURIComponent(projectName)}/changes/download`, {
+        const resp = await _fetchCloud(`${url}/api/projects/${encodeURIComponent(cloudKey)}/changes/download`, {
           headers: { 'Authorization': `Bearer ${key}` },
         }, FETCH_DOWNLOAD_TIMEOUT_MS);
         if (resp.ok) {
@@ -519,7 +604,7 @@ function registerCloudHandlers() {
 
           // Only ack after verified successful extraction
           if (extracted) {
-            await _fetchCloud(`${url}/api/projects/${encodeURIComponent(projectName)}/changes/ack`, {
+            await _fetchCloud(`${url}/api/projects/${encodeURIComponent(cloudKey)}/changes/ack`, {
               method: 'POST', headers,
             });
           }
@@ -564,12 +649,13 @@ function registerCloudHandlers() {
 
   // ── File comparison (local vs cloud) ──
 
-  ipcMain.handle('cloud:compare-files', async (_event, { projectName, localProjectPath }) => {
+  ipcMain.handle('cloud:compare-files', async (_event, { projectName, localProjectPath, cloudProjectKey }) => {
     const { url, key } = _getCloudConfig();
+    const cloudKey = _getCloudProjectKey(projectName, cloudProjectKey);
 
     // Fetch cloud file list
     const resp = await _fetchCloud(
-      `${url}/api/projects/${encodeURIComponent(projectName)}/files`,
+      `${url}/api/projects/${encodeURIComponent(cloudKey)}/files`,
       { headers: { 'Authorization': `Bearer ${key}` } }
     );
     if (!resp.ok) throw new Error('Failed to fetch cloud files');
@@ -640,12 +726,13 @@ function registerCloudHandlers() {
 
   // ── Conflict detection ──
 
-  ipcMain.handle('cloud:check-conflicts', async (_event, { projectName, localProjectPath }) => {
+  ipcMain.handle('cloud:check-conflicts', async (_event, { projectName, localProjectPath, cloudProjectKey }) => {
     const { url, key } = _getCloudConfig();
+    const cloudKey = _getCloudProjectKey(projectName, cloudProjectKey);
     const headers = { 'Authorization': `Bearer ${key}` };
 
     const changesResp = await _fetchCloud(
-      `${url}/api/projects/${encodeURIComponent(projectName)}/changes`,
+      `${url}/api/projects/${encodeURIComponent(cloudKey)}/changes`,
       { headers }
     );
     if (!changesResp.ok) throw new Error('Failed to check changes');
@@ -678,12 +765,13 @@ function registerCloudHandlers() {
 
   // ── Download with conflict resolutions ──
 
-  ipcMain.handle('cloud:download-with-resolutions', async (_event, { projectName, localProjectPath, resolutions }) => {
+  ipcMain.handle('cloud:download-with-resolutions', async (_event, { projectName, localProjectPath, resolutions, cloudProjectKey }) => {
     const { url, key } = _getCloudConfig();
+    const cloudKey = _getCloudProjectKey(projectName, cloudProjectKey);
     const headers = { 'Authorization': `Bearer ${key}` };
 
     const resp = await _fetchCloud(
-      `${url}/api/projects/${encodeURIComponent(projectName)}/changes/download`,
+      `${url}/api/projects/${encodeURIComponent(cloudKey)}/changes/download`,
       { headers }, FETCH_DOWNLOAD_TIMEOUT_MS
     );
     if (!resp.ok) throw new Error('Failed to download changes');
@@ -739,7 +827,7 @@ function registerCloudHandlers() {
 
       // Acknowledge
       await _fetchCloud(
-        `${url}/api/projects/${encodeURIComponent(projectName)}/changes/ack`,
+        `${url}/api/projects/${encodeURIComponent(cloudKey)}/changes/ack`,
         { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' } }
       );
 
@@ -1016,13 +1104,18 @@ async function _checkPendingChangesOnReconnect() {
     const projectsResp = await _fetchCloud(`${url}/api/projects`, { headers });
     if (projectsResp.ok) {
       const { projects } = await projectsResp.json();
+      const machineId = getMachineId();
       const allChanges = [];
       for (const project of projects) {
+        // Only process projects that belong to this machine
+        if (!project.name.startsWith(`${machineId}-`)) continue;
         const changesResp = await _fetchCloud(`${url}/api/projects/${encodeURIComponent(project.name)}/changes`, { headers });
         if (!changesResp.ok) continue;
         const { changes } = await changesResp.json();
         if (changes.length > 0) {
-          allChanges.push({ projectName: project.name, changes });
+          // Strip machineId prefix for display to match local project name
+          const localName = project.name.slice(`${machineId}-`.length);
+          allChanges.push({ projectName: project.name, localName, changes });
         }
       }
       // Hash-filter: auto-dismiss changes where local files already match cloud

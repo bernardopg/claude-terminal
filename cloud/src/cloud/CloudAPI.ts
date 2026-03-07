@@ -421,6 +421,21 @@ export function createCloudRouter(relay?: RelayServer): Router {
     }
   });
 
+  router.patch('/projects/:name', async (req: AuthRequest, res: Response) => {
+    try {
+      const oldName = req.params.name as string;
+      const { newName } = req.body;
+      if (!newName || typeof newName !== 'string') {
+        res.status(400).json({ error: 'Missing newName' });
+        return;
+      }
+      await projectManager.renameProject(req.userName!, oldName, newName);
+      res.json({ ok: true, newName });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   router.delete('/projects/:name', async (req: AuthRequest, res: Response) => {
     try {
       const name = req.params.name as string;
