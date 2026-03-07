@@ -93,6 +93,203 @@ function unescapeHtml(html) {
   return html.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#039;/g, "'");
 }
 
+// ── Context Suggestions ──
+
+function createContextSuggestions(project, inputEl, getDefaultPlaceholder) {
+  const CACHE_TTL = 30_000;
+  const ROTATION_INTERVAL = 4_000;
+
+  let suggestions = [];
+  let currentIndex = 0;
+  let rotationTimer = null;
+  let cache = null; // { suggestions: string[], timestamp: number }
+  let _refreshing = false;
+  let _initTimer = null;
+  let _postStreamTimer = null;
+
+  function buildSuggestions(todos, gitStatus) {
+    const result = [];
+    const todoCount = Array.isArray(todos) ? todos.length : 0;
+    const gitCount = gitStatus
+      ? (gitStatus.modified?.length || 0) + (gitStatus.staged?.length || 0) + (gitStatus.untracked?.length || 0)
+      : 0;
+    if (todoCount > 0) result.push(t('chat.suggestTodos', { count: todoCount }));
+    if (gitCount > 0) result.push(t('chat.suggestGit', { count: gitCount }));
+    return result;
+  }
+
+  async function refresh() {
+    if (!project?.path || _refreshing) return;
+    _refreshing = true;
+    const now = Date.now();
+    if (cache && now - cache.timestamp < CACHE_TTL) {
+      suggestions = cache.suggestions;
+      _refreshing = false;
+      _start();
+      return;
+    }
+    try {
+      const [todos, gitStatus] = await Promise.all([
+        api.project.scanTodos(project.path).catch(() => []),
+        api.git.statusDetailed({ projectPath: project.path }).catch(() => null),
+      ]);
+      suggestions = buildSuggestions(todos, gitStatus);
+      cache = { suggestions, timestamp: Date.now() };
+    } catch {
+      suggestions = [];
+    } finally {
+      _refreshing = false;
+    }
+    _start();
+  }
+
+  function _start() {
+    stop();
+    if (!suggestions.length) return;
+    currentIndex = 0;
+    _apply();
+    if (suggestions.length > 1) {
+      rotationTimer = setInterval(() => {
+        if (inputEl.value !== '') { stop(); return; }
+        currentIndex = (currentIndex + 1) % suggestions.length;
+        _apply();
+      }, ROTATION_INTERVAL);
+    }
+  }
+
+  function _apply() {
+    // Don't overwrite if user has typed something
+    if (inputEl.value !== '') return;
+    inputEl.placeholder = suggestions[currentIndex] || getDefaultPlaceholder();
+  }
+
+  function stop() {
+    if (rotationTimer) { clearInterval(rotationTimer); rotationTimer = null; }
+  }
+
+  function reset() {
+    stop();
+    if (_initTimer) { clearTimeout(_initTimer); _initTimer = null; }
+    if (_postStreamTimer) { clearTimeout(_postStreamTimer); _postStreamTimer = null; }
+    _refreshing = false;
+    suggestions = [];
+    inputEl.placeholder = getDefaultPlaceholder();
+  }
+
+  function handleTab(event) {
+    if (inputEl.value !== '' || !suggestions.length) return false;
+    event.preventDefault();
+    // Strip the " [Tab]" hint from the raw i18n string and insert clean text
+    const raw = suggestions[currentIndex] || '';
+    const clean = raw.replace(/\s*\[Tab\]\s*$/, '');
+    inputEl.value = clean;
+    inputEl.selectionStart = inputEl.selectionEnd = clean.length;
+    reset();
+    return true;
+  }
+
+  return { refresh, stop, reset, handleTab, setInitTimer(t) { _initTimer = t; }, setPostStreamTimer(t) { _postStreamTimer = t; } };
+}
+
+// ── Follow-up Suggestion Chips ──
+
+const SPARKLE_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5z"/><path d="M19 15l.75 2.25L22 18l-2.25.75L19 21l-.75-2.25L16 18l2.25-.75z"/></svg>`;
+
+function createFollowupChips(suggestionsContainerEl, inputEl) {
+  let _generationTimer = null;
+  let _pendingGeneration = false;
+  let _lastAssistantText = '';
+  let _lastUserText = '';
+
+  function _render(chips) {
+    if (!chips || chips.length === 0) {
+      suggestionsContainerEl.style.display = 'none';
+      suggestionsContainerEl.innerHTML = '';
+      return;
+    }
+
+    const label = document.createElement('span');
+    label.className = 'chat-followup-label';
+    label.textContent = t('chat.suggestionsLabel') || 'Suggestions';
+
+    const chipsWrapper = document.createElement('div');
+    chipsWrapper.className = 'chat-followup-chips';
+
+    chips.forEach((text) => {
+      const chip = document.createElement('button');
+      chip.className = 'chat-followup-chip';
+      chip.innerHTML = `<span class="chat-followup-chip-icon">${SPARKLE_ICON}</span><span class="chat-followup-chip-text">${escapeHtml(text)}</span>`;
+      chip.title = text;
+      chip.addEventListener('click', () => {
+        inputEl.value = text;
+        inputEl.style.height = 'auto';
+        inputEl.style.height = Math.min(inputEl.scrollHeight, 200) + 'px';
+        inputEl.focus();
+        inputEl.selectionStart = inputEl.selectionEnd = text.length;
+        // Hide chips after selection
+        clear();
+      });
+      chipsWrapper.appendChild(chip);
+    });
+
+    suggestionsContainerEl.innerHTML = '';
+    suggestionsContainerEl.appendChild(label);
+    suggestionsContainerEl.appendChild(chipsWrapper);
+    suggestionsContainerEl.style.display = 'flex';
+  }
+
+  async function generate(assistantText, userText) {
+    _lastAssistantText = assistantText || '';
+    _lastUserText = userText || '';
+
+    if (!_lastAssistantText || _pendingGeneration) return;
+
+    // Clear previous chips while generating
+    suggestionsContainerEl.style.display = 'none';
+    suggestionsContainerEl.innerHTML = '';
+    _pendingGeneration = true;
+
+    try {
+      const result = await api.chat.generateSuggestions({
+        lastAssistantText: _lastAssistantText.slice(0, 800),
+        lastUserText: _lastUserText.slice(0, 300),
+      });
+      if (result && result.success && Array.isArray(result.suggestions) && result.suggestions.length > 0) {
+        _render(result.suggestions);
+      }
+    } catch (err) {
+      // Silently ignore errors — suggestions are non-critical
+      console.warn('[ChatView] generateSuggestions failed:', err.message);
+    } finally {
+      _pendingGeneration = false;
+    }
+  }
+
+  function scheduleGeneration(assistantText, userText, delay = 400) {
+    if (_generationTimer) { clearTimeout(_generationTimer); _generationTimer = null; }
+    _generationTimer = setTimeout(() => {
+      _generationTimer = null;
+      generate(assistantText, userText);
+    }, delay);
+  }
+
+  function clear() {
+    if (_generationTimer) { clearTimeout(_generationTimer); _generationTimer = null; }
+    _pendingGeneration = false;
+    suggestionsContainerEl.style.display = 'none';
+    suggestionsContainerEl.innerHTML = '';
+  }
+
+  // Hide chips when user starts typing
+  inputEl.addEventListener('input', () => {
+    if (inputEl.value !== '' && suggestionsContainerEl.style.display !== 'none') {
+      clear();
+    }
+  });
+
+  return { scheduleGeneration, clear };
+}
+
 // ── Tool Icons ──
 
 function getToolIcon(toolName) {
@@ -155,6 +352,8 @@ function createChatView(wrapperEl, project, options = {}) {
   let todoAllDone = false; // tracks if all todos are completed
   let slashCommands = []; // populated from system/init message
   let slashSelectedIndex = -1; // currently highlighted item in slash dropdown
+  let lastUserText = ''; // last user message text, used for follow-up suggestions
+  let lastAssistantText = ''; // last finalized assistant response text, used for follow-up suggestions
   const unsubscribers = [];
 
   // ── Session recap tracking (for chat-mode sessions) ──
@@ -182,6 +381,7 @@ function createChatView(wrapperEl, project, options = {}) {
         <div class="chat-mention-dropdown" style="display:none"></div>
         <div class="chat-slash-dropdown" style="display:none"></div>
         <div class="chat-mention-chips" style="display:none"></div>
+        <div class="chat-followup-suggestions" style="display:none"></div>
         <div class="chat-image-preview" style="display:none"></div>
         <div class="chat-input-wrapper">
           <button class="chat-attach-btn" title="${escapeHtml(t('chat.attachImage'))}">
@@ -241,6 +441,7 @@ function createChatView(wrapperEl, project, options = {}) {
   const imagePreview = chatView.querySelector('.chat-image-preview');
   const mentionDropdown = chatView.querySelector('.chat-mention-dropdown');
   const mentionChipsEl = chatView.querySelector('.chat-mention-chips');
+  const followupSuggestionsEl = chatView.querySelector('.chat-followup-suggestions');
 
   // ── Mention state ──
 
@@ -383,6 +584,14 @@ function createChatView(wrapperEl, project, options = {}) {
   initModelSelector();
   initEffortSelector();
 
+  // ── Context suggestions (placeholder rotation before first message) ──
+  const contextSuggestions = createContextSuggestions(project, inputEl, () => t('chat.placeholder'));
+  // Defer initial scan to let the component finish mounting
+  contextSuggestions.setInitTimer(setTimeout(() => { if (project?.path) contextSuggestions.refresh(); }, 500));
+
+  // ── Follow-up suggestion chips (shown after Claude responds) ──
+  const followupChips = createFollowupChips(followupSuggestionsEl, inputEl);
+
   attachBtn.addEventListener('click', () => fileInput.click());
 
   fileInput.addEventListener('change', () => {
@@ -466,6 +675,7 @@ function createChatView(wrapperEl, project, options = {}) {
   inputEl.addEventListener('input', () => {
     inputEl.style.height = 'auto';
     inputEl.style.height = Math.min(inputEl.scrollHeight, 200) + 'px';
+    if (inputEl.value !== '') contextSuggestions.stop();
     // Slash commands take precedence (/ at start of line)
     if (inputEl.value.startsWith('/')) {
       hideMentionDropdown();
@@ -557,6 +767,11 @@ function createChatView(wrapperEl, project, options = {}) {
         hideSlashDropdown();
         return;
       }
+    }
+
+    // Context suggestion — Tab to accept
+    if (e.key === 'Tab' && mentionDropdown.style.display === 'none' && slashDropdown.style.display === 'none') {
+      if (contextSuggestions.handleTab(e)) return;
     }
 
     if (e.key === 'Enter' && !shiftHeld && !e.shiftKey && !e.getModifierState('Shift')) {
@@ -1510,6 +1725,10 @@ function createChatView(wrapperEl, project, options = {}) {
       setTimeout(() => el.remove(), 300);
     }
 
+    // Track last user text for follow-up suggestion context, clear chips
+    if (text) lastUserText = text;
+    followupChips.clear();
+
     const isQueued = isStreaming && sessionId;
     appendUserMessage(text, images, mentions, isQueued);
     inputEl.value = '';
@@ -2149,6 +2368,8 @@ function createChatView(wrapperEl, project, options = {}) {
     if (currentStreamEl && currentStreamText) {
       currentStreamEl.innerHTML = renderMarkdown(currentStreamText);
       injectInlineImages(currentStreamEl);
+      // Capture for follow-up suggestions (plain text, truncated to avoid large memory)
+      lastAssistantText = currentStreamText.slice(0, 1200);
     }
     currentStreamEl = null;
     currentStreamText = '';
@@ -2883,7 +3104,12 @@ function createChatView(wrapperEl, project, options = {}) {
       inputEl.placeholder = t('chat.queuePlaceholder') || 'Queue a follow-up message...';
       setStatus('thinking', t('chat.thinking'));
     } else {
-      inputEl.placeholder = t('chat.placeholder');
+      // Refresh contextual suggestions (placeholder rotation) after streaming ends
+      contextSuggestions.setPostStreamTimer(setTimeout(() => contextSuggestions.refresh(), 300));
+      // Generate follow-up suggestion chips based on last assistant response
+      if (lastAssistantText && getSetting('enableFollowupSuggestions') !== false) {
+        followupChips.scheduleGeneration(lastAssistantText, lastUserText, 500);
+      }
       setStatus('idle', t('chat.ready') || 'Ready');
       inputEl.focus();
     }
@@ -3753,6 +3979,8 @@ function createChatView(wrapperEl, project, options = {}) {
         } catch (e) { /* events not ready */ }
       }
       if (sessionId) api.chat.close({ sessionId });
+      contextSuggestions.reset();
+      followupChips.clear();
       for (const unsub of unsubscribers) {
         if (typeof unsub === 'function') unsub();
       }

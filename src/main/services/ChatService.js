@@ -817,6 +817,131 @@ class ChatService {
     }
   }
 
+  // ── Follow-up suggestion generation ──
+
+  /**
+   * Ensure the persistent suggestion session is running.
+   * Reuses the same pattern as the naming session (single warm Haiku session).
+   */
+  async _ensureSuggestionSession() {
+    if (this._suggestionReady) return;
+    if (this._suggestionStarting) return this._suggestionStarting;
+
+    this._suggestionStarting = (async () => {
+      const sdk = await loadSDK();
+      this._suggestionQueue = createMessageQueue();
+
+      const runtime = resolveRuntime();
+      const stream = sdk.query({
+        prompt: this._suggestionQueue.iterable,
+        options: {
+          maxTurns: 1,
+          allowedTools: [],
+          model: 'haiku',
+          executable: runtime.executable,
+          env: runtime.env,
+          pathToClaudeCodeExecutable: getSdkCliPath(),
+          systemPrompt: [
+            'You generate 2-3 short follow-up message suggestions for a developer chatting with Claude Code.',
+            'Each suggestion should be a concrete, actionable developer question or instruction (max 8 words).',
+            'Output ONLY a JSON array of strings, nothing else. Example: ["Explain this in detail","Give me an example","How do I test this?"]',
+            'Vary the suggestions: one can go deeper, one can ask for an example, one can ask for a different approach.',
+            'Reply in the SAME language as the conversation.',
+          ].join(' ')
+        }
+      });
+
+      (async () => {
+        try {
+          for await (const msg of stream) {
+            if (msg.type === 'assistant' && msg.message?.content) {
+              let text = '';
+              for (const block of msg.message.content) {
+                if (block.type === 'text') text += block.text;
+              }
+              if (text && this._suggestionResolve) {
+                const resolve = this._suggestionResolve;
+                this._suggestionResolve = null;
+                resolve(text);
+              }
+            }
+          }
+        } catch (err) {
+          console.error('[ChatService] Suggestion session error:', err.message);
+        } finally {
+          this._suggestionReady = false;
+          this._suggestionStarting = null;
+        }
+      })();
+
+      this._suggestionReady = true;
+      this._suggestionStarting = null;
+    })();
+
+    return this._suggestionStarting;
+  }
+
+  /**
+   * Generate 2-3 follow-up suggestions based on the last assistant message.
+   * @param {string} lastAssistantText - The last assistant response text (truncated)
+   * @param {string} lastUserText - The last user message for context
+   * @returns {Promise<string[]>} Array of suggestion strings, or []
+   */
+  async generateSuggestions(lastAssistantText, lastUserText) {
+    try {
+      await this._ensureSuggestionSession();
+      if (!this._suggestionQueue) return [];
+
+      return new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          this._suggestionResolve = null;
+          resolve([]);
+        }, 6000);
+
+        this._suggestionResolve = (rawText) => {
+          clearTimeout(timeout);
+          try {
+            // Extract JSON array from the response
+            const match = rawText.match(/\[[\s\S]*\]/);
+            if (!match) { resolve([]); return; }
+            const arr = JSON.parse(match[0]);
+            if (!Array.isArray(arr)) { resolve([]); return; }
+            const suggestions = arr
+              .filter(s => typeof s === 'string' && s.trim().length > 0)
+              .map(s => s.trim().slice(0, 80))
+              .slice(0, 3);
+            resolve(suggestions);
+          } catch {
+            resolve([]);
+          }
+        };
+
+        try {
+          const context = [
+            lastUserText ? `User asked: "${lastUserText.slice(0, 150)}"` : '',
+            `Claude replied: "${lastAssistantText.slice(0, 300)}"`,
+          ].filter(Boolean).join('\n');
+          this._suggestionQueue.push({
+            type: 'user',
+            message: { role: 'user', content: `Generate follow-up suggestions for this exchange:\n${context}` }
+          });
+        } catch (pushErr) {
+          console.error('[ChatService] Suggestion transport dead, resetting:', pushErr.message);
+          this._suggestionReady = false;
+          this._suggestionStarting = null;
+          this._suggestionQueue = null;
+          clearTimeout(timeout);
+          resolve([]);
+        }
+      });
+    } catch (err) {
+      console.error('[ChatService] generateSuggestions error:', err.message);
+      this._suggestionReady = false;
+      this._suggestionStarting = null;
+      return [];
+    }
+  }
+
   // ── Background skill/agent generation ──
 
   /**

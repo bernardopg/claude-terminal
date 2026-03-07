@@ -829,6 +829,16 @@ async function renderSettingsTab(initialTab = 'general') {
                   <span class="settings-toggle-slider"></span>
                 </label>
               </div>
+              <div class="settings-toggle-row">
+                <div class="settings-toggle-label">
+                  <div>${t('settings.enableFollowupSuggestions')}</div>
+                  <div class="settings-toggle-desc">${t('settings.enableFollowupSuggestionsDesc')}</div>
+                </div>
+                <label class="settings-toggle">
+                  <input type="checkbox" id="followup-suggestions-toggle" ${settings.enableFollowupSuggestions !== false ? 'checked' : ''}>
+                  <span class="settings-toggle-slider"></span>
+                </label>
+              </div>
             </div>
           </div>
           <div class="settings-group">
@@ -1312,6 +1322,8 @@ async function renderSettingsTab(initialTab = 'general') {
     const newTabRenameOnSlashCommand = tabRenameSlashToggle ? tabRenameSlashToggle.checked : false;
     const aiTabNamingToggle = document.getElementById('ai-tab-naming-toggle');
     const newAiTabNaming = aiTabNamingToggle ? aiTabNamingToggle.checked : true;
+    const followupSuggestionsToggle = document.getElementById('followup-suggestions-toggle');
+    const newEnableFollowupSuggestions = followupSuggestionsToggle ? followupSuggestionsToggle.checked : true;
     const hooksToggle = document.getElementById('hooks-enabled-toggle');
     const newHooksEnabled = hooksToggle ? hooksToggle.checked : settings.hooksEnabled;
     const context1MToggle = document.getElementById('enable-1m-context-toggle');
@@ -1350,6 +1362,7 @@ async function renderSettingsTab(initialTab = 'general') {
       showTabModeToggle: newShowTabModeToggle,
       tabRenameOnSlashCommand: newTabRenameOnSlashCommand,
       aiTabNaming: newAiTabNaming,
+      enableFollowupSuggestions: newEnableFollowupSuggestions,
       telemetryEnabled: newTelemetryEnabled,
       telemetryCategories: newTelemetryCategories
     };

@@ -662,6 +662,8 @@
     "tabRenameOnSlashCommandDesc": "Automatically rename the terminal tab to the last slash command executed (e.g. /gsd:verify-work 12)",
     "aiTabNaming": "AI tab naming",
     "aiTabNamingDesc": "Use AI to generate short tab names from messages",
+    "enableFollowupSuggestions": "Follow-up suggestions",
+    "enableFollowupSuggestionsDesc": "Show AI-generated suggestion chips after Claude responds (uses Haiku)",
     "hooks": {
       "title": "Smart Hooks",
       "enable": "Enable Smart Hooks",
@@ -1178,6 +1180,9 @@
     "title": "Chat",
     "sendMessage": "Send",
     "placeholder": "Ask Claude something...",
+    "suggestTodos": "Find and fix the {count} TODO(s) in the code [Tab]",
+    "suggestGit": "Suggest a commit message for the {count} modified files [Tab]",
+    "suggestionsLabel": "Suggestions",
     "queuePlaceholder": "Queue a follow-up message...",
     "thinking": "Thinking",
     "toolCall": "Tool call",
