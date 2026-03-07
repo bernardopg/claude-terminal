@@ -47,6 +47,17 @@ const TOOL_CATEGORIES = {
 // Player speed → ms/step
 const PLAYER_SPEED_DELAYS = { 0.5: 2000, 1: 1000, 2: 500, 4: 250 };
 
+// Tool category → RGB for chat-style border-left
+const CAT_COLORS = {
+  file:     '34,197,94',
+  terminal: '245,158,11',
+  search:   '167,139,250',
+  web:      '6,182,212',
+  agent:    '249,115,22',
+  plan:     '217,119,6',
+  other:    '100,100,110',
+};
+
 // Tools that have a friendly card renderer (Fix 4)
 const FRIENDLY_TOOLS = new Set([
   'Bash', 'Read', 'Write', 'Edit', 'NotebookEdit',
@@ -838,42 +849,43 @@ function buildPlayerBarHtml(total) {
 
 function buildPlayerStepEl(step) {
   const el = document.createElement('div');
+  el.className = 'sr-pstep';
+
   if (step.type === 'prompt') {
     const detected = detectSkillInPrompt(step.text || '');
     let inner;
     if (detected.hasSkill) {
-      const svg = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0 4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>`;
+      const svg = `<svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0 4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>`;
       inner = `<span class="sr-pstep-skill-chip">${svg}${escapeHtml(detected.skillName)}</span>`;
     } else {
-      inner = escapeHtml(truncate(step.text || '', 180));
+      inner = escapeHtml(truncate(step.text || '', 200));
     }
-    el.className = 'sr-pstep sr-pstep--prompt';
-    el.innerHTML = `<div class="sr-pstep-bubble">${inner}</div>`;
+    el.classList.add('sr-pstep--prompt');
+    el.innerHTML = `<div class="sr-pstep-user-pill">${inner}</div>`;
+
   } else if (step.type === 'thinking') {
-    el.className = 'sr-pstep sr-pstep--thinking';
-    el.innerHTML = `
-      <div class="sr-pstep-avatar sr-pstep-avatar--thinking"></div>
-      <div class="sr-pstep-thinking-dots"><span></span><span></span><span></span></div>`;
+    el.classList.add('sr-pstep--thinking');
+    el.innerHTML = `<div class="sr-pstep-thinking-dots"><span></span><span></span><span></span></div>`;
+
   } else if (step.type === 'response') {
-    el.className = 'sr-pstep sr-pstep--response';
-    el.innerHTML = `
-      <div class="sr-pstep-avatar"></div>
-      <div class="sr-pstep-bubble">${escapeHtml(truncate(step.text || '', 220))}</div>`;
+    el.classList.add('sr-pstep--response');
+    el.innerHTML = `<div class="sr-pstep-response-text">${escapeHtml(truncate(step.text || '', 300))}</div>`;
+
   } else if (step.type === 'tool' || step.type === 'group') {
     const cat = getToolCategory(step.toolName);
-    el.className = `sr-pstep sr-pstep--tool sr-pstep--cat-${cat}`;
-    const sub = step.type === 'group'
-      ? `${step.count} appels`
-      : buildStepSubtitle(step);
+    const rgb = CAT_COLORS[cat] || CAT_COLORS.other;
+    el.classList.add('sr-pstep--tool');
+    const sub = step.type === 'group' ? `${step.count} appels` : buildStepSubtitle(step);
     const badge = step.type === 'group'
-      ? `<span class="sr-pstep-group-badge">${step.count}</span>`
-      : '';
+      ? `<span class="sr-pstep-tc-badge">${step.count}</span>`
+      : `<svg class="sr-pstep-tc-check" viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>`;
+    const iconSvg = getToolIcon(step.toolName).replace('<svg ', '<svg class="sr-pstep-tc-icon" ');
     el.innerHTML = `
-      <div class="sr-pstep-tool-card">
-        <div class="sr-pstep-tool-icon">${getToolIcon(step.toolName)}</div>
-        <div class="sr-pstep-tool-meta">
-          <span class="sr-pstep-tool-name">${escapeHtml(step.toolName || '')}</span>
-          ${sub ? `<span class="sr-pstep-tool-sub" title="${escapeHtml(sub)}">${escapeHtml(truncate(sub, 55))}</span>` : ''}
+      <div class="sr-pstep-tc" style="--tc:${rgb}">
+        ${iconSvg}
+        <div class="sr-pstep-tc-info">
+          <span class="sr-pstep-tc-name">${escapeHtml(step.toolName || '')}</span>
+          ${sub ? `<span class="sr-pstep-tc-detail" title="${escapeHtml(sub)}">${escapeHtml(truncate(sub, 60))}</span>` : ''}
         </div>
         ${badge}
       </div>`;
