@@ -1234,9 +1234,11 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* User prompt — compact dark pill (= .chat-msg-user) */
+/* User prompt — compact pill, alignée à droite */
 .sr-pstep--prompt {
   padding: 6px 0;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .sr-pstep-user-pill {
