@@ -44,6 +44,7 @@ const defaultSettings = {
   telemetryCategories: { app: true, features: true, errors: true }, // Granular event categories
   telemetryConsentShown: false, // Whether consent prompt was shown
   agentColors: {}, // Custom colors per tool/agent name: { 'Grep': '#ff0000', 'my-agent': '#00ff00' }
+  enableFollowupSuggestions: true, // Show AI-generated follow-up suggestion chips after Claude responds (uses Haiku)
 };
 
 const settingsState = new State({ ...defaultSettings });

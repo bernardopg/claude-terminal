@@ -3096,7 +3096,7 @@ function createChatView(wrapperEl, project, options = {}) {
       // Refresh contextual suggestions (placeholder rotation) after streaming ends
       contextSuggestions.setPostStreamTimer(setTimeout(() => contextSuggestions.refresh(), 300));
       // Generate follow-up suggestion chips based on last assistant response
-      if (lastAssistantText) {
+      if (lastAssistantText && getSetting('enableFollowupSuggestions') !== false) {
         followupChips.scheduleGeneration(lastAssistantText, lastUserText, 500);
       }
       setStatus('idle', t('chat.ready') || 'Ready');

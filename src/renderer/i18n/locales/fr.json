@@ -680,6 +680,8 @@
     "tabRenameOnSlashCommandDesc": "Renomme automatiquement l'onglet terminal avec la dernière commande slash exécutée (ex. /gsd:verify-work 12)",
     "aiTabNaming": "Nommage IA des onglets",
     "aiTabNamingDesc": "Utiliser l'IA pour générer des noms courts pour les onglets à partir des messages",
+    "enableFollowupSuggestions": "Suggestions de suivi",
+    "enableFollowupSuggestionsDesc": "Afficher des chips de suggestions générées par l'IA après les réponses de Claude (utilise Haiku)",
     "hooks": {
       "title": "Hooks intelligents",
       "enable": "Activer les hooks intelligents",
