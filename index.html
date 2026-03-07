@@ -22,6 +22,7 @@
   <link rel="stylesheet" href="styles/skills.css">
   <link rel="stylesheet" href="styles/chat.css">
   <link rel="stylesheet" href="styles/workflow.css">
+  <link rel="stylesheet" href="styles/parallel.css">
   <link rel="stylesheet" href="node_modules/litegraph.js/css/litegraph.css">
   <link rel="stylesheet" href="styles/cloud.css">
   <link rel="stylesheet" href="styles/kanban.css">
@@ -189,6 +190,18 @@
             <path d="M2 12l10 5 10-5"/>
           </svg>
           <span data-i18n="ui.tabControlTower">Control Tower</span>
+        </button>
+        <button class="nav-tab" data-tab="tasks" title="Parallel Tasks">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="5" height="5" rx="1"/>
+            <rect x="10" y="3" width="5" height="5" rx="1"/>
+            <rect x="17" y="3" width="4" height="5" rx="1"/>
+            <line x1="5.5" y1="8" x2="5.5" y2="12"/>
+            <line x1="12.5" y1="8" x2="12.5" y2="12"/>
+            <rect x="3" y="12" width="5" height="5" rx="1"/>
+            <rect x="10" y="12" width="5" height="5" rx="1"/>
+          </svg>
+          <span data-i18n="parallel.tabTitle">Tasks</span>
         </button>
         <div class="nav-separator"><span data-i18n="ui.separatorAnalytics">Analytique</span></div>
         <button class="nav-tab" data-tab="dashboard" title="Dashboard">
@@ -711,6 +724,9 @@
           </div>
         </div>
       </div>
+
+      <!-- Parallel Tasks Tab -->
+      <div class="tab-content" id="tab-tasks"></div>
 
       <!-- Workflows Tab -->
       <div class="tab-content" id="tab-workflows">

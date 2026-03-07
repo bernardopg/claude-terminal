@@ -97,7 +97,7 @@ const {
 const registry = require('./src/project-types/registry');
 const { mergeTranslations } = require('./src/renderer/i18n');
 const ModalComponent = require('./src/renderer/ui/components/Modal');
-const { MemoryEditor, GitChangesPanel, ShortcutsManager, SettingsPanel, SkillsAgentsPanel, PluginsPanel, MarketplacePanel, McpPanel, WorkflowPanel, DatabasePanel, CloudPanel, ControlTowerPanel, SessionReplayPanel } = require('./src/renderer/ui/panels');
+const { MemoryEditor, GitChangesPanel, ShortcutsManager, SettingsPanel, SkillsAgentsPanel, PluginsPanel, MarketplacePanel, McpPanel, WorkflowPanel, DatabasePanel, CloudPanel, ControlTowerPanel, SessionReplayPanel, ParallelTaskPanel } = require('./src/renderer/ui/panels');
 
 // ========== LOCAL MODAL FUNCTIONS ==========
 // These work with the existing HTML modal elements in index.html
@@ -325,6 +325,24 @@ const { loadSessionData, clearProjectSessions, saveTerminalSessions } = require(
   });
 
   WorkflowPanel.init({ api, showToast, path, fs });
+
+  ParallelTaskPanel.init({
+    api,
+    showToast,
+    showModal,
+    closeModal,
+    projectsState,
+    openTerminalAtPath: (worktreePath) => {
+      // Switch to Claude tab and open a terminal at the worktree path
+      document.querySelector('[data-tab="claude"]')?.click();
+      const openedId = projectsState.get().openedProjectId;
+      const project = projectsState.get().projects.find(p => p.id === openedId)
+        || projectsState.get().projects[0];
+      if (project) {
+        TerminalManager.createTerminal(project, { cwd: worktreePath, runClaude: false });
+      }
+    }
+  });
 
   DatabasePanel.init({
     api, showModal, closeModal, showToast,
@@ -2383,6 +2401,7 @@ document.querySelectorAll('.nav-tab[data-tab]').forEach(tab => {
     if (tabId === 'agents') SkillsAgentsPanel.loadAgents();
     if (tabId === 'mcp') McpPanel.loadMcps();
     if (tabId === 'workflows') WorkflowPanel.load();
+    if (tabId === 'tasks') ParallelTaskPanel.load();
     if (tabId === 'database') DatabasePanel.loadPanel();
     if (tabId === 'git') {
       GitTabService.initGitTab();

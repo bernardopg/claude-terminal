@@ -16,6 +16,7 @@ const DatabasePanel = require('./DatabasePanel');
 const CloudPanel = require('./CloudPanel');
 const ControlTowerPanel = require('./ControlTowerPanel');
 const SessionReplayPanel = require('./SessionReplayPanel');
+const ParallelTaskPanel = require('./ParallelTaskPanel');
 
 module.exports = {
   MemoryEditor,
@@ -31,4 +32,5 @@ module.exports = {
   CloudPanel,
   ControlTowerPanel,
   SessionReplayPanel,
+  ParallelTaskPanel,
 };
