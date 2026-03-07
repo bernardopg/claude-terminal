@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════════════
-   Parallel Task Manager
+   Parallel Task Manager — Mission Control aesthetic
    ══════════════════════════════════════════════════════════════════════════════ */
 
 /* ── Root panel ───────────────────────────────────────────────────────────── */
@@ -10,6 +10,11 @@
   height: 100%;
   overflow: hidden;
   background: var(--bg-primary);
+  --pt-mono: 'SF Mono', 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+  --pt-green: #22c55e;
+  --pt-red: #ef4444;
+  --pt-amber: var(--accent);
+  --pt-blue: #3b82f6;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -29,10 +34,20 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 24px 16px;
+  padding: 18px 24px 14px;
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-secondary);
   flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.parallel-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, var(--accent) 0%, transparent 60%);
 }
 
 .parallel-header-left {
@@ -45,35 +60,36 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius);
-  background: var(--accent-dim);
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  border: 1px solid rgba(217,119,6,0.3);
+  background: rgba(217,119,6,0.08);
   color: var(--accent);
   flex-shrink: 0;
 }
 
 .parallel-header-title {
-  font-size: var(--font-md);
+  font-size: var(--font-base);
   font-weight: 700;
   color: var(--text-primary);
-  margin: 0 0 3px;
-  letter-spacing: -0.01em;
+  margin: 0 0 2px;
+  letter-spacing: -0.02em;
 }
 
 .parallel-header-subtitle {
   font-size: var(--font-xs);
-  color: var(--text-secondary);
+  color: var(--text-muted);
   margin: 0;
-  line-height: 1.4;
-  max-width: 500px;
+  font-family: var(--pt-mono);
+  letter-spacing: 0;
 }
 
-/* ── Form content (two-column layout) ───────────────────────────────────── */
+/* ── Form content ───────────────────────────────────────────────────────── */
 
 .parallel-form-content {
   display: grid;
-  grid-template-columns: 1fr 300px;
+  grid-template-columns: 1fr 280px;
   gap: 0;
   flex: 1;
   overflow: hidden;
@@ -82,17 +98,19 @@
 .parallel-form-main {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 24px;
+  gap: 14px;
+  padding: 22px 24px;
   overflow-y: auto;
   border-right: 1px solid var(--border-color);
+  /* Subtle dot grid */
+  background-image: radial-gradient(circle, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 20px 20px;
 }
 
 .parallel-form-sidebar {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 20px;
+  gap: 0;
   overflow-y: auto;
   background: var(--bg-secondary);
 }
@@ -102,7 +120,7 @@
 .parallel-field {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 6px;
 }
 
 .parallel-field--grow {
@@ -110,77 +128,81 @@
 }
 
 .parallel-label {
-  font-size: var(--font-xs);
-  font-weight: 600;
-  color: var(--text-secondary);
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 1px;
+  font-family: var(--pt-mono);
 }
 
 .parallel-select {
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 4px;
   color: var(--text-primary);
   font-size: var(--font-sm);
   padding: 7px 10px;
   cursor: pointer;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  font-family: var(--pt-mono);
 }
 
 .parallel-select:hover,
 .parallel-select:focus {
-  border-color: var(--accent);
+  border-color: rgba(217,119,6,0.4);
+  box-shadow: 0 0 0 2px rgba(217,119,6,0.08);
   outline: none;
 }
 
-.parallel-select--full {
-  width: 100%;
-}
+.parallel-select--full { width: 100%; }
 
+/* Goal input — styled as a terminal */
 .parallel-goal-input {
   flex: 1;
-  min-height: 140px;
+  min-height: 160px;
   width: 100%;
   resize: none;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
+  background: #050505;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 6px;
+  color: #e8e8e8;
   font-size: var(--font-sm);
-  padding: 12px 14px;
-  line-height: 1.6;
-  font-family: inherit;
-  transition: border-color 0.15s;
+  padding: 14px 16px;
+  line-height: 1.65;
+  font-family: var(--pt-mono);
+  transition: border-color 0.15s, box-shadow 0.15s;
   box-sizing: border-box;
+  letter-spacing: 0;
 }
 
 .parallel-goal-input:hover,
 .parallel-goal-input:focus {
-  border-color: var(--accent);
+  border-color: rgba(217,119,6,0.5);
+  box-shadow: 0 0 0 2px rgba(217,119,6,0.07), inset 0 0 30px rgba(217,119,6,0.02);
   outline: none;
 }
 
 .parallel-goal-input::placeholder {
-  color: var(--text-muted);
+  color: #333;
+  font-style: italic;
 }
 
 /* ── Config card ─────────────────────────────────────────────────────────── */
 
 .parallel-config-card {
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius);
-  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 0;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .parallel-config-section {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
 }
 
 /* Max agents slider */
@@ -194,9 +216,9 @@
   flex: 1;
   -webkit-appearance: none;
   appearance: none;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--border-color);
+  height: 2px;
+  border-radius: 1px;
+  background: rgba(255,255,255,0.1);
   outline: none;
   cursor: pointer;
 }
@@ -204,55 +226,61 @@
 .parallel-agents-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   background: var(--accent);
   cursor: pointer;
-  border: 2px solid var(--bg-primary);
-  box-shadow: 0 0 0 1px var(--accent);
-  transition: transform 0.1s;
+  border: 2px solid #0d0d0d;
+  box-shadow: 0 0 8px rgba(217,119,6,0.6);
+  transition: transform 0.1s, box-shadow 0.1s;
 }
 
 .parallel-agents-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.15);
+  transform: scale(1.2);
+  box-shadow: 0 0 14px rgba(217,119,6,0.8);
 }
 
 .parallel-agents-slider::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   background: var(--accent);
   cursor: pointer;
-  border: 2px solid var(--bg-primary);
+  border: 2px solid #0d0d0d;
 }
 
 .parallel-agents-display {
   display: flex;
   align-items: baseline;
-  gap: 3px;
+  gap: 2px;
   flex-shrink: 0;
-  min-width: 48px;
+  min-width: 42px;
 }
 
 .parallel-agents-value {
   font-size: var(--font-lg);
-  font-weight: 700;
+  font-weight: 800;
   color: var(--accent);
   line-height: 1;
+  font-family: var(--pt-mono);
 }
 
 .parallel-agents-unit {
-  font-size: var(--font-xs);
+  font-size: 0.6rem;
   color: var(--text-muted);
+  font-family: var(--pt-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .parallel-agents-ticks {
   display: flex;
   justify-content: space-between;
   padding: 0 2px;
-  font-size: var(--font-2xs);
+  font-size: 0.55rem;
   color: var(--text-muted);
+  font-family: var(--pt-mono);
 }
 
 /* Start button */
@@ -263,62 +291,96 @@
   gap: 8px;
   background: var(--accent);
   border: none;
-  border-radius: var(--radius-sm);
-  color: #fff;
+  border-radius: 0;
+  color: #000;
   cursor: pointer;
-  font-size: var(--font-sm);
-  font-weight: 600;
-  padding: 10px 20px;
-  transition: background 0.15s, opacity 0.15s, transform 0.1s;
+  font-size: var(--font-xs);
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 12px 20px;
+  transition: background 0.15s, box-shadow 0.15s;
   white-space: nowrap;
   width: 100%;
+  position: relative;
+  overflow: hidden;
+  font-family: var(--pt-mono);
+}
+
+.parallel-start-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.15) 50%, transparent 100%);
+  transform: translateX(-100%);
+  transition: transform 0.4s;
 }
 
 .parallel-start-btn:hover {
   background: var(--accent-hover);
-  transform: translateY(-1px);
+  box-shadow: 0 0 20px rgba(217,119,6,0.4);
+}
+
+.parallel-start-btn:hover::before {
+  transform: translateX(100%);
 }
 
 .parallel-start-btn:active {
-  transform: translateY(0);
+  box-shadow: 0 0 8px rgba(217,119,6,0.3);
 }
 
 .parallel-start-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
-  transform: none;
+  box-shadow: none;
 }
+
+.parallel-start-btn:disabled::before { display: none; }
 
 /* ── Info card ────────────────────────────────────────────────────────────── */
 
 .parallel-info-card {
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius);
-  padding: 14px 16px;
+  padding: 16px 18px;
 }
 
 .parallel-info-title {
-  font-size: var(--font-xs);
+  font-size: 0.6rem;
   font-weight: 700;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin: 0 0 10px;
+  letter-spacing: 1px;
+  margin: 0 0 12px;
+  font-family: var(--pt-mono);
 }
 
 .parallel-info-steps {
   margin: 0;
-  padding: 0 0 0 16px;
+  padding: 0;
+  list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  counter-reset: steps;
 }
 
 .parallel-info-steps li {
   font-size: var(--font-xs);
-  color: var(--text-secondary);
+  color: var(--text-muted);
   line-height: 1.4;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  counter-increment: steps;
+}
+
+.parallel-info-steps li::before {
+  content: counter(steps, decimal-leading-zero);
+  font-family: var(--pt-mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: rgba(217,119,6,0.5);
+  flex-shrink: 0;
+  margin-top: 1px;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -338,11 +400,22 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 20px;
+  padding: 10px 18px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
   gap: 12px;
+  position: relative;
+}
+
+.parallel-board-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0;
+  height: 1px;
+  width: 100%;
+  background: linear-gradient(90deg, var(--accent) 0%, transparent 70%);
+  opacity: 0.5;
 }
 
 .parallel-board-header-left {
@@ -355,24 +428,27 @@
 .parallel-board-header-info {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 0;
   min-width: 0;
 }
 
 .parallel-board-phase-label {
-  font-size: var(--font-sm);
-  font-weight: 600;
+  font-size: var(--font-xs);
+  font-weight: 700;
   color: var(--text-primary);
   white-space: nowrap;
+  font-family: var(--pt-mono);
+  letter-spacing: 0.5px;
 }
 
 .parallel-board-goal-label {
-  font-size: var(--font-xs);
+  font-size: 0.65rem;
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 400px;
+  max-width: 420px;
+  font-style: italic;
 }
 
 .parallel-board-header-right {
@@ -382,32 +458,36 @@
   flex-shrink: 0;
 }
 
-/* Phase dot */
+/* Phase dot — orbital ring style */
 .parallel-phase-dot {
   width: 10px;
   height: 10px;
   border-radius: 50%;
   background: var(--text-muted);
   flex-shrink: 0;
-  transition: background 0.3s;
+  transition: all 0.3s;
+  position: relative;
 }
 
 .parallel-phase-dot.running {
   background: var(--accent);
-  animation: pulse-dot 1.2s ease-in-out infinite;
+  box-shadow: 0 0 6px var(--accent), 0 0 12px rgba(217,119,6,0.4);
+  animation: pt-pulse 1.4s ease-in-out infinite;
 }
 
 .parallel-phase-dot.done {
-  background: var(--success);
+  background: var(--pt-green);
+  box-shadow: 0 0 6px var(--pt-green);
 }
 
 .parallel-phase-dot.failed {
-  background: var(--danger);
+  background: var(--pt-red);
+  box-shadow: 0 0 6px var(--pt-red);
 }
 
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.6; transform: scale(0.8); }
+@keyframes pt-pulse {
+  0%, 100% { box-shadow: 0 0 4px var(--accent); transform: scale(1); }
+  50%       { box-shadow: 0 0 10px rgba(217,119,6,0.7), 0 0 20px rgba(217,119,6,0.3); transform: scale(1.15); }
 }
 
 /* Board action buttons */
@@ -415,56 +495,65 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 3px;
+  color: var(--text-muted);
   cursor: pointer;
-  font-size: var(--font-xs);
-  font-weight: 500;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
   padding: 5px 10px;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  transition: all 0.12s;
   white-space: nowrap;
+  font-family: var(--pt-mono);
 }
 
 .parallel-header-action-btn:hover {
-  background: var(--bg-hover);
+  background: rgba(255,255,255,0.05);
   color: var(--text-primary);
-  border-color: var(--text-muted);
+  border-color: rgba(255,255,255,0.2);
 }
 
 .parallel-header-action-btn--danger {
-  border-color: rgba(239,68,68,0.3);
-  color: var(--danger);
+  border-color: rgba(239,68,68,0.25);
+  color: rgba(239,68,68,0.7);
 }
 
 .parallel-header-action-btn--danger:hover {
-  background: rgba(239,68,68,0.1);
-  border-color: var(--danger);
-  color: var(--danger);
+  background: rgba(239,68,68,0.08);
+  border-color: var(--pt-red);
+  color: var(--pt-red);
 }
 
-/* ── Progress bar ──────────────────────────────────────────────────────── */
+/* ── Progress bar — segmented track ──────────────────────────────────────── */
 
 .parallel-progress-bar-wrapper {
   height: 3px;
-  background: var(--bg-tertiary);
+  background: rgba(255,255,255,0.04);
   flex-shrink: 0;
+  display: flex;
+  gap: 1px;
 }
 
+/* We override the single bar with a gradient track */
 .parallel-progress-bar {
   height: 100%;
-  background: var(--accent);
-  border-radius: 0 2px 2px 0;
-  transition: width 0.4s ease;
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent-hover) 100%);
+  border-radius: 0 1px 1px 0;
+  transition: width 0.5s cubic-bezier(0.4,0,0.2,1);
+  box-shadow: 0 0 8px rgba(217,119,6,0.5);
 }
 
 .parallel-progress-bar.done {
-  background: var(--success);
+  background: var(--pt-green);
+  box-shadow: 0 0 8px rgba(34,197,94,0.4);
 }
 
 .parallel-progress-bar.failed {
-  background: var(--danger);
+  background: var(--pt-red);
+  box-shadow: 0 0 8px rgba(239,68,68,0.4);
 }
 
 /* ── Task grid ─────────────────────────────────────────────────────────── */
@@ -472,11 +561,13 @@
 .parallel-task-grid {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: 18px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 12px;
   align-content: start;
+  background-image: radial-gradient(circle, rgba(255,255,255,0.02) 1px, transparent 1px);
+  background-size: 24px 24px;
 }
 
 /* ── Empty / loading state ────────────────────────────────────────────── */
@@ -487,20 +578,19 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  padding: 60px 40px;
+  gap: 18px;
+  padding: 80px 40px;
   color: var(--text-muted);
-  font-size: var(--font-sm);
   text-align: center;
-  min-height: 200px;
+  min-height: 220px;
 }
 
 .parallel-empty-state--error {
-  color: var(--danger);
+  color: var(--pt-red);
 }
 
 .parallel-empty-state--error svg {
-  opacity: 0.8;
+  opacity: 0.7;
 }
 
 .parallel-empty-state-text {
@@ -511,9 +601,11 @@
 
 .parallel-empty-state-title {
   font-size: var(--font-sm);
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-secondary);
   margin: 0;
+  font-family: var(--pt-mono);
+  letter-spacing: 0.5px;
 }
 
 .parallel-empty-state-hint {
@@ -521,211 +613,318 @@
   color: var(--text-muted);
   margin: 0;
   max-width: 320px;
+  line-height: 1.5;
 }
 
 .parallel-empty-state-error {
   font-size: var(--font-xs);
-  color: var(--danger);
+  color: var(--pt-red);
   margin: 0;
   max-width: 400px;
   word-break: break-word;
+  font-family: var(--pt-mono);
 }
 
+/* Custom spinner — dual ring */
 .parallel-spinner {
-  width: 28px;
-  height: 28px;
-  border: 2.5px solid var(--border-color);
-  border-top-color: var(--accent);
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+  border: 2px solid rgba(217,119,6,0.15);
+  border-top-color: var(--accent);
+  border-right-color: rgba(217,119,6,0.5);
+  animation: spin 0.7s linear infinite;
   flex-shrink: 0;
+  box-shadow: 0 0 12px rgba(217,119,6,0.2);
 }
 
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
 
-/* ── Task cards ───────────────────────────────────────────────────────────── */
+/* ── Task cards — terminal window style ───────────────────────────────────── */
 
 .parallel-task-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius);
-  padding: 14px;
+  background: #0c0c0c;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 6px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  transition: border-color 0.2s, box-shadow 0.2s;
-  min-height: 200px;
+  gap: 0;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+  min-height: 220px;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Status accent stripe on the left */
+.parallel-task-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: 2px;
+  background: rgba(255,255,255,0.07);
+  transition: background 0.3s;
+}
+
+.parallel-task-card.status-pending::before  { background: rgba(255,255,255,0.1); }
+.parallel-task-card.status-creating::before { background: var(--pt-blue); box-shadow: 0 0 8px rgba(59,130,246,0.4); }
+.parallel-task-card.status-running::before  {
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(217,119,6,0.5);
+  animation: pt-stripe-pulse 2s ease-in-out infinite;
+}
+.parallel-task-card.status-done::before     { background: var(--pt-green); box-shadow: 0 0 6px rgba(34,197,94,0.4); }
+.parallel-task-card.status-failed::before   { background: var(--pt-red); box-shadow: 0 0 6px rgba(239,68,68,0.4); }
+.parallel-task-card.status-cancelled::before { background: rgba(255,255,255,0.15); }
+
+@keyframes pt-stripe-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
 }
 
 .parallel-task-card.status-running {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px rgba(217,119,6,0.15);
+  border-color: rgba(217,119,6,0.2);
+  box-shadow: 0 0 0 1px rgba(217,119,6,0.06), 0 2px 12px rgba(217,119,6,0.06);
 }
 
 .parallel-task-card.status-done {
-  border-color: var(--success);
+  border-color: rgba(34,197,94,0.2);
 }
 
 .parallel-task-card.status-failed {
-  border-color: var(--danger);
+  border-color: rgba(239,68,68,0.2);
 }
 
+/* Card inner content (offset for the left stripe) */
 .parallel-task-card-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
+  padding: 10px 12px 10px 16px;
+  background: rgba(255,255,255,0.02);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
 }
 
 .parallel-task-title {
-  font-size: var(--font-sm);
-  font-weight: 600;
+  font-size: var(--font-xs);
+  font-weight: 700;
   color: var(--text-primary);
   line-height: 1.3;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.parallel-task-index {
+  font-family: var(--pt-mono);
+  font-size: 0.6rem;
+  font-weight: 800;
+  color: rgba(217,119,6,0.45);
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
 }
 
 /* Status badges */
 .parallel-task-badge {
-  font-size: var(--font-2xs);
+  font-size: 0.55rem;
   padding: 2px 7px;
-  border-radius: 10px;
+  border-radius: 2px;
   text-transform: uppercase;
-  letter-spacing: 0.4px;
+  letter-spacing: 1px;
   white-space: nowrap;
   flex-shrink: 0;
-  font-weight: 600;
+  font-weight: 800;
+  font-family: var(--pt-mono);
 }
 
-.badge-pending   { background: var(--bg-tertiary);              color: var(--text-muted); }
-.badge-creating  { background: rgba(59,130,246,0.15);           color: var(--info); }
-.badge-running   { background: rgba(217,119,6,0.2);             color: var(--accent); }
-.badge-done      { background: rgba(34,197,94,0.15);            color: var(--success); }
-.badge-failed    { background: rgba(239,68,68,0.15);            color: var(--danger); }
-.badge-cancelled { background: var(--bg-tertiary);              color: var(--text-muted); }
+.badge-pending   { background: rgba(255,255,255,0.05);  color: rgba(255,255,255,0.3); }
+.badge-creating  { background: rgba(59,130,246,0.12);   color: var(--pt-blue); }
+.badge-running   {
+  background: rgba(217,119,6,0.15);
+  color: var(--accent);
+  animation: pt-badge-blink 1.5s ease-in-out infinite;
+}
+.badge-done      {
+  background: rgba(34,197,94,0.12);
+  color: var(--pt-green);
+  box-shadow: 0 0 6px rgba(34,197,94,0.2);
+}
+.badge-failed    { background: rgba(239,68,68,0.12);    color: var(--pt-red); }
+.badge-cancelled { background: rgba(255,255,255,0.04);  color: rgba(255,255,255,0.25); }
+
+@keyframes pt-badge-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.6; }
+}
 
 /* Branch chip */
 .parallel-task-branch {
   display: flex;
   align-items: center;
   gap: 5px;
-  color: var(--text-muted);
+  padding: 5px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.parallel-task-branch svg {
+  color: rgba(255,255,255,0.2);
+  flex-shrink: 0;
 }
 
 .parallel-task-branch code {
-  font-size: var(--font-2xs);
-  font-family: monospace;
-  background: var(--bg-tertiary);
-  padding: 2px 6px;
-  border-radius: 3px;
+  font-size: 0.6rem;
+  font-family: var(--pt-mono);
+  color: rgba(217,119,6,0.6);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 220px;
+  background: none;
+  padding: 0;
+  letter-spacing: 0;
 }
 
 /* Description */
 .parallel-task-desc {
   font-size: var(--font-xs);
-  color: var(--text-secondary);
+  color: var(--text-muted);
   margin: 0;
   line-height: 1.45;
+  padding: 8px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
 }
 
-/* Running indicator (animated dots) */
+/* Running indicator — scanline bar */
 .parallel-task-running-indicator {
   display: flex;
-  gap: 4px;
-  padding: 4px 0;
+  gap: 3px;
+  padding: 6px 16px 2px;
 }
 
 .parallel-task-running-indicator span {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: indicator-bounce 1.2s ease-in-out infinite;
+  flex: 1;
+  height: 2px;
+  border-radius: 1px;
+  background: rgba(217,119,6,0.4);
+  animation: pt-bar-wave 1.2s ease-in-out infinite;
 }
 
-.parallel-task-running-indicator span:nth-child(2) { animation-delay: 0.2s; }
-.parallel-task-running-indicator span:nth-child(3) { animation-delay: 0.4s; }
+.parallel-task-running-indicator span:nth-child(1) { animation-delay: 0s; }
+.parallel-task-running-indicator span:nth-child(2) { animation-delay: 0.1s; }
+.parallel-task-running-indicator span:nth-child(3) { animation-delay: 0.2s; }
+.parallel-task-running-indicator span:nth-child(4) { animation-delay: 0.3s; }
+.parallel-task-running-indicator span:nth-child(5) { animation-delay: 0.4s; }
+.parallel-task-running-indicator span:nth-child(6) { animation-delay: 0.5s; }
+.parallel-task-running-indicator span:nth-child(7) { animation-delay: 0.6s; }
+.parallel-task-running-indicator span:nth-child(8) { animation-delay: 0.7s; }
 
-@keyframes indicator-bounce {
-  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
-  40% { transform: scale(1); opacity: 1; }
+@keyframes pt-bar-wave {
+  0%, 100% { opacity: 0.2; transform: scaleY(1); }
+  50%       { opacity: 1;   transform: scaleY(2); }
 }
 
-/* Output log */
+/* Output log — terminal style */
 .parallel-task-output-wrap {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 4px;
   min-height: 0;
+  padding: 0 0 0 0;
 }
 
 .parallel-task-output {
-  background: var(--bg-primary);
-  border-radius: var(--radius-sm);
-  padding: 7px 9px;
+  background: #040404;
   flex: 1;
   overflow-y: auto;
-  max-height: 120px;
+  max-height: 110px;
+  position: relative;
+}
+
+/* Scanline overlay */
+.parallel-task-output::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.15) 2px,
+    rgba(0,0,0,0.15) 3px
+  );
+  pointer-events: none;
 }
 
 .parallel-task-output pre {
   margin: 0;
-  font-size: 0.6rem;
-  font-family: monospace;
-  color: var(--text-muted);
+  font-size: 0.58rem;
+  font-family: var(--pt-mono);
+  color: rgba(100,210,100,0.6);
   white-space: pre-wrap;
   word-break: break-all;
-  line-height: 1.5;
+  line-height: 1.6;
+  padding: 8px 10px 8px 16px;
 }
 
 /* Error */
 .parallel-task-error {
   font-size: var(--font-xs);
-  color: var(--danger);
-  background: rgba(239,68,68,0.08);
-  border-radius: var(--radius-sm);
-  padding: 5px 9px;
+  color: var(--pt-red);
+  background: rgba(239,68,68,0.06);
+  padding: 7px 16px;
   line-height: 1.4;
-  border-left: 2px solid var(--danger);
+  border-top: 1px solid rgba(239,68,68,0.15);
+  font-family: var(--pt-mono);
+  font-size: 0.6rem;
 }
 
 /* Card footer */
 .parallel-task-footer {
   display: flex;
-  gap: 6px;
-  padding-top: 4px;
-  border-top: 1px solid var(--border-color);
+  gap: 0;
+  border-top: 1px solid rgba(255,255,255,0.04);
+  background: rgba(255,255,255,0.02);
 }
 
 /* Small buttons */
 .parallel-btn-sm {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
+  justify-content: center;
+  gap: 5px;
+  flex: 1;
+  background: transparent;
+  border: none;
+  border-right: 1px solid rgba(255,255,255,0.04);
+  color: var(--text-muted);
   cursor: pointer;
-  font-size: var(--font-xs);
-  padding: 4px 9px;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  padding: 7px 10px;
+  transition: background 0.12s, color 0.12s;
+  font-family: var(--pt-mono);
 }
 
+.parallel-btn-sm:last-child { border-right: none; }
+
 .parallel-btn-sm:hover {
-  background: var(--bg-hover);
+  background: rgba(255,255,255,0.04);
   color: var(--text-primary);
 }
 
 .parallel-btn-diff:hover {
-  border-color: var(--accent);
   color: var(--accent);
+  background: rgba(217,119,6,0.06);
+}
+
+.parallel-btn-terminal:hover {
+  color: var(--pt-green);
+  background: rgba(34,197,94,0.05);
 }
 
 /* ── Merge section ────────────────────────────────────────────────────────── */
@@ -734,48 +933,68 @@
   border-top: 1px solid var(--border-color);
   background: var(--bg-secondary);
   flex-shrink: 0;
-  max-height: 260px;
+  max-height: 250px;
   overflow-y: auto;
+  position: relative;
+}
+
+.parallel-merge-section::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, var(--pt-green) 0%, transparent 50%);
+  opacity: 0.5;
 }
 
 .parallel-merge-inner {
-  padding: 16px 20px;
+  padding: 14px 20px;
 }
 
 .parallel-merge-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 6px;
-  color: var(--accent);
+  margin-bottom: 4px;
+  color: var(--pt-green);
 }
 
 .parallel-merge-title {
-  font-size: var(--font-sm);
-  font-weight: 700;
+  font-size: var(--font-xs);
+  font-weight: 800;
   color: var(--text-primary);
   margin: 0;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-family: var(--pt-mono);
 }
 
 .parallel-merge-hint {
-  font-size: var(--font-xs);
-  color: var(--text-secondary);
-  margin: 0 0 12px 0;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin: 0 0 10px 0;
+  font-style: italic;
 }
 
 .parallel-merge-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .parallel-merge-item {
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 4px;
+  padding: 9px 12px;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  transition: border-color 0.15s;
+}
+
+.parallel-merge-item:hover {
+  border-color: rgba(34,197,94,0.2);
 }
 
 .parallel-merge-branch-row {
@@ -786,25 +1005,34 @@
 }
 
 .parallel-merge-branch {
-  font-size: var(--font-xs);
-  font-family: monospace;
-  color: var(--accent);
+  font-size: 0.65rem;
+  font-family: var(--pt-mono);
+  color: var(--pt-green);
+  letter-spacing: 0;
 }
 
 .parallel-merge-cmds {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
 .parallel-merge-cmd {
-  font-size: var(--font-2xs);
-  font-family: monospace;
-  background: var(--bg-primary);
+  font-size: 0.58rem;
+  font-family: var(--pt-mono);
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
   padding: 3px 8px;
   border-radius: 3px;
-  color: var(--text-secondary);
+  color: rgba(255,255,255,0.4);
   user-select: all;
+  letter-spacing: 0;
+  transition: color 0.1s, border-color 0.1s;
+}
+
+.parallel-merge-cmd:hover {
+  color: var(--text-secondary);
+  border-color: rgba(255,255,255,0.15);
 }
 
 /* ── Diff modal ───────────────────────────────────────────────────────────── */
@@ -812,21 +1040,26 @@
 .parallel-diff-modal {
   max-height: 65vh;
   overflow: auto;
+  background: #040404;
+  border-radius: 4px;
+  padding: 4px;
 }
 
 .parallel-diff-modal .diff-view {
-  font-size: 0.7rem;
-  line-height: 1.5;
+  font-size: 0.68rem;
+  font-family: var(--pt-mono);
+  line-height: 1.6;
   white-space: pre;
   margin: 0;
-  color: var(--text-secondary);
+  padding: 8px 12px;
+  color: rgba(255,255,255,0.4);
 }
 
-.parallel-diff-modal .diff-add  { color: var(--success); display: block; }
-.parallel-diff-modal .diff-del  { color: var(--danger);  display: block; }
-.parallel-diff-modal .diff-hunk { color: var(--info);    display: block; }
+.parallel-diff-modal .diff-add  { color: var(--pt-green); display: block; background: rgba(34,197,94,0.05); }
+.parallel-diff-modal .diff-del  { color: var(--pt-red);   display: block; background: rgba(239,68,68,0.05); }
+.parallel-diff-modal .diff-hunk { color: var(--pt-blue);  display: block; opacity: 0.7; }
 
-/* ── Responsive: narrower sidebar ─────────────────────────────────────── */
+/* ── Responsive ────────────────────────────────────────────────────────── */
 
 @media (max-width: 860px) {
   .parallel-form-content {
@@ -839,14 +1072,9 @@
     border-bottom: 1px solid var(--border-color);
   }
 
-  .parallel-form-sidebar {
-    padding: 16px;
-  }
-
   .parallel-config-card {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 12px;
   }
 
   .parallel-start-btn {

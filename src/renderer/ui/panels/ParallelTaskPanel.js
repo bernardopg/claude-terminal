@@ -481,32 +481,39 @@ function _buildTaskCard(task) {
   const isFinished = task.status === 'done' || task.status === 'failed';
   const isRunning = task.status === 'running';
 
+  // Extract index from task.id (e.g. "run-1234-task-2" → "02")
+  const idxMatch = task.id && task.id.match(/task-(\d+)/);
+  const taskIndex = idxMatch ? String(parseInt(idxMatch[1], 10)).padStart(2, '0') : '--';
+
   return `
     <div class="parallel-task-card-header">
-      <span class="parallel-task-title">${escapeHtml(task.title || task.id)}</span>
+      <span class="parallel-task-title">
+        <span class="parallel-task-index">${taskIndex}</span>
+        ${escapeHtml(task.title || task.id)}
+      </span>
       <span class="parallel-task-badge badge-${task.status}">${statusLabel}</span>
     </div>
     ${task.description ? `<p class="parallel-task-desc">${escapeHtml(task.description)}</p>` : ''}
     ${task.branch ? `
       <div class="parallel-task-branch">
-        <svg viewBox="0 0 16 16" fill="currentColor" width="10" height="10">
+        <svg viewBox="0 0 16 16" fill="currentColor" width="9" height="9">
           <path d="M11.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122V6A2.5 2.5 0 019 8.5H7.5a1 1 0 000 2h1.25a2.25 2.25 0 110 1.5H7.5a2.5 2.5 0 01-2.5-2.5v-2A2.25 2.25 0 110 5.5a2.25 2.25 0 012.25 2.25v.5h4.25V5.25A2.25 2.25 0 019.5 3.25z"/>
         </svg>
         <code>${escapeHtml(task.branch)}</code>
       </div>
     ` : ''}
     <div class="parallel-task-output-wrap" id="output-wrap-${task.id}">
-      ${isRunning ? '<div class="parallel-task-running-indicator"><span></span><span></span><span></span></div>' : ''}
+      ${isRunning ? '<div class="parallel-task-running-indicator"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>' : ''}
       <div class="parallel-task-output" id="output-${task.id}"><pre>${escapeHtml(outputLines)}</pre></div>
     </div>
     ${task.error ? `<div class="parallel-task-error">${escapeHtml(task.error)}</div>` : ''}
     <div class="parallel-task-footer" id="footer-${task.id}" style="${isFinished ? '' : 'display:none'}">
       <button class="parallel-btn-sm parallel-btn-diff" data-task-id="${task.id}">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/></svg>
         ${t('parallel.card.viewDiff')}
       </button>
       <button class="parallel-btn-sm parallel-btn-terminal" data-worktree-path="${escapeHtml(task.worktreePath || '')}">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><polyline points="4,17 10,11 4,5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><polyline points="4,17 10,11 4,5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
         ${t('parallel.card.openTerminal')}
       </button>
     </div>
