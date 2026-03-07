@@ -198,12 +198,13 @@ class ParallelTaskService {
     }
 
     const enrichedTasks = [];
+    const featureSlug = this._sanitizeBranchSuffix(goal).slice(0, 25);
 
     for (let i = 0; i < tasks.length; i++) {
       const task = tasks[i];
       const taskId = `task-${i}`;
       const suffix = this._sanitizeBranchSuffix(task.branchSuffix || task.title);
-      const branch = `${mainBranch}-parallel-${suffix}`;
+      const branch = `parallel/${featureSlug}/${suffix}`;
       const worktreePath = path.join(worktreeBase, taskId);
 
       // Emit task card immediately
