@@ -347,6 +347,20 @@
   font-weight: 500;
 }
 
+.ct-perm-detail code {
+  display: block;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: var(--font-2xs);
+  color: var(--text-secondary);
+  font-weight: 400;
+  white-space: pre-wrap;
+  word-break: break-all;
+  padding: 4px 7px;
+  background: color-mix(in srgb, var(--bg-primary) 80%, transparent);
+  border-radius: 3px;
+  border-left: 2px solid color-mix(in srgb, var(--warning) 40%, transparent);
+}
+
 .ct-inline-hint {
   font-size: var(--font-2xs);
   color: var(--text-muted);

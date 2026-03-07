@@ -677,10 +677,12 @@ function _buildInlineActions(agent) {
     `;
   }
 
-  // Default permission request: Approve / Deny buttons
+  // Default permission request: show tool detail + Approve / Deny buttons
+  const detail = _getPermDetail(toolName, input);
   return `
     <div class="ct-inline-action" data-agent-id="${escapeHtml(agent.id)}">
-      <div class="ct-inline-hint">${escapeHtml(t('controlTower.statusWaiting'))}: ${escapeHtml(toolName)}</div>
+      <div class="ct-inline-hint">${escapeHtml(toolName)}</div>
+      ${detail ? `<div class="ct-inline-question ct-perm-detail"><code>${escapeHtml(detail)}</code></div>` : ''}
       <div class="ct-inline-btn-row">
         <button class="ct-btn ct-btn-approve ct-btn-perm-approve" data-agent-id="${escapeHtml(agent.id)}">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -971,6 +973,24 @@ function _interruptAgent(agentId) {
       window.electron_api.terminal.input({ id: agent.terminalId, data: '\x03' });
     } catch { /* ignore */ }
   }
+}
+
+/**
+ * Extract a short human-readable detail from a permission request input.
+ * Mirrors ChatView's getToolDisplayInfo but with truncation for compact display.
+ */
+function _getPermDetail(toolName, input) {
+  if (!input) return '';
+  const name = (toolName || '').toLowerCase();
+  let detail = '';
+  if (name === 'bash') detail = input.command || '';
+  else if (name === 'read' || name === 'write' || name === 'edit' || name === 'notebookedit') detail = input.file_path || '';
+  else if (name === 'grep') detail = input.pattern ? `${input.pattern}${input.path ? ` in ${input.path}` : ''}` : '';
+  else if (name === 'glob') detail = input.pattern || '';
+  else detail = input.file_path || input.path || input.command || input.query || '';
+  // Truncate long values (especially bash commands)
+  if (detail.length > 120) detail = detail.slice(0, 117) + '…';
+  return detail;
 }
 
 /**
