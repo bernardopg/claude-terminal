@@ -97,7 +97,7 @@ const {
 const registry = require('./src/project-types/registry');
 const { mergeTranslations } = require('./src/renderer/i18n');
 const ModalComponent = require('./src/renderer/ui/components/Modal');
-const { MemoryEditor, GitChangesPanel, ShortcutsManager, SettingsPanel, SkillsAgentsPanel, PluginsPanel, MarketplacePanel, McpPanel, WorkflowPanel, DatabasePanel, CloudPanel, ControlTowerPanel } = require('./src/renderer/ui/panels');
+const { MemoryEditor, GitChangesPanel, ShortcutsManager, SettingsPanel, SkillsAgentsPanel, PluginsPanel, MarketplacePanel, McpPanel, WorkflowPanel, DatabasePanel, CloudPanel, ControlTowerPanel, SessionReplayPanel } = require('./src/renderer/ui/panels');
 
 // ========== LOCAL MODAL FUNCTIONS ==========
 // These work with the existing HTML modal elements in index.html
@@ -2417,6 +2417,13 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
     }
     if (tabId !== 'control-tower') {
       ControlTowerPanel.cleanup();
+    }
+    if (tabId === 'session-replay') {
+      const container = document.getElementById('tab-session-replay');
+      if (container && !container.dataset.initialized) {
+        SessionReplayPanel.init(container, { projectsState, openedProjectId: projectsState.get().openedProjectId });
+        container.dataset.initialized = 'true';
+      }
     }
     if (tabId === 'claude') {
       const activeId = terminalsState.get().activeTerminal;
