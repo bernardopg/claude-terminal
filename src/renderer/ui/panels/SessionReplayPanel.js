@@ -17,12 +17,22 @@ let currentSteps = [];
 let currentSummary = {};
 let selectedStepIndex = -1;
 
+// ── Player state ───────────────────────────────────────────────────────────────
+let playerSteps = [];
+let playerCurrentStep = -1;
+let playerIsPlaying = false;
+let playerSpeed = 1;
+let playerTimer = null;
+let _playerDragCleanup = null;
+
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 let projectSelect = null;
 let sessionSelect = null;
 let loadBtn = null;
 let summaryBar = null;
 let timeline = null;
+let playerChatEl = null;
+let playerBarEl = null;
 
 // ── Tool category helpers ─────────────────────────────────────────────────────
 const TOOL_CATEGORIES = {
@@ -33,6 +43,9 @@ const TOOL_CATEGORIES = {
   agent:   ['Task'],
   plan:    ['ExitPlanMode', 'AskUserQuestion', 'EnterPlanMode', 'TodoWrite'],
 };
+
+// Player speed → ms/step
+const PLAYER_SPEED_DELAYS = { 0.5: 2000, 1: 1000, 2: 500, 4: 250 };
 
 // Tools that have a friendly card renderer (Fix 4)
 const FRIENDLY_TOOLS = new Set([
@@ -649,7 +662,7 @@ async function loadReplay() {
     currentSessionId = sessionId;
     selectedStepIndex = -1;
     renderSummary(currentSummary);
-    renderTimeline(currentSteps);
+    initPlayer(currentSteps);
   } catch (e) {
     timeline.innerHTML = `<div class="sr-empty sr-empty--error">${t('sessionReplay.errorLoading')}: ${escapeHtml(e.message)}</div>`;
   } finally {
@@ -791,6 +804,241 @@ function makeCustomSelect(placeholder) {
   };
 }
 
+// ── Player ────────────────────────────────────────────────────────────────────
+
+function buildPlayerBarHtml(total) {
+  const playSvg  = `<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M8 5v14l11-7z"/></svg>`;
+  const prevSvg  = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>`;
+  const nextSvg  = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>`;
+  const rstSvg   = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>`;
+  const listSvg  = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>`;
+  return `
+    <div class="sr-pbar-scrubber">
+      <div class="sr-pbar-track" id="sr-pbar-track">
+        <div class="sr-pbar-fill" id="sr-pbar-fill" style="width:0%"></div>
+        <div class="sr-pbar-thumb" id="sr-pbar-thumb" style="left:0%"></div>
+      </div>
+      <span class="sr-pbar-counter" id="sr-pbar-counter">0 / ${total}</span>
+    </div>
+    <div class="sr-pbar-controls">
+      <button class="sr-pbar-btn" id="sr-pbar-restart" title="Recommencer">${rstSvg}</button>
+      <button class="sr-pbar-btn" id="sr-pbar-prev" title="Précédent" disabled>${prevSvg}</button>
+      <button class="sr-pbar-btn sr-pbar-btn--play" id="sr-pbar-play" title="Lire">${playSvg}</button>
+      <button class="sr-pbar-btn" id="sr-pbar-next" title="Suivant">${nextSvg}</button>
+      <div class="sr-pbar-speeds">
+        <button class="sr-pbar-speed" data-speed="0.5">0.5×</button>
+        <button class="sr-pbar-speed sr-pbar-speed--active" data-speed="1">1×</button>
+        <button class="sr-pbar-speed" data-speed="2">2×</button>
+        <button class="sr-pbar-speed" data-speed="4">4×</button>
+      </div>
+      <button class="sr-pbar-btn sr-pbar-btn--sm" id="sr-pbar-timeline" title="Vue timeline">${listSvg}</button>
+    </div>
+  `;
+}
+
+function buildPlayerStepEl(step) {
+  const el = document.createElement('div');
+  if (step.type === 'prompt') {
+    const detected = detectSkillInPrompt(step.text || '');
+    let inner;
+    if (detected.hasSkill) {
+      const svg = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0 4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>`;
+      inner = `<span class="sr-pstep-skill-chip">${svg}${escapeHtml(detected.skillName)}</span>`;
+    } else {
+      inner = escapeHtml(truncate(step.text || '', 180));
+    }
+    el.className = 'sr-pstep sr-pstep--prompt';
+    el.innerHTML = `<div class="sr-pstep-bubble">${inner}</div>`;
+  } else if (step.type === 'thinking') {
+    el.className = 'sr-pstep sr-pstep--thinking';
+    el.innerHTML = `
+      <div class="sr-pstep-avatar sr-pstep-avatar--thinking"></div>
+      <div class="sr-pstep-thinking-dots"><span></span><span></span><span></span></div>`;
+  } else if (step.type === 'response') {
+    el.className = 'sr-pstep sr-pstep--response';
+    el.innerHTML = `
+      <div class="sr-pstep-avatar"></div>
+      <div class="sr-pstep-bubble">${escapeHtml(truncate(step.text || '', 220))}</div>`;
+  } else if (step.type === 'tool' || step.type === 'group') {
+    const cat = getToolCategory(step.toolName);
+    el.className = `sr-pstep sr-pstep--tool sr-pstep--cat-${cat}`;
+    const sub = step.type === 'group'
+      ? `${step.count} appels`
+      : buildStepSubtitle(step);
+    const badge = step.type === 'group'
+      ? `<span class="sr-pstep-group-badge">${step.count}</span>`
+      : '';
+    el.innerHTML = `
+      <div class="sr-pstep-tool-card">
+        <div class="sr-pstep-tool-icon">${getToolIcon(step.toolName)}</div>
+        <div class="sr-pstep-tool-meta">
+          <span class="sr-pstep-tool-name">${escapeHtml(step.toolName || '')}</span>
+          ${sub ? `<span class="sr-pstep-tool-sub" title="${escapeHtml(sub)}">${escapeHtml(truncate(sub, 55))}</span>` : ''}
+        </div>
+        ${badge}
+      </div>`;
+  }
+  return el;
+}
+
+function _appendStep(idx) {
+  if (idx < 0 || idx >= playerSteps.length) return;
+  playerChatEl.appendChild(buildPlayerStepEl(playerSteps[idx]));
+  playerCurrentStep = idx;
+}
+
+function _updatePlayerBar() {
+  if (!playerBarEl) return;
+  const total = playerSteps.length;
+  const current = playerCurrentStep + 1;
+  const pct = total > 0 ? (current / total) * 100 : 0;
+  const fill    = playerBarEl.querySelector('#sr-pbar-fill');
+  const thumb   = playerBarEl.querySelector('#sr-pbar-thumb');
+  const counter = playerBarEl.querySelector('#sr-pbar-counter');
+  if (fill)    fill.style.width = `${pct}%`;
+  if (thumb)   thumb.style.left = `${pct}%`;
+  if (counter) counter.textContent = `${current} / ${total}`;
+  const prevBtn = playerBarEl.querySelector('#sr-pbar-prev');
+  const nextBtn = playerBarEl.querySelector('#sr-pbar-next');
+  if (prevBtn) prevBtn.disabled = playerCurrentStep <= 0;
+  if (nextBtn) nextBtn.disabled = playerCurrentStep >= total - 1;
+}
+
+function _updatePlayBtn() {
+  const btn = playerBarEl?.querySelector('#sr-pbar-play');
+  if (!btn) return;
+  const playSvg  = `<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M8 5v14l11-7z"/></svg>`;
+  const pauseSvg = `<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`;
+  btn.innerHTML = playerIsPlaying ? pauseSvg : playSvg;
+}
+
+function _startTimer() {
+  const delay = PLAYER_SPEED_DELAYS[playerSpeed] || 1000;
+  playerTimer = setInterval(() => {
+    if (playerCurrentStep >= playerSteps.length - 1) {
+      _playerPause();
+      return;
+    }
+    _appendStep(playerCurrentStep + 1);
+    _updatePlayerBar();
+    requestAnimationFrame(() => { playerChatEl.scrollTop = playerChatEl.scrollHeight; });
+  }, delay);
+}
+
+function _playerPause() {
+  if (!playerIsPlaying) return;
+  playerIsPlaying = false;
+  if (playerTimer) { clearInterval(playerTimer); playerTimer = null; }
+  _updatePlayBtn();
+}
+
+function _playerPlay() {
+  if (playerIsPlaying) return;
+  if (playerCurrentStep >= playerSteps.length - 1) {
+    // Finished — restart from beginning
+    playerChatEl.innerHTML = '';
+    playerCurrentStep = -1;
+    _updatePlayerBar();
+  }
+  playerIsPlaying = true;
+  _updatePlayBtn();
+  _startTimer();
+}
+
+function playerSeekTo(idx) {
+  idx = Math.max(0, Math.min(playerSteps.length - 1, idx));
+  _playerPause();
+  if (idx < playerCurrentStep) {
+    playerChatEl.innerHTML = '';
+    playerCurrentStep = -1;
+  }
+  for (let i = playerCurrentStep + 1; i <= idx; i++) _appendStep(i);
+  _updatePlayerBar();
+  requestAnimationFrame(() => { playerChatEl.scrollTop = playerChatEl.scrollHeight; });
+}
+
+function initPlayer(rawSteps) {
+  playerSteps = groupConsecutiveAgents(rawSteps);
+  playerCurrentStep = -1;
+  playerIsPlaying = false;
+  playerSpeed = 1;
+  if (playerTimer) { clearInterval(playerTimer); playerTimer = null; }
+  if (_playerDragCleanup) { _playerDragCleanup(); _playerDragCleanup = null; }
+
+  // Build bar HTML
+  playerBarEl.innerHTML = buildPlayerBarHtml(playerSteps.length);
+
+  // Switch to player view
+  timeline.hidden = true;
+  playerChatEl.innerHTML = '';
+  playerChatEl.hidden = false;
+  playerBarEl.hidden = false;
+  _updatePlayerBar();
+
+  // Controls
+  playerBarEl.querySelector('#sr-pbar-play').addEventListener('click', () =>
+    playerIsPlaying ? _playerPause() : _playerPlay());
+
+  playerBarEl.querySelector('#sr-pbar-prev').addEventListener('click', () => {
+    _playerPause();
+    if (playerCurrentStep > 0) playerSeekTo(playerCurrentStep - 1);
+  });
+
+  playerBarEl.querySelector('#sr-pbar-next').addEventListener('click', () => {
+    _playerPause();
+    if (playerCurrentStep < playerSteps.length - 1) playerSeekTo(playerCurrentStep + 1);
+  });
+
+  playerBarEl.querySelector('#sr-pbar-restart').addEventListener('click', () => {
+    _playerPause();
+    playerChatEl.innerHTML = '';
+    playerCurrentStep = -1;
+    _updatePlayerBar();
+  });
+
+  playerBarEl.querySelector('#sr-pbar-timeline').addEventListener('click', () => {
+    _playerPause();
+    playerChatEl.hidden = true;
+    playerBarEl.hidden = true;
+    timeline.hidden = false;
+    renderTimeline(rawSteps);
+  });
+
+  playerBarEl.querySelectorAll('.sr-pbar-speed').forEach(btn => {
+    btn.addEventListener('click', () => {
+      playerSpeed = parseFloat(btn.dataset.speed);
+      playerBarEl.querySelectorAll('.sr-pbar-speed').forEach(b => b.classList.remove('sr-pbar-speed--active'));
+      btn.classList.add('sr-pbar-speed--active');
+      if (playerIsPlaying) {
+        clearInterval(playerTimer);
+        playerTimer = null;
+        _startTimer();
+      }
+    });
+  });
+
+  // Scrubber drag
+  const trackEl = playerBarEl.querySelector('#sr-pbar-track');
+  let isDragging = false;
+  function seekFromEvent(e) {
+    const rect = trackEl.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    playerSeekTo(Math.round(ratio * (playerSteps.length - 1)));
+  }
+  function onMove(e) { if (isDragging) seekFromEvent(e); }
+  function onUp()    { isDragging = false; }
+  trackEl.addEventListener('mousedown', e => { isDragging = true; seekFromEvent(e); });
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+  _playerDragCleanup = () => {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  };
+
+  // Auto-play
+  _playerPlay();
+}
+
 // ── Initialization ────────────────────────────────────────────────────────────
 
 function buildEmptyStateHtml() {
@@ -893,6 +1141,8 @@ function buildHtml() {
       <div class="sr-timeline" id="sr-timeline">
         ${buildEmptyStateHtml()}
       </div>
+      <div class="sr-player-chat" id="sr-player-chat" hidden></div>
+      <div class="sr-player-bar" id="sr-player-bar" hidden></div>
     </div>
   `;
 }
@@ -906,6 +1156,8 @@ function init(containerEl, opts = {}) {
   loadBtn = container.querySelector('#sr-load-btn');
   summaryBar = container.querySelector('#sr-summary');
   timeline = container.querySelector('#sr-timeline');
+  playerChatEl = container.querySelector('#sr-player-chat');
+  playerBarEl = container.querySelector('#sr-player-bar');
 
   // Create and inject custom select widgets
   const projWidget = makeCustomSelect(t('sessionReplay.selectProject'));
@@ -942,6 +1194,13 @@ function init(containerEl, opts = {}) {
     sessionSelect.setOptions(`<option value="">${t('sessionReplay.selectSession')}</option>`);
     sessionSelect.disabled = true;
     loadBtn.disabled = true;
+    // Reset player
+    _playerPause();
+    if (playerChatEl) { playerChatEl.hidden = true; playerChatEl.innerHTML = ''; }
+    if (playerBarEl)  playerBarEl.hidden = true;
+    playerSteps = [];
+    playerCurrentStep = -1;
+    timeline.hidden = false;
     timeline.innerHTML = buildEmptyStateHtml();
     summaryBar.innerHTML = '';
     currentSteps = [];
@@ -959,6 +1218,10 @@ function cleanup() {
   currentSteps = [];
   currentSummary = {};
   selectedStepIndex = -1;
+  _playerPause();
+  if (_playerDragCleanup) { _playerDragCleanup(); _playerDragCleanup = null; }
+  playerSteps = [];
+  playerCurrentStep = -1;
   if (projectSelect?.destroy) projectSelect.destroy();
   if (sessionSelect?.destroy) sessionSelect.destroy();
 }

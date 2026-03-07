@@ -1052,3 +1052,371 @@
   from { opacity: 0; transform: translateX(-8px); }
   to   { opacity: 1; transform: translateX(0); }
 }
+
+/* ── Player chat view ─────────────────────────────────────────── */
+.sr-player-chat {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sr-player-chat::-webkit-scrollbar { width: 4px; }
+.sr-player-chat::-webkit-scrollbar-track { background: transparent; }
+.sr-player-chat::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 2px; }
+
+/* ── Player bar ────────────────────────────────────────────────── */
+.sr-player-bar {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  padding: 10px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Scrubber */
+.sr-pbar-scrubber {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sr-pbar-track {
+  flex: 1;
+  height: 4px;
+  background: var(--bg-tertiary);
+  border-radius: 2px;
+  position: relative;
+  cursor: pointer;
+  transition: height 0.12s;
+}
+
+.sr-pbar-track:hover {
+  height: 6px;
+}
+
+.sr-pbar-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.15s ease;
+  pointer-events: none;
+}
+
+.sr-pbar-thumb {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-primary);
+  cursor: grab;
+  opacity: 0;
+  transition: left 0.15s ease, opacity 0.15s;
+  pointer-events: none;
+}
+
+.sr-pbar-track:hover .sr-pbar-thumb {
+  opacity: 1;
+}
+
+.sr-pbar-counter {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  min-width: 52px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Controls row */
+.sr-pbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sr-pbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  flex-shrink: 0;
+}
+
+.sr-pbar-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.sr-pbar-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.sr-pbar-btn--play {
+  width: 34px;
+  height: 34px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 50%;
+  margin: 0 2px;
+}
+
+.sr-pbar-btn--play:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.sr-pbar-btn--sm {
+  margin-left: auto;
+}
+
+/* Speed selector */
+.sr-pbar-speeds {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  margin-left: 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 2px;
+}
+
+.sr-pbar-speed {
+  padding: 3px 7px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+  white-space: nowrap;
+}
+
+.sr-pbar-speed:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.sr-pbar-speed--active {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+/* ── Player step elements ───────────────────────────────────────── */
+.sr-pstep {
+  display: flex;
+  animation: sr-pstep-in 0.22s ease;
+  max-width: 100%;
+}
+
+@keyframes sr-pstep-in {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Prompt — right aligned */
+.sr-pstep--prompt {
+  justify-content: flex-end;
+}
+
+.sr-pstep--prompt .sr-pstep-bubble {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  color: var(--text-secondary);
+  border-radius: 14px 4px 14px 14px;
+  max-width: 72%;
+}
+
+/* Response — left aligned with avatar */
+.sr-pstep--response {
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.sr-pstep--response .sr-pstep-bubble {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  border-radius: 4px 14px 14px 14px;
+  max-width: 72%;
+}
+
+/* Shared bubble */
+.sr-pstep-bubble {
+  padding: 8px 12px;
+  font-size: var(--font-sm);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+/* Avatar dot */
+.sr-pstep-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent-dim);
+  border: 1.5px solid var(--accent);
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.sr-pstep-avatar--thinking {
+  background: var(--bg-tertiary);
+  border-color: var(--border-color);
+}
+
+/* Thinking dots */
+.sr-pstep--thinking {
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.sr-pstep-thinking-dots {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px 14px 14px 14px;
+}
+
+.sr-pstep-thinking-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  animation: sr-pthink 1.2s ease-in-out infinite;
+}
+
+.sr-pstep-thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+.sr-pstep-thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes sr-pthink {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50%       { opacity: 1;   transform: scale(1.1); }
+}
+
+/* Tool card — centered pill */
+.sr-pstep--tool {
+  justify-content: center;
+}
+
+.sr-pstep-tool-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 5px 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  max-width: 82%;
+}
+
+.sr-pstep-tool-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--bg-tertiary);
+}
+
+.sr-pstep-tool-icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+.sr-pstep-tool-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.sr-pstep-tool-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.sr-pstep-tool-sub {
+  font-size: 10px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+
+.sr-pstep-group-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* Tool category icon colors in player */
+.sr-pstep--cat-file .sr-pstep-tool-icon     { background: rgba(34,197,94,0.12); }
+.sr-pstep--cat-file .sr-pstep-tool-icon svg { color: #22c55e; }
+.sr-pstep--cat-terminal .sr-pstep-tool-icon     { background: rgba(245,158,11,0.12); }
+.sr-pstep--cat-terminal .sr-pstep-tool-icon svg { color: #f59e0b; }
+.sr-pstep--cat-search .sr-pstep-tool-icon     { background: rgba(167,139,250,0.12); }
+.sr-pstep--cat-search .sr-pstep-tool-icon svg { color: #a78bfa; }
+.sr-pstep--cat-web .sr-pstep-tool-icon     { background: rgba(6,182,212,0.12); }
+.sr-pstep--cat-web .sr-pstep-tool-icon svg { color: #06b6d4; }
+.sr-pstep--cat-agent .sr-pstep-tool-icon     { background: rgba(249,115,22,0.12); }
+.sr-pstep--cat-agent .sr-pstep-tool-icon svg { color: #f97316; }
+.sr-pstep--cat-plan .sr-pstep-tool-icon     { background: var(--accent-dim); }
+.sr-pstep--cat-plan .sr-pstep-tool-icon svg { color: var(--accent); }
+
+/* Skill chip inside prompt bubble */
+.sr-pstep-skill-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px 2px 6px;
+  border-radius: 12px;
+  background: rgba(139, 92, 246, 0.12);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  color: #a78bfa;
+  font-size: var(--font-sm);
+  font-weight: 600;
+}
+
+.sr-pstep-skill-chip svg {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+}
