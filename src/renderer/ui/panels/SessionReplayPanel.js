@@ -342,6 +342,72 @@ function buildPromptBody(step) {
   return `<div class="sr-body-text">${escapeHtml(step.text || '')}</div>`;
 }
 
+// ── AskUserQuestion renderer ──────────────────────────────────────────────────
+/**
+ * Parses the AskUserQuestion output: `User has answered your questions: "Q"="A". You can now...`
+ * Returns array of { question, answer } pairs.
+ */
+function parseAskAnswers(output) {
+  if (!output) return [];
+  const pairs = [];
+  const regex = /"([^"]+)"="([^"]*)"/g;
+  let m;
+  while ((m = regex.exec(output)) !== null) {
+    pairs.push({ question: m[1], answer: m[2] });
+  }
+  return pairs;
+}
+
+function buildAskUserQuestionBody(step) {
+  const { toolInput, toolOutput } = step;
+
+  // Extract question list: toolInput.questions[] or single toolInput.question
+  const questions = [];
+  if (Array.isArray(toolInput?.questions)) {
+    toolInput.questions.forEach(q => {
+      if (q?.question) questions.push({ text: q.question, options: q.options || [] });
+    });
+  } else if (toolInput?.question) {
+    questions.push({ text: toolInput.question, options: [] });
+  }
+
+  // Parse answers from output string
+  const answered = parseAskAnswers(toolOutput);
+  // Build a map: question text → answer
+  const answerMap = new Map(answered.map(p => [p.question, p.answer]));
+
+  const qaItems = questions.map(q => {
+    const answer = answerMap.get(q.text);
+    // Show options if available, highlight selected
+    const optionsHtml = q.options.length > 0
+      ? `<div class="sr-ask-options">${q.options.map(o => {
+          const isSelected = o.label === answer;
+          return `<span class="sr-ask-opt${isSelected ? ' sr-ask-opt--selected' : ''}">${escapeHtml(o.label)}</span>`;
+        }).join('')}</div>`
+      : '';
+    const answerHtml = answer !== undefined
+      ? `<div class="sr-ask-answer"><span class="sr-ask-answer-chip">${escapeHtml(answer)}</span></div>`
+      : '';
+    return `<div class="sr-ask-qa">
+      <div class="sr-ask-question">${escapeHtml(q.text)}</div>
+      ${optionsHtml || answerHtml}
+    </div>`;
+  }).join('');
+
+  // If no questions were parsed, fallback to showing cleaned output
+  if (questions.length === 0 && toolOutput) {
+    const cleaned = toolOutput
+      .replace(/^User has answered your questions:\s*/i, '')
+      .replace(/\.\s*You can now continue.*$/i, '')
+      .trim();
+    return `<div class="sr-tool-friendly"><div class="sr-ask-qa">
+      <div class="sr-ask-answer"><span class="sr-ask-answer-chip">${escapeHtml(cleaned)}</span></div>
+    </div></div>`;
+  }
+
+  return `<div class="sr-tool-friendly">${qaItems || ''}</div>`;
+}
+
 // ── Fix 4: Friendly tool cards ────────────────────────────────────────────────
 function buildFriendlyToolBody(step) {
   const { toolName, toolInput, toolOutput } = step;
@@ -382,7 +448,7 @@ function buildFriendlyToolBody(step) {
   } else if (toolName === 'WebSearch') {
     if (toolInput?.query) parts.push(buildParamRow(t('sessionReplay.paramQuery') || 'Query', toolInput.query));
   } else if (toolName === 'AskUserQuestion') {
-    if (toolInput?.question) parts.push(buildParamRow(t('sessionReplay.paramQuestion') || 'Question', toolInput.question));
+    return buildAskUserQuestionBody(step);
   } else if (toolName === 'Task') {
     if (toolInput?.description) parts.push(buildParamRow(t('sessionReplay.paramDescription') || 'Task', truncate(toolInput.description, 200)));
     if (toolInput?.prompt) parts.push(buildParamRow(t('sessionReplay.paramPrompt') || 'Prompt', truncate(toolInput.prompt, 200)));
@@ -541,24 +607,26 @@ function focusStep(idx) {
 // ── Session loading ───────────────────────────────────────────────────────────
 
 async function loadSessions(projectPath) {
-  sessionSelect.innerHTML = `<option value="">${t('sessionReplay.loadingSessions')}</option>`;
+  sessionSelect.setOptions(`<option value="">${t('sessionReplay.loadingSessions')}</option>`);
   sessionSelect.disabled = true;
   loadBtn.disabled = true;
   try {
     const sessions = await window.electron_api.claude.sessions(projectPath);
     if (!sessions || sessions.length === 0) {
-      sessionSelect.innerHTML = `<option value="">${t('sessionReplay.noSessions')}</option>`;
+      sessionSelect.setOptions(`<option value="">${t('sessionReplay.noSessions')}</option>`);
       return;
     }
-    sessionSelect.innerHTML = `<option value="">${t('sessionReplay.selectSession')}</option>` +
+    sessionSelect.setOptions(
+      `<option value="">${t('sessionReplay.selectSession')}</option>` +
       sessions.map(s => {
         const label = s.summary || truncate(s.firstPrompt, 70) || s.sessionId;
         const date = s.modified ? new Date(s.modified).toLocaleDateString() : '';
         return `<option value="${escapeHtml(s.sessionId)}">${escapeHtml(label)} — ${escapeHtml(date)}</option>`;
-      }).join('');
+      }).join('')
+    );
     sessionSelect.disabled = false;
   } catch (e) {
-    sessionSelect.innerHTML = `<option value="">${t('sessionReplay.errorLoadingSessions')}</option>`;
+    sessionSelect.setOptions(`<option value="">${t('sessionReplay.errorLoadingSessions')}</option>`);
   }
 }
 
@@ -590,7 +658,222 @@ async function loadReplay() {
   }
 }
 
+// ── Custom Select Widget ──────────────────────────────────────────────────────
+/**
+ * Lightweight custom select replacing native <select>.
+ * API: { el, value, disabled, setOptions(html), addEventListener(change, cb), destroy() }
+ */
+function makeCustomSelect(placeholder) {
+  let _value = '';
+  let _options = [];
+  let _isOpen = false;
+  let _isDisabled = false;
+  const _changeListeners = [];
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'sr-cs';
+
+  const trigger = document.createElement('button');
+  trigger.type = 'button';
+  trigger.className = 'sr-cs-trigger';
+  trigger.innerHTML = `
+    <span class="sr-cs-label sr-cs-label--placeholder">${escapeHtml(placeholder)}</span>
+    <svg class="sr-cs-chevron" viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M7 10l5 5 5-5z"/></svg>
+  `;
+  const _labelEl = trigger.querySelector('.sr-cs-label');
+
+  const menu = document.createElement('div');
+  menu.className = 'sr-cs-menu';
+  menu.hidden = true;
+
+  wrapper.appendChild(trigger);
+  wrapper.appendChild(menu);
+
+  function _updateDisplay() {
+    const selected = _options.find(o => o.value === _value);
+    if (selected && _value !== '') {
+      _labelEl.textContent = selected.label;
+      _labelEl.classList.remove('sr-cs-label--placeholder');
+    } else {
+      const statusOpt = _options.find(o => o.value === '');
+      _labelEl.textContent = statusOpt ? statusOpt.label : placeholder;
+      _labelEl.classList.add('sr-cs-label--placeholder');
+    }
+  }
+
+  function _buildMenu() {
+    menu.innerHTML = '';
+    const selectableOpts = _options.filter(o => o.value !== '');
+    if (selectableOpts.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'sr-cs-empty';
+      const statusOpt = _options.find(o => o.value === '');
+      empty.textContent = statusOpt ? statusOpt.label : placeholder;
+      menu.appendChild(empty);
+      return;
+    }
+    selectableOpts.forEach(opt => {
+      const item = document.createElement('div');
+      item.className = 'sr-cs-option' + (opt.value === _value ? ' sr-cs-option--selected' : '');
+      item.textContent = opt.label;
+      item.tabIndex = -1;
+      item.addEventListener('click', () => {
+        _value = opt.value;
+        _updateDisplay();
+        _buildMenu();
+        _closeMenu();
+        _changeListeners.forEach(cb => cb());
+      });
+      item.addEventListener('keydown', e => {
+        const items = [...menu.querySelectorAll('.sr-cs-option')];
+        const idx = items.indexOf(item);
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); item.click(); }
+        if (e.key === 'ArrowDown') { e.preventDefault(); items[idx + 1]?.focus(); }
+        if (e.key === 'ArrowUp')   { e.preventDefault(); (idx === 0 ? trigger : items[idx - 1])?.focus(); }
+        if (e.key === 'Escape')    { e.preventDefault(); _closeMenu(); trigger.focus(); }
+      });
+      menu.appendChild(item);
+    });
+  }
+
+  function _openMenu() {
+    if (_isDisabled) return;
+    _isOpen = true;
+    menu.hidden = false;
+    wrapper.classList.add('sr-cs--open');
+    requestAnimationFrame(() => {
+      (menu.querySelector('.sr-cs-option--selected') || menu.querySelector('.sr-cs-option'))?.focus();
+    });
+  }
+
+  function _closeMenu() {
+    _isOpen = false;
+    menu.hidden = true;
+    wrapper.classList.remove('sr-cs--open');
+  }
+
+  trigger.addEventListener('click', () => _isOpen ? _closeMenu() : _openMenu());
+  trigger.addEventListener('keydown', e => {
+    if (['ArrowDown', 'Enter', ' '].includes(e.key)) { e.preventDefault(); _openMenu(); }
+  });
+
+  const _outsideHandler = e => { if (_isOpen && !wrapper.contains(e.target)) _closeMenu(); };
+  document.addEventListener('click', _outsideHandler, true);
+
+  return {
+    el: wrapper,
+    get value() { return _value; },
+    set value(val) {
+      const opt = _options.find(o => o.value === val);
+      _value = opt ? val : '';
+      _updateDisplay();
+    },
+    get disabled() { return _isDisabled; },
+    set disabled(val) {
+      _isDisabled = !!val;
+      trigger.disabled = _isDisabled;
+      wrapper.classList.toggle('sr-cs--disabled', _isDisabled);
+    },
+    setOptions(html) {
+      const tmp = document.createElement('select');
+      tmp.innerHTML = html;
+      _options = [...tmp.options].map(o => ({ value: o.value, label: o.text }));
+      _value = '';
+      _updateDisplay();
+      _buildMenu();
+    },
+    addEventListener(event, cb) {
+      if (event === 'change') _changeListeners.push(cb);
+    },
+    destroy() {
+      document.removeEventListener('click', _outsideHandler, true);
+    },
+  };
+}
+
 // ── Initialization ────────────────────────────────────────────────────────────
+
+function buildEmptyStateHtml() {
+  return `
+    <div class="sr-empty-state">
+      <div class="sr-empty-illustration" aria-hidden="true">
+        <div class="sr-ei-track">
+          <div class="sr-ei-row">
+            <div class="sr-ei-connector">
+              <div class="sr-ei-dot sr-ei-dot--prompt"></div>
+              <div class="sr-ei-line"></div>
+            </div>
+            <div class="sr-ei-card">
+              <div class="sr-ei-card-icon sr-ei-icon--prompt"></div>
+              <div class="sr-ei-card-bars">
+                <div class="sr-ei-bar sr-ei-bar--60"></div>
+                <div class="sr-ei-bar sr-ei-bar--40"></div>
+              </div>
+            </div>
+          </div>
+          <div class="sr-ei-row">
+            <div class="sr-ei-connector">
+              <div class="sr-ei-dot sr-ei-dot--file"></div>
+              <div class="sr-ei-line"></div>
+            </div>
+            <div class="sr-ei-card">
+              <div class="sr-ei-card-icon sr-ei-icon--file"></div>
+              <div class="sr-ei-card-bars">
+                <div class="sr-ei-bar sr-ei-bar--45"></div>
+                <div class="sr-ei-bar sr-ei-bar--70"></div>
+              </div>
+            </div>
+          </div>
+          <div class="sr-ei-row">
+            <div class="sr-ei-connector">
+              <div class="sr-ei-dot sr-ei-dot--terminal"></div>
+              <div class="sr-ei-line"></div>
+            </div>
+            <div class="sr-ei-card">
+              <div class="sr-ei-card-icon sr-ei-icon--terminal"></div>
+              <div class="sr-ei-card-bars">
+                <div class="sr-ei-bar sr-ei-bar--75"></div>
+                <div class="sr-ei-bar sr-ei-bar--50"></div>
+              </div>
+            </div>
+          </div>
+          <div class="sr-ei-row">
+            <div class="sr-ei-connector">
+              <div class="sr-ei-dot sr-ei-dot--response"></div>
+            </div>
+            <div class="sr-ei-card">
+              <div class="sr-ei-card-icon sr-ei-icon--response"></div>
+              <div class="sr-ei-card-bars">
+                <div class="sr-ei-bar sr-ei-bar--55"></div>
+                <div class="sr-ei-bar sr-ei-bar--35"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="sr-empty-content">
+        <div class="sr-empty-title">${t('sessionReplay.title')}</div>
+        <div class="sr-empty-desc">${t('sessionReplay.emptyDesc')}</div>
+        <div class="sr-empty-steps">
+          <div class="sr-empty-step">
+            <div class="sr-empty-step-num">1</div>
+            <div class="sr-empty-step-label">${t('sessionReplay.emptyStepProject')}</div>
+          </div>
+          <div class="sr-empty-step-sep">›</div>
+          <div class="sr-empty-step">
+            <div class="sr-empty-step-num">2</div>
+            <div class="sr-empty-step-label">${t('sessionReplay.emptyStepSession')}</div>
+          </div>
+          <div class="sr-empty-step-sep">›</div>
+          <div class="sr-empty-step">
+            <div class="sr-empty-step-num">3</div>
+            <div class="sr-empty-step-label">${t('sessionReplay.load')}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
 
 function buildHtml() {
   return `
@@ -601,18 +884,14 @@ function buildHtml() {
           <span>${t('sessionReplay.title')}</span>
         </div>
         <div class="sr-controls">
-          <select class="sr-select" id="sr-project-select">
-            <option value="">${t('sessionReplay.selectProject')}</option>
-          </select>
-          <select class="sr-select" id="sr-session-select" disabled>
-            <option value="">${t('sessionReplay.selectSession')}</option>
-          </select>
+          <div class="sr-cs-container" id="sr-project-select-wrap"></div>
+          <div class="sr-cs-container" id="sr-session-select-wrap"></div>
           <button class="sr-load-btn" id="sr-load-btn" disabled>${t('sessionReplay.load')}</button>
         </div>
       </div>
       <div class="sr-summary" id="sr-summary"></div>
       <div class="sr-timeline" id="sr-timeline">
-        <div class="sr-empty">${t('sessionReplay.selectToStart')}</div>
+        ${buildEmptyStateHtml()}
       </div>
     </div>
   `;
@@ -623,19 +902,28 @@ function init(containerEl, opts = {}) {
   projectsState = opts.projectsState || null;
   container.innerHTML = buildHtml();
 
-  // Bind DOM refs
-  projectSelect = container.querySelector('#sr-project-select');
-  sessionSelect = container.querySelector('#sr-session-select');
+  // Bind basic DOM refs
   loadBtn = container.querySelector('#sr-load-btn');
   summaryBar = container.querySelector('#sr-summary');
   timeline = container.querySelector('#sr-timeline');
+
+  // Create and inject custom select widgets
+  const projWidget = makeCustomSelect(t('sessionReplay.selectProject'));
+  const sessWidget = makeCustomSelect(t('sessionReplay.selectSession'));
+  sessWidget.disabled = true;
+  container.querySelector('#sr-project-select-wrap').appendChild(projWidget.el);
+  container.querySelector('#sr-session-select-wrap').appendChild(sessWidget.el);
+  projectSelect = projWidget;
+  sessionSelect = sessWidget;
 
   // Populate project list
   if (projectsState) {
     const state = projectsState.get();
     const projects = state.projects || [];
-    projectSelect.innerHTML = `<option value="">${t('sessionReplay.selectProject')}</option>` +
-      projects.map(p => `<option value="${escapeHtml(p.path)}">${escapeHtml(p.name || p.path)}</option>`).join('');
+    projectSelect.setOptions(
+      `<option value="">${t('sessionReplay.selectProject')}</option>` +
+      projects.map(p => `<option value="${escapeHtml(p.path)}">${escapeHtml(p.name || p.path)}</option>`).join('')
+    );
 
     // Default to open project
     const openedId = opts.openedProjectId || state.openedProjectId;
@@ -651,10 +939,10 @@ function init(containerEl, opts = {}) {
   // Event listeners
   projectSelect.addEventListener('change', () => {
     const path = projectSelect.value;
-    sessionSelect.innerHTML = `<option value="">${t('sessionReplay.selectSession')}</option>`;
+    sessionSelect.setOptions(`<option value="">${t('sessionReplay.selectSession')}</option>`);
     sessionSelect.disabled = true;
     loadBtn.disabled = true;
-    timeline.innerHTML = `<div class="sr-empty">${t('sessionReplay.selectToStart')}</div>`;
+    timeline.innerHTML = buildEmptyStateHtml();
     summaryBar.innerHTML = '';
     currentSteps = [];
     if (path) loadSessions(path);
@@ -668,10 +956,11 @@ function init(containerEl, opts = {}) {
 }
 
 function cleanup() {
-  // Reset state when leaving the tab
   currentSteps = [];
   currentSummary = {};
   selectedStepIndex = -1;
+  if (projectSelect?.destroy) projectSelect.destroy();
+  if (sessionSelect?.destroy) sessionSelect.destroy();
 }
 
 module.exports = { init, cleanup };
