@@ -90,7 +90,7 @@ jobs:
       # Add one block per locale. Copy-paste and adjust the `lang` variable.
 
       - name: Update badge — French (fr)
-        if: ${{ steps.parse.outputs.message_fr != '' && secrets.GIST_SECRET != '' && secrets.GIST_ID != '' }}
+        if: steps.parse.outputs.message_fr != ''
         uses: schneegans/dynamic-badges-action@e9a478b16159b4d31420099ba146cdc50f134483
         with:
           auth: ${{ secrets.GIST_SECRET }}
