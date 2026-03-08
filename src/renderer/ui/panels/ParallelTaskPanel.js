@@ -15,7 +15,6 @@ const {
   getRunById,
   addRun,
   removeRun,
-  setHistory,
   initParallelListeners,
 } = require('../../state/parallelTask.state');
 
@@ -454,7 +453,11 @@ function _updateBoard() {
     let card = document.getElementById(`pt-run-card-${run.id}`);
     if (!card) {
       card = _createRunCard(run);
-      listEl.insertBefore(card, listEl.firstChild);
+      if (run._fromHistory) {
+        listEl.appendChild(card); // history runs go to bottom
+      } else {
+        listEl.insertBefore(card, listEl.firstChild); // active runs go to top
+      }
     }
     _updateRunCard(run);
   });
@@ -968,22 +971,29 @@ async function _loadHistory() {
     ? ctx.projectsState?.get()?.projects?.find(p => p.id === ctx.projectsState?.get()?.openedProjectId)?.path
     : null;
   const result = await ctx.api.parallel.getHistory({ projectPath });
-  if (result.success) {
-    setHistory(result.runs || []);
-    // Generate short names for history runs that don't have one yet
-    if (ctx.api?.chat?.generateTabName) {
-      (result.runs || []).forEach(run => {
-        if (!_runNames.has(run.id) && run.goal) {
-          ctx.api.chat.generateTabName({ userMessage: run.goal }).then(res => {
-            if (res?.success && res.name) {
-              _runNames.set(run.id, res.name);
-              const nameEl = document.querySelector(`#pt-run-card-${run.id} .pt-run-goal-text`);
-              if (nameEl) nameEl.textContent = res.name;
-            }
-          }).catch(() => {});
-        }
-      });
+  if (!result.success) return;
+
+  const historyRuns = result.runs || [];
+  historyRuns.forEach(run => {
+    // Only restore runs that have tasks to show, skip if already active
+    if (!getRunById(run.id) && Array.isArray(run.tasks) && run.tasks.length > 0) {
+      addRun({ ...run, _fromHistory: true });
     }
+  });
+
+  // Generate short names
+  if (ctx.api?.chat?.generateTabName) {
+    historyRuns.forEach(run => {
+      if (!_runNames.has(run.id) && run.goal) {
+        ctx.api.chat.generateTabName({ userMessage: run.goal }).then(res => {
+          if (res?.success && res.name) {
+            _runNames.set(run.id, res.name);
+            const nameEl = document.querySelector(`#pt-run-card-${run.id} .pt-run-goal-text`);
+            if (nameEl) nameEl.textContent = res.name;
+          }
+        }).catch(() => {});
+      }
+    });
   }
 }
 

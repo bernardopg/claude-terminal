@@ -20,6 +20,8 @@ class ParallelTaskService {
   constructor() {
     /** @type {Map<string, { abortControllers: Map<string, AbortController> }>} */
     this._active = new Map();
+    /** @type {Map<string, { projectPath, mainBranch, goal, model, effort, startedAt, tasks: Map }>} */
+    this._runStates = new Map();
     this._mainWindow = null;
   }
 
@@ -35,7 +37,9 @@ class ParallelTaskService {
   async startRun({ projectPath, mainBranch, goal, maxTasks = 4, model, effort }) {
 
     const runId = `ptask-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+    const startedAt = parseInt(runId.split('-')[1], 10);
     this._active.set(runId, { abortControllers: new Map() });
+    this._runStates.set(runId, { projectPath, mainBranch, goal, model, effort, startedAt, tasks: new Map() });
 
     // Fire and forget — errors are caught internally
     this._executeRun({ runId, projectPath, mainBranch, goal, maxTasks, model, effort })
@@ -43,6 +47,12 @@ class ParallelTaskService {
         console.error('[ParallelTaskService] Unexpected run error:', err);
         this._send('parallel-run-status', { runId, phase: 'failed', error: err.message });
         this._active.delete(runId);
+        const state = this._runStates.get(runId);
+        if (state && state.tasks.size > 0) {
+          this._appendHistory({ id: runId, projectPath: state.projectPath, mainBranch: state.mainBranch, goal: state.goal, phase: 'failed', startedAt: state.startedAt, endedAt: Date.now(), error: err.message });
+        } else {
+          this._runStates.delete(runId);
+        }
       });
 
     return { success: true, runId };
@@ -62,6 +72,12 @@ class ParallelTaskService {
     }
     this._active.delete(runId);
     this._send('parallel-run-status', { runId, phase: 'cancelled' });
+    const state = this._runStates.get(runId);
+    if (state && state.tasks.size > 0) {
+      this._appendHistory({ id: runId, projectPath: state.projectPath, mainBranch: state.mainBranch, goal: state.goal, phase: 'cancelled', startedAt: state.startedAt, endedAt: Date.now() });
+    } else {
+      this._runStates.delete(runId);
+    }
     return { success: true };
   }
 
@@ -158,6 +174,7 @@ class ParallelTaskService {
       } catch (err) {
         this._send('parallel-run-status', { runId, phase: 'failed', error: `Decomposition failed: ${err.message}` });
         this._active.delete(runId);
+        this._runStates.delete(runId); // no tasks to persist
         return;
       }
 
@@ -197,6 +214,7 @@ class ParallelTaskService {
     } catch (mkdirErr) {
       this._send('parallel-run-status', { runId, phase: 'failed', error: `Failed to create worktree directory: ${mkdirErr.message}` });
       this._active.delete(runId);
+      this._runStates.delete(runId); // no tasks to persist
       return;
     }
 
@@ -258,16 +276,14 @@ class ParallelTaskService {
     this._send('parallel-run-status', { runId, phase: 'done', endedAt });
     this._active.delete(runId);
 
-    // Persist lightweight summary
     this._appendHistory({
       id: runId,
       projectPath,
       mainBranch,
       goal,
       phase: 'done',
-      taskCount: tasks.length,
       startedAt: parseInt(runId.split('-')[1], 10),
-      endedAt
+      endedAt,
     });
   }
 
@@ -473,10 +489,39 @@ Field guide:
     if (this._mainWindow && !this._mainWindow.isDestroyed()) {
       this._mainWindow.webContents.send(channel, data);
     }
+    // Track task state for persistence on run end
+    if (channel === 'parallel-task-update') {
+      const { runId, taskId, ...rest } = data;
+      const state = this._runStates.get(runId);
+      if (state) {
+        const existing = state.tasks.get(taskId) || {};
+        state.tasks.set(taskId, { ...existing, id: taskId, ...rest });
+      }
+    }
   }
 
-  _appendHistory(summary) {
+  _appendHistory({ id: runId, projectPath, mainBranch, goal, phase, startedAt, endedAt, error }) {
     try {
+      const state = this._runStates.get(runId);
+      // Persist tasks without the output field (too large, not useful after the fact)
+      const tasks = state
+        ? [...state.tasks.values()].map(({ output, ...t }) => t)
+        : [];
+
+      const entry = {
+        id: runId,
+        projectPath,
+        mainBranch,
+        goal,
+        model: state?.model || null,
+        effort: state?.effort || null,
+        phase,
+        startedAt,
+        endedAt,
+        error: error || null,
+        tasks,
+      };
+
       const dir = path.dirname(HISTORY_FILE);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
@@ -485,9 +530,22 @@ Field guide:
         try { all = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8')); } catch (_) {}
       }
       if (!Array.isArray(all)) all = [];
-      all.unshift(summary);
+
+      // Replace existing entry if same runId, otherwise prepend
+      const existingIdx = all.findIndex(r => r.id === runId);
+      if (existingIdx >= 0) {
+        all[existingIdx] = entry;
+      } else {
+        all.unshift(entry);
+      }
       all = all.slice(0, MAX_HISTORY);
-      fs.writeFileSync(HISTORY_FILE, JSON.stringify(all, null, 2), 'utf8');
+
+      // Atomic write
+      const tmp = HISTORY_FILE + '.tmp';
+      fs.writeFileSync(tmp, JSON.stringify(all, null, 2), 'utf8');
+      fs.renameSync(tmp, HISTORY_FILE);
+
+      this._runStates.delete(runId);
     } catch (err) {
       console.error('[ParallelTaskService] Failed to save history:', err.message);
     }
