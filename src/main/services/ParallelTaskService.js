@@ -271,7 +271,32 @@ class ParallelTaskService {
   async _decomposeTasks({ projectPath, goal, maxTasks, model, effort, feedback }) {
     const prompt = this._buildDecomposePrompt(goal, maxTasks, feedback);
 
-    // Run decomposition — parse JSON from the text output (more reliable than structured output)
+    // JSON schema for structured output — guarantees valid, parseable JSON without regex hacks
+    const outputFormat = {
+      type: 'json_schema',
+      schema: {
+        type: 'object',
+        properties: {
+          tasks: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                description: { type: 'string' },
+                branchSuffix: { type: 'string' },
+                prompt: { type: 'string' },
+              },
+              required: ['title', 'description', 'branchSuffix', 'prompt'],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ['tasks'],
+        additionalProperties: false,
+      },
+    };
+
     const result = await chatService.runSinglePrompt({
       cwd: projectPath,
       prompt,
@@ -279,17 +304,23 @@ class ParallelTaskService {
       effort: effort || 'high',
       maxTurns: 10,
       permissionMode: 'bypassPermissions',
+      outputFormat,
     });
 
-    if (!result.success && !result.output) {
+    if (!result.success && !result.output && !result.tasks) {
       throw new Error(result.error || 'Decomposition failed');
     }
 
-    // Extract JSON from the output — Claude wraps it in a markdown code block or outputs raw JSON
-    const output = result.output || '';
-    const taskList = this._parseTasksFromOutput(output);
+    // Structured output: result.tasks is populated directly via Object.assign(result, structured_output)
+    // Fallback to text parsing for older SDK versions or if structured output wasn't returned
+    let taskList = result.tasks || null;
+    if (!taskList) {
+      const output = result.output || '';
+      taskList = this._parseTasksFromOutput(output);
+    }
+
     if (!Array.isArray(taskList) || taskList.length === 0) {
-      throw new Error(`Could not parse task list from Claude output. Raw output: ${output.slice(0, 500)}`);
+      throw new Error(`Could not parse task list from Claude output. Raw output: ${(result.output || '').slice(0, 500)}`);
     }
 
     // Validate and cap at maxTasks
@@ -308,8 +339,8 @@ class ParallelTaskService {
   }
 
   /**
-   * Parse a tasks array from Claude's text output.
-   * Handles: raw JSON, JSON in ```json code block, JSON in ``` block.
+   * Fallback: parse a tasks array from Claude's text output.
+   * Used when structured output is unavailable.
    */
   _parseTasksFromOutput(output) {
     if (!output) return null;
@@ -409,23 +440,13 @@ Rules:
 - title must be concise (max 50 chars)
 - description is one sentence describing the outcome
 
-IMPORTANT: Do not use any tools or read any files. Based solely on the feature description above, respond immediately with a JSON array.
+IMPORTANT: Do not use any tools or read any files. Based solely on the feature description above, respond immediately.
 
-Return ONLY a JSON array of task objects, no other text. Each object must have these fields:
-- title: string (max 50 chars)
-- description: string (one sentence)
-- branchSuffix: string (lowercase-kebab-case, max 30 chars)
-- prompt: string (self-contained implementation prompt for Claude Code)
-
-Example format:
-[
-  {
-    "title": "Add JWT middleware",
-    "description": "Create JWT validation middleware for Express routes.",
-    "branchSuffix": "add-jwt-middleware",
-    "prompt": "Create a JWT authentication middleware in src/middleware/auth.js that validates Bearer tokens using the jsonwebtoken package. Export it as a default function. Do not modify any other files."
-  }
-]`;
+Field guide:
+- title: task name, max 50 chars
+- description: one sentence describing the outcome
+- branchSuffix: lowercase-kebab-case, max 30 chars
+- prompt: self-contained implementation prompt for Claude Code (include all context needed)`;
   }
 
   _sanitizeBranchSuffix(raw) {
