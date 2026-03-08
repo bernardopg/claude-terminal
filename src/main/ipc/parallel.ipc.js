@@ -61,6 +61,16 @@ function registerParallelHandlers(mainWindow) {
     }
   });
 
+  // Remove a run from disk history
+  ipcMain.handle('parallel-history-remove', async (_e, { runId }) => {
+    try {
+      return parallelTaskService.removeFromHistory(runId);
+    } catch (err) {
+      console.error('[parallel-history-remove]', err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
   // Load run history for a project
   ipcMain.handle('parallel-history', async (_e, { projectPath } = {}) => {
     try {

@@ -132,6 +132,7 @@ function _wireEvents() {
         }
         if (action === 'remove') {
           removeRun(runId);
+          ctx.api.parallel.removeHistory({ runId }).catch(() => {});
           return;
         }
       }

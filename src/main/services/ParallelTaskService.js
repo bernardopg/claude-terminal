@@ -157,6 +157,24 @@ class ParallelTaskService {
         });
       }
 
+      // Remove from disk history
+      this.removeFromHistory(runId);
+
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+
+  removeFromHistory(runId) {
+    try {
+      if (!fs.existsSync(HISTORY_FILE)) return { success: true };
+      let all = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
+      if (!Array.isArray(all)) return { success: true };
+      all = all.filter(r => r.id !== runId);
+      const tmp = HISTORY_FILE + '.tmp';
+      fs.writeFileSync(tmp, JSON.stringify(all, null, 2), 'utf8');
+      fs.renameSync(tmp, HISTORY_FILE);
       return { success: true };
     } catch (err) {
       return { success: false, error: err.message };
