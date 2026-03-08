@@ -1025,7 +1025,7 @@ class ChatService {
    * @param {Object} opts - { cwd, prompt, model, effort, maxTurns, permissionMode, outputFormat, skills, onMessage, signal }
    * @returns {Promise<{ output: string, success: boolean, ... }>}
    */
-  async runSinglePrompt({ cwd, prompt, model, effort, maxTurns, permissionMode, outputFormat, skills, onMessage, onOutput, signal }) {
+  async runSinglePrompt({ cwd, prompt, model, effort, maxTurns, permissionMode, outputFormat, skills, systemPrompt, disallowedTools, onMessage, onOutput, signal }) {
     const sdk = await loadSDK();
     const runtime = resolveRuntime();
 
@@ -1050,7 +1050,7 @@ class ChatService {
         executable: runtime.executable,
         env: runtime.env,
         pathToClaudeCodeExecutable: getSdkCliPath(),
-        systemPrompt: { type: 'preset', preset: 'claude_code' },
+        systemPrompt: systemPrompt || { type: 'preset', preset: 'claude_code' },
         settingSources: ['user', 'project', 'local'],
       };
 
@@ -1058,6 +1058,7 @@ class ChatService {
       if (effort) options.effort = effort;
       if (outputFormat) options.outputFormat = outputFormat;
       if (skills?.length) options.skills = skills;
+      if (disallowedTools?.length) options.disallowedTools = disallowedTools;
 
       const queryStream = sdk.query({ prompt, options });
 

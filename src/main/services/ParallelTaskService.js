@@ -463,6 +463,17 @@ class ParallelTaskService {
         effort: effort || 'high',
         maxTurns: 50,
         permissionMode: 'bypassPermissions',
+        systemPrompt: [
+          'You are an autonomous coding agent working on a single isolated sub-task inside a git worktree.',
+          'RULES:',
+          '- Implement the task completely and autonomously. Do NOT ask questions or request clarification.',
+          '- Do NOT use AskUserQuestion, EnterPlanMode, or ExitPlanMode tools — they are unavailable.',
+          '- Make all necessary decisions yourself using best judgment.',
+          '- Write clean, working code. Commit your changes when done.',
+          '- If something is ambiguous, pick the most reasonable approach and proceed.',
+          '- Be concise in your output — focus on implementation, not explanation.',
+        ].join('\n'),
+        disallowedTools: ['AskUserQuestion', 'EnterPlanMode', 'ExitPlanMode'],
         signal: ac.signal,
         onOutput: (chunk) => {
           this._send('parallel-task-output', { runId, taskId: task.id, chunk });
