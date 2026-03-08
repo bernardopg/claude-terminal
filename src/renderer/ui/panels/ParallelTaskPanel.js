@@ -668,16 +668,11 @@ function _updateRunKanban(run) {
       card.dataset.taskId = task.id;
       kanban.appendChild(card);
       card.innerHTML = _buildTaskCard(task);
-      // Wire task buttons directly (more reliable than delegation through kanban)
-      card.querySelector('.parallel-btn-diff')?.addEventListener('click', () => {
-        _handleViewDiff(run.id, task.id);
-      });
-      card.querySelector('.parallel-btn-terminal')?.addEventListener('click', () => {
-        if (task.worktreePath && ctx.openTerminalAtPath) ctx.openTerminalAtPath(task.worktreePath);
-      });
     } else {
       _patchTaskCard(card, task);
     }
+    // Wire buttons (dedup via _wired flag — safe to call on every update)
+    _wireTaskCardButtons(card, run, task);
   });
 
   kanban.querySelectorAll('[data-task-id]').forEach(card => {
@@ -686,6 +681,22 @@ function _updateRunKanban(run) {
 }
 
 // ─── Task card ────────────────────────────────────────────────────────────────
+
+/** Wire diff/terminal buttons with dedup flag to prevent duplicate listeners. */
+function _wireTaskCardButtons(card, run, task) {
+  const diffBtn = card.querySelector('.parallel-btn-diff');
+  if (diffBtn && !diffBtn._wired) {
+    diffBtn._wired = true;
+    diffBtn.addEventListener('click', () => _handleViewDiff(run.id, task.id));
+  }
+  const termBtn = card.querySelector('.parallel-btn-terminal');
+  if (termBtn && !termBtn._wired) {
+    termBtn._wired = true;
+    termBtn.addEventListener('click', () => {
+      if (task.worktreePath && ctx.openTerminalAtPath) ctx.openTerminalAtPath(task.worktreePath);
+    });
+  }
+}
 
 function _buildTaskCard(task) {
   const outputLines = _formatOutput(task.output);
