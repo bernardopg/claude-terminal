@@ -886,19 +886,31 @@ function _updateRunMerge(run) {
 
 async function _handleViewDiff(runId, taskId) {
   const run = getRunById(runId);
-  if (!run) return;
+  if (!run) { _showToast('Run not found', 'error'); return; }
 
   const task = (run.tasks || []).find(t => t.id === taskId);
-  if (!task || !task.branch) return;
+  if (!task) { _showToast('Task not found', 'error'); return; }
+  if (!task.branch) { _showToast('No branch associated with this task', 'error'); return; }
 
-  const result = await ctx.api.git.worktreeDiff({
-    projectPath: run.projectPath,
-    branch1: run.mainBranch,
-    branch2: task.branch
-  });
+  let result;
+  try {
+    result = await ctx.api.git.worktreeDiff({
+      projectPath: run.projectPath,
+      branch1: run.mainBranch,
+      branch2: task.branch
+    });
+  } catch (err) {
+    _showToast(err.message || 'Diff failed', 'error');
+    return;
+  }
 
-  if (!result.success || !result.diff) {
+  if (!result.success) {
     _showToast(result.error || t('parallel.errors.noDiff'), 'error');
+    return;
+  }
+
+  if (!result.diff) {
+    _showToast('No changes found between branches', 'warning');
     return;
   }
 

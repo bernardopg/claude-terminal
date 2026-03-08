@@ -277,8 +277,12 @@ function registerGitHandlers() {
 
   // Diff between worktree branches
   ipcMain.handle('git-worktree-diff', async (event, { projectPath, branch1, branch2, filePath }) => {
-    const diff = await diffWorktreeBranches(projectPath, branch1, branch2, filePath);
-    return { success: true, diff };
+    try {
+      const diff = await diffWorktreeBranches(projectPath, branch1, branch2, filePath);
+      return { success: true, diff };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
   });
 }
 
