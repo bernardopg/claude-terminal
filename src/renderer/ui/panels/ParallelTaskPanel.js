@@ -563,14 +563,14 @@ function _updateRunHeader(run) {
   const tasks = run.tasks || [];
   const done = tasks.filter(t => t.status === 'done').length;
   const total = tasks.length;
-  const isActive = ['decomposing', 'reviewing', 'creating-worktrees', 'running'].includes(run.phase);
-  const isFinished = ['done', 'failed', 'cancelled'].includes(run.phase);
+  const isActive = ['decomposing', 'reviewing', 'creating-worktrees', 'running', 'merging'].includes(run.phase);
+  const isFinished = ['done', 'failed', 'cancelled', 'merged'].includes(run.phase);
 
   const dot = document.getElementById(`pt-phasedot-${run.id}`);
   if (dot) {
     dot.className = 'pt-run-phase-dot';
     if (isActive) dot.classList.add('running');
-    else if (run.phase === 'done') dot.classList.add('done');
+    else if (run.phase === 'done' || run.phase === 'merged') dot.classList.add('done');
     else if (isFinished) dot.classList.add('failed');
   }
 
@@ -1162,9 +1162,7 @@ function _renderDiff(diff) {
       if (m) { oldLine = parseInt(m[1], 10); }
       const m2 = line.match(/\+(\d+)/);
       if (m2) { newLine = parseInt(m2[1], 10); }
-      // Extract hunk label (function name etc.)
-      const hunkLabel = line.replace(/@@ .+? @@/, '').trim();
-      rows.push(`<div class="diff-row diff-hunk"><span class="diff-ln"></span><span class="diff-ln"></span><span class="diff-gutter"></span><span class="diff-text">${escapeHtml(line)}${hunkLabel ? '' : ''}</span></div>`);
+      rows.push(`<div class="diff-row diff-hunk"><span class="diff-ln"></span><span class="diff-ln"></span><span class="diff-gutter"></span><span class="diff-text">${escapeHtml(line)}</span></div>`);
       continue;
     }
 

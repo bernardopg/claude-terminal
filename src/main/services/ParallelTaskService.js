@@ -539,15 +539,14 @@ class ParallelTaskService {
         return { success: false, error: coResult.error };
       }
 
-      // Create the unified branch
+      // Delete existing merge branch if any (stale from previous attempt)
+      await execGit(projectPath, ['branch', '-D', mergeBranch], 10000).catch(() => {});
+
+      // Create the unified branch from mainBranch
       const brResult = await createBranch(projectPath, mergeBranch);
       if (!brResult.success) {
-        // Branch may already exist — try checkout instead
-        const co2 = await checkoutBranch(projectPath, mergeBranch);
-        if (!co2.success) {
-          this._send('parallel-run-status', { runId, phase: 'done', error: `Failed to create branch ${mergeBranch}` });
-          return { success: false, error: `Failed to create branch: ${brResult.error}` };
-        }
+        this._send('parallel-run-status', { runId, phase: 'done', error: `Failed to create branch ${mergeBranch}` });
+        return { success: false, error: `Failed to create branch: ${brResult.error}` };
       }
 
       const merged = [];
