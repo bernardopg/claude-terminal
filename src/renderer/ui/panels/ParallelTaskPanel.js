@@ -958,9 +958,11 @@ async function _handleViewDiff(runId, taskId) {
   const fileListHtml = files.map((f, i) => {
     const basename = f.path.split('/').pop();
     const dirname = f.path.includes('/') ? f.path.slice(0, f.path.lastIndexOf('/')) : '';
+    const ext = basename.includes('.') ? basename.split('.').pop().toLowerCase() : '';
+    const icon = _diffFileIcon(ext);
     return `
       <div class="pd-file-item ${i === 0 ? 'is-active' : ''}" data-file-idx="${i}" data-file-path="${escapeHtml(f.path)}">
-        <span class="pd-file-badge pd-badge-${statusColors[f.status] || 'mod'}">${f.status}</span>
+        <span class="pd-file-icon">${icon}</span>
         <div class="pd-file-name-wrap">
           <span class="pd-file-basename">${escapeHtml(basename)}</span>
           ${dirname ? `<span class="pd-file-dirname">${escapeHtml(dirname)}</span>` : ''}
@@ -969,6 +971,7 @@ async function _handleViewDiff(runId, taskId) {
           ${f.additions ? `<span class="pd-stat-add">+${f.additions}</span>` : ''}
           ${f.deletions ? `<span class="pd-stat-del">-${f.deletions}</span>` : ''}
         </span>
+        <span class="pd-file-badge pd-badge-${statusColors[f.status] || 'mod'}">${f.status}</span>
       </div>`;
   }).join('');
 
@@ -985,8 +988,11 @@ async function _handleViewDiff(runId, taskId) {
         <div class="pd-files-list">${fileListHtml}</div>
       </div>
       <div class="pd-content">
-        <div class="pd-content-header" id="pd-content-header">${escapeHtml(files[0].path)}</div>
-        <pre class="pd-diff-view" id="pd-diff-view"><span class="pd-loading">Loading...</span></pre>
+        <div class="pd-content-header" id="pd-content-header">
+          <span class="pd-content-path">${escapeHtml(files[0].path)}</span>
+          <span class="pd-content-badge" id="pd-content-badge"></span>
+        </div>
+        <div class="pd-diff-view" id="pd-diff-view"><span class="pd-loading">Loading...</span></div>
       </div>
     </div>`;
 
@@ -1004,24 +1010,31 @@ async function _handleViewDiff(runId, taskId) {
       if (!item) return;
       filesContainer.querySelectorAll('.pd-file-item').forEach(el => el.classList.remove('is-active'));
       item.classList.add('is-active');
-      _loadFileDiff(diffParams, item.dataset.filePath);
+      const f = files[parseInt(item.dataset.fileIdx, 10)];
+      _loadFileDiff(diffParams, f);
     });
   }
 
   // Auto-load first file
-  _loadFileDiff(diffParams, files[0].path);
+  _loadFileDiff(diffParams, files[0]);
 }
 
-async function _loadFileDiff(diffParams, filePath) {
-  const header = document.getElementById('pd-content-header');
+async function _loadFileDiff(diffParams, file) {
+  const pathEl = document.querySelector('.pd-content-path');
+  const badgeEl = document.getElementById('pd-content-badge');
   const viewer = document.getElementById('pd-diff-view');
   if (!viewer) return;
 
-  if (header) header.textContent = filePath;
+  if (pathEl) pathEl.textContent = file.path;
+  if (badgeEl) {
+    const adds = file.additions || 0;
+    const dels = file.deletions || 0;
+    badgeEl.innerHTML = `${adds ? `<span class="pd-stat-add">+${adds}</span>` : ''}${dels ? `<span class="pd-stat-del">-${dels}</span>` : ''}`;
+  }
   viewer.innerHTML = '<span class="pd-loading">Loading...</span>';
 
   try {
-    const result = await ctx.api.git.worktreeDiff({ ...diffParams, filePath });
+    const result = await ctx.api.git.worktreeDiff({ ...diffParams, filePath: file.path });
     if (!result.success || !result.diff) {
       viewer.innerHTML = '<span class="pd-empty">No changes</span>';
       return;
@@ -1033,15 +1046,57 @@ async function _loadFileDiff(diffParams, filePath) {
 }
 
 function _renderDiff(diff) {
-  return diff
-    .split('\n')
-    .map(line => {
-      if (line.startsWith('+') && !line.startsWith('+++')) return `<span class="diff-add">${escapeHtml(line)}</span>`;
-      if (line.startsWith('-') && !line.startsWith('---')) return `<span class="diff-del">${escapeHtml(line)}</span>`;
-      if (line.startsWith('@@')) return `<span class="diff-hunk">${escapeHtml(line)}</span>`;
-      return escapeHtml(line);
-    })
-    .join('\n');
+  const lines = diff.split('\n');
+  let oldLine = 0, newLine = 0;
+  const rows = [];
+
+  for (const line of lines) {
+    // Skip file headers
+    if (line.startsWith('diff ') || line.startsWith('index ') || line.startsWith('---') || line.startsWith('+++')) continue;
+
+    if (line.startsWith('@@')) {
+      const m = line.match(/@@ -(\d+)/);
+      if (m) { oldLine = parseInt(m[1], 10); }
+      const m2 = line.match(/\+(\d+)/);
+      if (m2) { newLine = parseInt(m2[1], 10); }
+      // Extract hunk label (function name etc.)
+      const hunkLabel = line.replace(/@@ .+? @@/, '').trim();
+      rows.push(`<div class="diff-row diff-hunk"><span class="diff-ln"></span><span class="diff-ln"></span><span class="diff-gutter"></span><span class="diff-text">${escapeHtml(line)}${hunkLabel ? '' : ''}</span></div>`);
+      continue;
+    }
+
+    if (line.startsWith('+')) {
+      rows.push(`<div class="diff-row diff-add"><span class="diff-ln"></span><span class="diff-ln">${newLine}</span><span class="diff-gutter">+</span><span class="diff-text">${escapeHtml(line.slice(1))}</span></div>`);
+      newLine++;
+    } else if (line.startsWith('-')) {
+      rows.push(`<div class="diff-row diff-del"><span class="diff-ln">${oldLine}</span><span class="diff-ln"></span><span class="diff-gutter">-</span><span class="diff-text">${escapeHtml(line.slice(1))}</span></div>`);
+      oldLine++;
+    } else {
+      // Context line (starts with space or is empty)
+      const text = line.startsWith(' ') ? line.slice(1) : line;
+      rows.push(`<div class="diff-row diff-ctx"><span class="diff-ln">${oldLine}</span><span class="diff-ln">${newLine}</span><span class="diff-gutter"></span><span class="diff-text">${escapeHtml(text)}</span></div>`);
+      oldLine++;
+      newLine++;
+    }
+  }
+
+  return `<div class="diff-table">${rows.join('')}</div>`;
+}
+
+function _diffFileIcon(ext) {
+  const icons = {
+    js: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 3h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5a2 2 0 012-2z" stroke="#f0db4f" stroke-width="1.5"/><text x="12" y="16" text-anchor="middle" fill="#f0db4f" font-size="8" font-weight="700">JS</text></svg>',
+    ts: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 3h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5a2 2 0 012-2z" stroke="#3178c6" stroke-width="1.5"/><text x="12" y="16" text-anchor="middle" fill="#3178c6" font-size="8" font-weight="700">TS</text></svg>',
+    tsx: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 3h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5a2 2 0 012-2z" stroke="#3178c6" stroke-width="1.5"/><text x="12" y="16" text-anchor="middle" fill="#3178c6" font-size="7" font-weight="700">TX</text></svg>',
+    jsx: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 3h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5a2 2 0 012-2z" stroke="#61dafb" stroke-width="1.5"/><text x="12" y="16" text-anchor="middle" fill="#61dafb" font-size="7" font-weight="700">JX</text></svg>',
+    css: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 3h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5a2 2 0 012-2z" stroke="#264de4" stroke-width="1.5"/><text x="12" y="16" text-anchor="middle" fill="#264de4" font-size="7" font-weight="700">CS</text></svg>',
+    json: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 3h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5a2 2 0 012-2z" stroke="#a8b1c2" stroke-width="1.5"/><text x="12" y="16" text-anchor="middle" fill="#a8b1c2" font-size="6" font-weight="700">{}</text></svg>',
+    html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 3h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5a2 2 0 012-2z" stroke="#e44d26" stroke-width="1.5"/><text x="12" y="16" text-anchor="middle" fill="#e44d26" font-size="6" font-weight="700">&lt;&gt;</text></svg>',
+    md: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 3h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5a2 2 0 012-2z" stroke="#888" stroke-width="1.5"/><text x="12" y="16" text-anchor="middle" fill="#888" font-size="7" font-weight="700">M</text></svg>',
+    py: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 3h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5a2 2 0 012-2z" stroke="#3776ab" stroke-width="1.5"/><text x="12" y="16" text-anchor="middle" fill="#3776ab" font-size="7" font-weight="700">PY</text></svg>',
+    lua: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 3h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5a2 2 0 012-2z" stroke="#000080" stroke-width="1.5"/><text x="12" y="16" text-anchor="middle" fill="#000080" font-size="6" font-weight="700">Lua</text></svg>',
+  };
+  return icons[ext] || '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

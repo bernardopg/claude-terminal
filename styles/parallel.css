@@ -1248,158 +1248,176 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Diff modal
+   Split-panel diff viewer (VS Code / GitHub style)
    ═══════════════════════════════════════════════════════════════════════════ */
 
-.parallel-diff-modal {
-  max-height: 65vh;
-  overflow: auto;
-  background: var(--bg-primary);
-  border-radius: var(--radius-sm);
-}
-
-.parallel-diff-modal .diff-view {
-  font-size: 0.72rem;
-  font-family: var(--pt-mono);
-  line-height: 1.6;
-  white-space: pre;
-  margin: 0;
-  padding: 12px 16px;
-  color: var(--text-muted);
-}
-
-.parallel-diff-modal .diff-add  { color: var(--pt-green); display: block; background: rgba(34,197,94,0.05); }
-.parallel-diff-modal .diff-del  { color: var(--pt-red);   display: block; background: rgba(239,68,68,0.05); }
-.parallel-diff-modal .diff-hunk { color: var(--pt-blue);  display: block; opacity: 0.7; }
-
-/* ── Split-panel diff viewer ────────────────────────────────────────────── */
-
 /* Widen the generic modal when split-panel is present */
-.modal:has(.pd-split) { width: 900px; max-width: 95vw; max-height: 85vh; }
+.modal:has(.pd-split) { width: 960px; max-width: 95vw; max-height: 88vh; }
+.modal:has(.pd-split) .modal-body { padding: 0; overflow: hidden; }
 
 .pd-split {
   display: flex;
-  height: 70vh;
-  min-height: 320px;
+  height: 72vh;
+  min-height: 340px;
   overflow: hidden;
-  border-radius: var(--radius);
-  border: 1px solid var(--border-color);
-  background: var(--bg-primary);
+  background: #0a0a0a;
 }
 
-/* ─ File list (left panel) ─ */
+/* ─── File list (left panel) ─────────────────────────────────────────── */
 
 .pd-files {
-  width: 280px;
-  min-width: 220px;
+  width: 260px;
+  min-width: 200px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--border-color);
-  background: var(--bg-secondary);
+  border-right: 1px solid rgba(255,255,255,0.06);
+  background: #111;
 }
 
 .pd-files-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border-color);
+  padding: 11px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
   font-size: var(--font-xs);
   color: var(--text-secondary);
   flex-shrink: 0;
+  background: #0f0f0f;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
-.pd-files-count { font-weight: 600; color: var(--text-primary); }
+.pd-files-count { font-weight: 700; color: var(--text-primary); font-size: var(--font-xs); }
 
-.pd-files-total { display: flex; gap: 8px; }
+.pd-files-total {
+  display: flex;
+  gap: 6px;
+  font-size: var(--font-2xs);
+  font-family: var(--pt-mono);
+}
 
 .pd-files-list {
   flex: 1;
   overflow-y: auto;
-  padding: 4px 0;
+  padding: 6px 0;
 }
 
-/* ─ File item row ─ */
+/* ─── File item row ──────────────────────────────────────────────────── */
 
 .pd-file-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 14px;
+  padding: 7px 12px 7px 16px;
   cursor: pointer;
-  transition: background 0.12s;
-  border-left: 2px solid transparent;
+  transition: background 0.1s ease;
+  position: relative;
 }
 
-.pd-file-item:hover { background: var(--bg-hover); }
+.pd-file-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  border-radius: 1px;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.pd-file-item:hover { background: rgba(255,255,255,0.04); }
 
 .pd-file-item.is-active {
-  background: var(--bg-active);
-  border-left-color: var(--accent);
+  background: rgba(255,255,255,0.06);
 }
 
-/* ─ Badge (A/M/D) ─ */
+.pd-file-item.is-active::before {
+  background: var(--accent);
+}
+
+/* ─── File icon ──────────────────────────────────────────────────────── */
+
+.pd-file-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.pd-file-icon svg { width: 14px; height: 14px; }
+
+/* ─── Badge (A/M/D/R) ───────────────────────────────────────────────── */
 
 .pd-file-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 4px;
-  font-size: 0.6rem;
-  font-weight: 700;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  font-size: 0.55rem;
+  font-weight: 800;
   flex-shrink: 0;
   font-family: var(--pt-mono);
+  letter-spacing: -0.02em;
 }
 
-.pd-badge-add { background: rgba(34,197,94,0.15); color: var(--pt-green); }
-.pd-badge-mod { background: rgba(217,119,6,0.15); color: var(--accent); }
-.pd-badge-del { background: rgba(239,68,68,0.15); color: var(--pt-red); }
-.pd-badge-ren { background: rgba(59,130,246,0.15); color: var(--pt-blue); }
+.pd-badge-add { color: #4ade80; }
+.pd-badge-mod { color: #fbbf24; }
+.pd-badge-del { color: #f87171; }
+.pd-badge-ren { color: #60a5fa; }
 
-/* ─ File name ─ */
+/* ─── File name ──────────────────────────────────────────────────────── */
 
 .pd-file-name-wrap {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 0;
 }
 
 .pd-file-basename {
   font-size: var(--font-xs);
-  font-weight: 600;
-  color: var(--text-primary);
+  font-weight: 500;
+  color: #d4d4d4;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.3;
 }
 
 .pd-file-dirname {
-  font-size: 0.6rem;
-  color: var(--text-muted);
+  font-size: 0.58rem;
+  color: #555;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.3;
 }
 
-/* ─ Stats (+X -Y) ─ */
+/* ─── Stats (+X -Y) ─────────────────────────────────────────────────── */
 
 .pd-file-stats {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   flex-shrink: 0;
-  font-size: 0.6rem;
+  font-size: 0.58rem;
   font-family: var(--pt-mono);
+  font-weight: 500;
 }
 
-.pd-stat-add { color: var(--pt-green); }
-.pd-stat-del { color: var(--pt-red); }
+.pd-stat-add { color: #4ade80; }
+.pd-stat-del { color: #f87171; }
 
-/* ─ Diff content (right panel) ─ */
+/* ─── Diff content (right panel) ─────────────────────────────────────── */
 
 .pd-content {
   flex: 1;
@@ -1407,44 +1425,198 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: #0d0d0d;
 }
 
 .pd-content-header {
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
   font-size: var(--font-xs);
   font-family: var(--pt-mono);
-  color: var(--text-secondary);
-  background: var(--bg-secondary);
+  background: #0f0f0f;
+  flex-shrink: 0;
+}
+
+.pd-content-path {
+  color: #888;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex-shrink: 0;
+  min-width: 0;
 }
+
+.pd-content-badge {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+  font-family: var(--pt-mono);
+  font-size: var(--font-2xs);
+  font-weight: 600;
+}
+
+/* ─── Diff view ──────────────────────────────────────────────────────── */
 
 .pd-diff-view {
   flex: 1;
   overflow: auto;
   margin: 0;
-  padding: 12px 16px;
   font-size: 0.72rem;
   font-family: var(--pt-mono);
-  line-height: 1.6;
-  white-space: pre;
-  color: var(--text-muted);
-  background: var(--bg-primary);
+  line-height: 1.7;
+  color: #888;
+  background: #0d0d0d;
 }
 
-.pd-diff-view .diff-add  { color: var(--pt-green); display: block; background: rgba(34,197,94,0.05); }
-.pd-diff-view .diff-del  { color: var(--pt-red);   display: block; background: rgba(239,68,68,0.05); }
-.pd-diff-view .diff-hunk { color: var(--pt-blue);  display: block; opacity: 0.7; }
+/* ─── Diff table (line-based layout) ─────────────────────────────────── */
 
-/* ─ Loading & empty states ─ */
+.diff-table {
+  display: flex;
+  flex-direction: column;
+  min-width: max-content;
+}
+
+.diff-row {
+  display: flex;
+  align-items: stretch;
+  min-height: 1.7em;
+  border-bottom: 1px solid transparent;
+}
+
+/* Line numbers */
+.diff-row .diff-ln {
+  display: inline-block;
+  width: 44px;
+  min-width: 44px;
+  padding: 0 8px 0 0;
+  text-align: right;
+  color: #333;
+  font-size: 0.65rem;
+  user-select: none;
+  flex-shrink: 0;
+  background: rgba(255,255,255,0.01);
+  line-height: 1.7em;
+}
+
+.diff-row .diff-ln:first-child { border-right: 1px solid rgba(255,255,255,0.04); }
+.diff-row .diff-ln:nth-child(2) { border-right: 1px solid rgba(255,255,255,0.04); }
+
+/* Gutter (+/-) */
+.diff-row .diff-gutter {
+  display: inline-block;
+  width: 20px;
+  min-width: 20px;
+  text-align: center;
+  font-weight: 600;
+  flex-shrink: 0;
+  user-select: none;
+  color: transparent;
+  line-height: 1.7em;
+}
+
+/* Code text */
+.diff-row .diff-text {
+  flex: 1;
+  white-space: pre;
+  padding: 0 16px 0 4px;
+  line-height: 1.7em;
+}
+
+/* ─── Row types ──────────────────────────────────────────────────────── */
+
+/* Context */
+.diff-row.diff-ctx .diff-text { color: #777; }
+
+/* Added */
+.diff-row.diff-add {
+  background: rgba(34,197,94,0.06);
+}
+
+.diff-row.diff-add .diff-ln {
+  color: #4a7;
+  background: rgba(34,197,94,0.08);
+}
+
+.diff-row.diff-add .diff-gutter {
+  color: #4ade80;
+}
+
+.diff-row.diff-add .diff-text {
+  color: #b8e6c8;
+}
+
+/* Deleted */
+.diff-row.diff-del {
+  background: rgba(239,68,68,0.06);
+}
+
+.diff-row.diff-del .diff-ln {
+  color: #a55;
+  background: rgba(239,68,68,0.08);
+}
+
+.diff-row.diff-del .diff-gutter {
+  color: #f87171;
+}
+
+.diff-row.diff-del .diff-text {
+  color: #e8b4b4;
+}
+
+/* Hunk header */
+.diff-row.diff-hunk {
+  background: rgba(59,130,246,0.04);
+  border-bottom: 1px solid rgba(59,130,246,0.08);
+  margin-top: 2px;
+}
+
+.diff-row.diff-hunk .diff-ln {
+  background: rgba(59,130,246,0.06);
+}
+
+.diff-row.diff-hunk .diff-text {
+  color: #6b8db5;
+  font-style: italic;
+  padding-left: 8px;
+}
+
+/* ─── Loading & empty states ─────────────────────────────────────────── */
 
 .pd-loading,
 .pd-empty {
-  color: var(--text-muted);
-  font-style: italic;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #555;
   font-family: var(--pt-sys);
   font-size: var(--font-sm);
+  padding: 40px;
+}
+
+/* ─── Scrollbar styling for diff panels ──────────────────────────────── */
+
+.pd-files-list::-webkit-scrollbar,
+.pd-diff-view::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.pd-files-list::-webkit-scrollbar-track,
+.pd-diff-view::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.pd-files-list::-webkit-scrollbar-thumb,
+.pd-diff-view::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.08);
+  border-radius: 3px;
+}
+
+.pd-files-list::-webkit-scrollbar-thumb:hover,
+.pd-diff-view::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.14);
 }
