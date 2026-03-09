@@ -679,18 +679,33 @@ function _updateRunKanban(run) {
 
 // ─── Task card ────────────────────────────────────────────────────────────────
 
-/** Wire diff/terminal buttons with dedup flag to prevent duplicate listeners. */
+/** Wire diff/terminal/expand buttons with dedup flag to prevent duplicate listeners. */
 function _wireTaskCardButtons(card, run, task) {
   const diffBtn = card.querySelector('.parallel-btn-diff');
   if (diffBtn && !diffBtn._wired) {
     diffBtn._wired = true;
-    diffBtn.addEventListener('click', () => _handleViewDiff(run.id, task.id));
+    diffBtn.addEventListener('click', (e) => { e.stopPropagation(); _handleViewDiff(run.id, task.id); });
   }
   const termBtn = card.querySelector('.parallel-btn-terminal');
   if (termBtn && !termBtn._wired) {
     termBtn._wired = true;
-    termBtn.addEventListener('click', () => {
+    termBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
       if (task.worktreePath && ctx.openTerminalAtPath) ctx.openTerminalAtPath(task.worktreePath);
+    });
+  }
+  const expandBtn = card.querySelector('.parallel-task-expand');
+  if (expandBtn && !expandBtn._wired) {
+    expandBtn._wired = true;
+    expandBtn.addEventListener('click', () => card.classList.toggle('is-expanded'));
+  }
+  // Also allow clicking the row itself to toggle
+  const row = card.querySelector('.parallel-task-row');
+  if (row && !row._wired) {
+    row._wired = true;
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('button')) return;
+      card.classList.toggle('is-expanded');
     });
   }
 }
@@ -699,47 +714,47 @@ function _buildTaskCard(task) {
   const outputLines = _formatOutput(task.output);
   const statusLabel = t(`parallel.status.${task.status}`) || task.status;
   const isFinished = task.status === 'done' || task.status === 'failed';
-  const isRunning = task.status === 'running';
 
   const idxMatch = task.id && task.id.match(/task-(\d+)/);
   const taskIndex = idxMatch ? String(parseInt(idxMatch[1], 10) + 1).padStart(2, '0') : '--';
 
   return `
-    <div class="parallel-task-card-header">
-      <span class="parallel-task-title">
-        <span class="parallel-task-index">${taskIndex}</span>
-        ${escapeHtml(task.title || task.id)}
+    <div class="parallel-task-row">
+      <span class="parallel-task-index">${taskIndex}</span>
+      <span class="parallel-task-status-dot status-dot-${task.status}"></span>
+      <span class="parallel-task-title">${escapeHtml(task.title || task.id)}</span>
+      ${task.branch ? `<code class="parallel-task-branch-tag">${escapeHtml(task.branch.split('/').pop())}</code>` : ''}
+      <span class="parallel-task-spacer"></span>
+      <span class="parallel-task-actions" id="actions-${task.id}" style="${isFinished ? '' : 'display:none'}">
+        <button class="parallel-btn-icon parallel-btn-diff" title="${t('parallel.card.viewDiff')}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </button>
+        <button class="parallel-btn-icon parallel-btn-terminal" title="${t('parallel.card.openTerminal')}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="4,17 10,11 4,5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        </button>
       </span>
       <span class="parallel-task-badge badge-${task.status}">${statusLabel}</span>
+      <button class="parallel-task-expand" aria-label="Toggle details">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
     </div>
-    ${task.description ? `<p class="parallel-task-desc">${escapeHtml(task.description)}</p>` : ''}
-    ${task.branch ? `
-      <div class="parallel-task-branch">
-        <svg viewBox="0 0 16 16" fill="currentColor" width="9" height="9">
-          <path d="M11.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122V6A2.5 2.5 0 019 8.5H7.5a1 1 0 000 2h1.25a2.25 2.25 0 110 1.5H7.5a2.5 2.5 0 01-2.5-2.5v-2A2.25 2.25 0 110 5.5a2.25 2.25 0 012.25 2.25v.5h4.25V5.25A2.25 2.25 0 019.5 3.25z"/>
-        </svg>
+    <div class="parallel-task-details">
+      ${task.description ? `<p class="parallel-task-desc">${escapeHtml(task.description)}</p>` : ''}
+      ${task.branch ? `<div class="parallel-task-branch-full">
+        <svg viewBox="0 0 16 16" fill="currentColor" width="10" height="10"><path d="M11.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122V6A2.5 2.5 0 019 8.5H7.5a1 1 0 000 2h1.25a2.25 2.25 0 110 1.5H7.5a2.5 2.5 0 01-2.5-2.5v-2A2.25 2.25 0 110 5.5a2.25 2.25 0 012.25 2.25v.5h4.25V5.25A2.25 2.25 0 019.5 3.25z"/></svg>
         <code>${escapeHtml(task.branch)}</code>
-      </div>
-    ` : ''}
-    <div class="parallel-task-output-wrap" id="output-wrap-${task.id}">
+      </div>` : ''}
       <div class="parallel-task-output" id="output-${task.id}"><pre>${escapeHtml(outputLines)}</pre></div>
-    </div>
-    ${task.error ? `<div class="parallel-task-error">${escapeHtml(task.error)}</div>` : ''}
-    <div class="parallel-task-footer" id="footer-${task.id}" style="${isFinished ? '' : 'display:none'}">
-      <button class="parallel-btn-sm parallel-btn-diff" data-task-id="${task.id}">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/></svg>
-        ${t('parallel.card.viewDiff')}
-      </button>
-      <button class="parallel-btn-sm parallel-btn-terminal" data-worktree-path="${escapeHtml(task.worktreePath || '')}">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><polyline points="4,17 10,11 4,5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-        ${t('parallel.card.openTerminal')}
-      </button>
+      ${task.error ? `<div class="parallel-task-error">${escapeHtml(task.error)}</div>` : ''}
     </div>
   `;
 }
 
 function _patchTaskCard(card, task) {
   card.className = `parallel-task-card status-${task.status}`;
+
+  const dot = card.querySelector('.parallel-task-status-dot');
+  if (dot) dot.className = `parallel-task-status-dot status-dot-${task.status}`;
 
   const badge = card.querySelector('.parallel-task-badge');
   if (badge) {
@@ -754,9 +769,9 @@ function _patchTaskCard(card, task) {
     if (outputBox) outputBox.scrollTop = outputBox.scrollHeight;
   }
 
-  const footer = card.querySelector(`#footer-${task.id}`);
-  if (footer) {
-    footer.style.display = (task.status === 'done' || task.status === 'failed') ? '' : 'none';
+  const actions = card.querySelector(`#actions-${task.id}`);
+  if (actions) {
+    actions.style.display = (task.status === 'done' || task.status === 'failed') ? '' : 'none';
   }
 
   let errorEl = card.querySelector('.parallel-task-error');
@@ -764,8 +779,8 @@ function _patchTaskCard(card, task) {
     if (!errorEl) {
       errorEl = document.createElement('div');
       errorEl.className = 'parallel-task-error';
-      const f = card.querySelector('.parallel-task-footer');
-      if (f) f.before(errorEl); else card.appendChild(errorEl);
+      const details = card.querySelector('.parallel-task-details');
+      if (details) details.appendChild(errorEl);
     }
     errorEl.textContent = task.error;
   } else if (errorEl) {
