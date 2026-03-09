@@ -312,9 +312,9 @@ async function fetchUsage() {
 
 /**
  * Start periodic fetching
- * @param {number} intervalMs - Interval (default: 5 minutes)
+ * @param {number} intervalMs - Interval (default: 10 minutes)
  */
-function startPeriodicFetch(intervalMs = 300000) {
+function startPeriodicFetch(intervalMs = 600000) {
   const { isMainWindowVisible } = require('../windows/MainWindow');
 
   setTimeout(() => {
@@ -365,7 +365,7 @@ function refreshUsage() {
  * Called when window becomes visible - refresh if data is stale
  */
 function onWindowShow() {
-  const staleMinutes = 5;
+  const staleMinutes = 10;
   const isStale = !lastFetch || (Date.now() - lastFetch.getTime() > staleMinutes * 60 * 1000);
 
   if (isStale && !isFetching) {
