@@ -908,7 +908,6 @@
 
 .parallel-btn-icon:hover { background: rgba(255,255,255,0.06); }
 .parallel-btn-diff:hover { color: var(--accent); }
-.parallel-btn-terminal:hover { color: var(--pt-green); }
 
 /* Status badge (compact) */
 .parallel-task-badge {

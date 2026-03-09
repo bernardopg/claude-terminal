@@ -686,14 +686,6 @@ function _wireTaskCardButtons(card, run, task) {
     diffBtn._wired = true;
     diffBtn.addEventListener('click', (e) => { e.stopPropagation(); _handleViewDiff(run.id, task.id); });
   }
-  const termBtn = card.querySelector('.parallel-btn-terminal');
-  if (termBtn && !termBtn._wired) {
-    termBtn._wired = true;
-    termBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (task.worktreePath && ctx.openTerminalAtPath) ctx.openTerminalAtPath(task.worktreePath);
-    });
-  }
   const expandBtn = card.querySelector('.parallel-task-expand');
   if (expandBtn && !expandBtn._wired) {
     expandBtn._wired = true;
@@ -728,9 +720,6 @@ function _buildTaskCard(task) {
       <span class="parallel-task-actions" id="actions-${task.id}" style="${isFinished ? '' : 'display:none'}">
         <button class="parallel-btn-icon parallel-btn-diff" title="${t('parallel.card.viewDiff')}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-        </button>
-        <button class="parallel-btn-icon parallel-btn-terminal" title="${t('parallel.card.openTerminal')}">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="4,17 10,11 4,5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
         </button>
       </span>
       <span class="parallel-task-badge badge-${task.status}">${statusLabel}</span>
