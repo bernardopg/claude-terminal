@@ -2339,7 +2339,7 @@
   "parallel": {
     "tabTitle": "Tasks",
     "title": "Parallel Task Manager",
-    "subtitle": "Decompose a feature into parallel sub-tasks, each running in an isolated git worktree.",
+    "subtitle": "Split a feature into multiple tasks and run them simultaneously. Requires a git repository.",
     "form": {
       "projectLabel": "Project",
       "goalLabel": "Feature goal",
@@ -2433,7 +2433,9 @@
       "prNoAuth": "GitHub authentication required. Go to Settings to connect.",
       "prPushFailed": "Failed to push branch to remote",
       "prNoRemote": "No remote URL found for this repository",
-      "prFailed": "Failed to create pull request"
+      "prFailed": "Failed to create pull request",
+      "prOpenedBrowser": "Branch pushed — opening PR page in browser",
+      "prPushed": "Branch pushed to remote successfully"
     },
     "diff": {
       "title": "Diff",
@@ -2448,6 +2450,7 @@
     "errors": {
       "noGoal": "Please enter a feature goal.",
       "noProject": "Please select a project.",
+      "noGit": "This project is not a git repository. Parallel tasks require git for branch isolation.",
       "startFailed": "Failed to start run.",
       "noDiff": "No diff available.",
       "runNotFound": "Run not found",

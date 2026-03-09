@@ -388,6 +388,13 @@ async function _handleStart(modalEl) {
 
   if (!autoTasks) setSetting('parallelMaxAgents', maxTasks);
 
+  // Check if project is a git repository (required for worktree isolation)
+  const gitInfo = await ctx.api.git.info(projectPath).catch(() => null);
+  if (!gitInfo || !gitInfo.isGitRepo) {
+    _showToast(t('parallel.errors.noGit'), 'error');
+    return;
+  }
+
   const branchResult = await ctx.api.git.currentBranch({ projectPath }).catch(() => null);
   const mainBranch = (branchResult?.branch || branchResult) || 'main';
 
@@ -952,20 +959,7 @@ function _updateRunMerge(run) {
         prBtn.disabled = true;
         prBtn.textContent = t('parallel.merge.creatingPR');
         try {
-          const auth = await ctx.api.github.authStatus();
-          if (!auth.authenticated) {
-            _showToast(t('parallel.merge.prNoAuth'), 'error');
-            prBtn.disabled = false;
-            prBtn.innerHTML = prBtnOriginalHTML;
-            return;
-          }
-          const pushResult = await ctx.api.git.pushBranch({ projectPath: run.projectPath, branch: mb });
-          if (!pushResult.success) {
-            _showToast(pushResult.error || t('parallel.merge.prPushFailed'), 'error');
-            prBtn.disabled = false;
-            prBtn.innerHTML = prBtnOriginalHTML;
-            return;
-          }
+          // 1. Get remote URL
           const gitInfo = await ctx.api.git.infoFull(run.projectPath);
           const remoteUrl = gitInfo?.remoteUrl;
           if (!remoteUrl) {
@@ -974,21 +968,43 @@ function _updateRunMerge(run) {
             prBtn.innerHTML = prBtnOriginalHTML;
             return;
           }
-          const prTitle = run.featureName || mb;
-          const taskList = (run.tasks || []).map(tk => `- ${tk.title}`).join('\n');
-          const prBody = `## Parallel Tasks\n\n${taskList}\n\nMerged from \`${mb}\` into \`${run.mainBranch}\``;
-          const prResult = await ctx.api.github.createPR({ remoteUrl, title: prTitle, body: prBody, head: mb, base: run.mainBranch });
-          if (!prResult.success) {
-            _showToast(prResult.error || t('parallel.merge.prFailed'), 'error');
+          // 2. Push merge branch
+          const pushResult = await ctx.api.git.pushBranch({ projectPath: run.projectPath, branch: mb });
+          if (!pushResult.success) {
+            _showToast(pushResult.error || t('parallel.merge.prPushFailed'), 'error');
             prBtn.disabled = false;
             prBtn.innerHTML = prBtnOriginalHTML;
             return;
           }
-          _showToast(t('parallel.merge.prCreated', { number: prResult.pr.number }), 'success');
-          prBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 012 2v7"/><path d="M6 9v12"/></svg> PR #${prResult.pr.number}`;
-          prBtn.classList.add('parallel-merge-btn-pr-done');
+          // 3. Try GitHub API if authenticated
+          const forge = _detectForge(remoteUrl);
+          if (forge === 'github') {
+            const auth = await ctx.api.github.authStatus();
+            if (auth.authenticated) {
+              const prTitle = run.featureName || mb;
+              const taskList = (run.tasks || []).map(tk => `- ${tk.title}`).join('\n');
+              const prBody = `## Parallel Tasks\n\n${taskList}\n\nMerged from \`${mb}\` into \`${run.mainBranch}\``;
+              const prResult = await ctx.api.github.createPR({ remoteUrl, title: prTitle, body: prBody, head: mb, base: run.mainBranch });
+              if (prResult.success) {
+                _showToast(t('parallel.merge.prCreated', { number: prResult.pr.number }), 'success');
+                prBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 012 2v7"/><path d="M6 9v12"/></svg> PR #${prResult.pr.number}`;
+                prBtn.classList.add('parallel-merge-btn-pr-done');
+                prBtn.disabled = false;
+                prBtn.onclick = () => ctx.api.dialog.openExternal(prResult.pr.url);
+                return;
+              }
+            }
+          }
+          // 4. Fallback: open "new PR" page in browser
+          const prUrl = _buildNewPRUrl(remoteUrl, forge, run.mainBranch, mb);
+          if (prUrl) {
+            ctx.api.dialog.openExternal(prUrl);
+            _showToast(t('parallel.merge.prOpenedBrowser'), 'success');
+          } else {
+            _showToast(t('parallel.merge.prPushed'), 'success');
+          }
           prBtn.disabled = false;
-          prBtn.onclick = () => ctx.api.dialog.openExternal(prResult.pr.url);
+          prBtn.innerHTML = prBtnOriginalHTML;
         } catch (err) {
           _showToast(err.message || t('parallel.merge.prFailed'), 'error');
           prBtn.disabled = false;
@@ -1316,6 +1332,29 @@ function _formatOutput(output) {
 
 function _showToast(msg, type) {
   if (ctx?.showToast) ctx.showToast({ type: type || 'info', title: msg });
+}
+
+function _detectForge(remoteUrl) {
+  if (!remoteUrl) return null;
+  const url = remoteUrl.toLowerCase();
+  if (url.includes('github.com')) return 'github';
+  if (url.includes('gitlab')) return 'gitlab';
+  if (url.includes('bitbucket')) return 'bitbucket';
+  return null;
+}
+
+function _buildNewPRUrl(remoteUrl, forge, base, head) {
+  const match = remoteUrl.match(/[:/]([^/]+)\/([^/.]+?)(?:\.git)?$/);
+  if (!match) return null;
+  const [, owner, repo] = match;
+  const h = encodeURIComponent(head);
+  const b = encodeURIComponent(base);
+  switch (forge) {
+    case 'github': return `https://github.com/${owner}/${repo}/compare/${b}...${h}?expand=1`;
+    case 'gitlab': return `https://gitlab.com/${owner}/${repo}/-/merge_requests/new?merge_request[source_branch]=${h}&merge_request[target_branch]=${b}`;
+    case 'bitbucket': return `https://bitbucket.org/${owner}/${repo}/pull-requests/new?source=${h}&dest=${b}`;
+    default: return null;
+  }
 }
 
 // ─── Exports ──────────────────────────────────────────────────────────────────

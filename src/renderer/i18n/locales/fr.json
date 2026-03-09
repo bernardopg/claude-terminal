@@ -2339,7 +2339,7 @@
   "parallel": {
     "tabTitle": "Tâches",
     "title": "Gestionnaire de tâches parallèles",
-    "subtitle": "Décomposez une fonctionnalité en sous-tâches parallèles, chacune dans un worktree git isolé.",
+    "subtitle": "Divisez une fonctionnalité en plusieurs tâches et exécutez-les simultanément. Nécessite un dépôt git.",
     "form": {
       "projectLabel": "Projet",
       "goalLabel": "Objectif de la fonctionnalité",
@@ -2433,7 +2433,9 @@
       "prNoAuth": "Authentification GitHub requise. Allez dans les paramètres pour vous connecter.",
       "prPushFailed": "Échec du push de la branche vers le remote",
       "prNoRemote": "Aucune URL remote trouvée pour ce dépôt",
-      "prFailed": "Échec de la création de la pull request"
+      "prFailed": "Échec de la création de la pull request",
+      "prOpenedBrowser": "Branche pushée — ouverture de la page PR dans le navigateur",
+      "prPushed": "Branche pushée vers le remote avec succès"
     },
     "diff": {
       "title": "Diff",
@@ -2448,6 +2450,7 @@
     "errors": {
       "noGoal": "Veuillez saisir un objectif.",
       "noProject": "Veuillez sélectionner un projet.",
+      "noGit": "Ce projet n'est pas un dépôt git. Les tâches parallèles nécessitent git pour l'isolation par branches.",
       "startFailed": "Échec du démarrage.",
       "noDiff": "Aucun diff disponible.",
       "runNotFound": "Exécution introuvable",
