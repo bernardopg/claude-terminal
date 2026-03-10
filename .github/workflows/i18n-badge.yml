@@ -100,6 +100,19 @@ jobs:
           message: ${{ steps.parse.outputs.message_fr }}
           color: ${{ steps.parse.outputs.color_fr }}
 
+      # ── Spanish (es) ────────────────────────────────────────────────────────
+
+      - name: Update badge — Spanish (es)
+        if: steps.parse.outputs.message_es != ''
+        uses: schneegans/dynamic-badges-action@e9a478b16159b4d31420099ba146cdc50f134483
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: ${{ secrets.GIST_ID }}
+          filename: i18n_es.json
+          label: "🌐 Spanish (es)"
+          message: ${{ steps.parse.outputs.message_es }}
+          color: ${{ steps.parse.outputs.color_es }}
+
       # ── Template for future locales ──────────────────────────────────────────
       # To add a new locale (e.g., German 'de'), copy the block above and set:
       #   filename:  i18n_de.json
