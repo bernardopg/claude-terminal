@@ -14,6 +14,10 @@
     src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/bernardopg/8aa5c09aca432a7a39aefe32e8ed393a/raw/i18n_fr.json"
     alt="i18n French"
   />
+  <img
+    src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/bernardopg/8aa5c09aca432a7a39aefe32e8ed393a/raw/i18n_es.json"
+    alt="i18n Spanish"
+  />
 </p>
 
 <p align="center">
@@ -81,6 +85,7 @@
 | --- | --- | --- |
 | 🇺🇸 English (base) | ![100%][i18n-en-badge] | ~800 / ~800 |
 | 🇫🇷 French | ![i18n fr][i18n-fr-badge] | ~800 / ~800 |
+| 🇪🇸 Spanish | ![i18n es][i18n-es-badge] | ~800 / ~800 |
 
 > Coverage badges are updated automatically on every push to locale files.
 > See [`.github/i18n-coverage.md`](.github/i18n-coverage.md) for details and
@@ -88,6 +93,7 @@
 
 [i18n-en-badge]: https://img.shields.io/badge/i18n-100%25-brightgreen
 [i18n-fr-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/bernardopg/8aa5c09aca432a7a39aefe32e8ed393a/raw/i18n_fr.json
+[i18n-es-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/bernardopg/8aa5c09aca432a7a39aefe32e8ed393a/raw/i18n_es.json
 
 ---
 
@@ -276,7 +282,7 @@ npm install
 ### Settings
 - Accent color theming (preset palettes + custom hex)
 - Per-agent and per-tool color customization for chat tool cards
-- Language: English and French with auto-detection
+- Language: English, French, and Spanish with auto-detection
 - Editor integration: VS Code, Cursor, WebStorm, IntelliJ IDEA
 - Customizable keyboard shortcuts
 - Desktop notification preferences
@@ -539,23 +545,23 @@ claude-terminal/
 │       ├── fivem/             # FiveM server projects
 │       │   ├── main/          # IPC & service
 │       │   ├── renderer/      # Dashboard, state, terminal panel, wizard
-│       │   └── i18n/          # en.json, fr.json
+│       │   └── i18n/          # en.json, fr.json, es.json
 │       ├── webapp/            # Web app projects
 │       │   ├── main/          # IPC & service
 │       │   ├── renderer/      # Dashboard, state, terminal panel, wizard
-│       │   └── i18n/          # en.json, fr.json
+│       │   └── i18n/          # en.json, fr.json, es.json
 │       ├── python/            # Python projects (detection only)
 │       │   ├── main/          # Detection service
 │       │   ├── renderer/      # Dashboard, state, wizard
-│       │   └── i18n/          # en.json, fr.json
+│       │   └── i18n/          # en.json, fr.json, es.json
 │       ├── minecraft/          # Minecraft Java plugin projects
 │       │   ├── main/          # Detection service, plugin generator
 │       │   ├── renderer/      # Dashboard, state, wizard
-│       │   └── i18n/          # en.json, fr.json
+│       │   └── i18n/          # en.json, fr.json, es.json
 │       └── api/               # API/backend projects
 │           ├── main/          # PTY service, route detection
 │           ├── renderer/      # Dashboard, state, terminal panel, route tester, wizard
-│           └── i18n/          # en.json, fr.json
+│           └── i18n/          # en.json, fr.json, es.json
 ├── scripts/
 │   └── build-renderer.js     # esbuild bundler
 └── resources/
