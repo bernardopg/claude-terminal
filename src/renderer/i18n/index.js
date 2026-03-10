@@ -6,13 +6,14 @@
 const { State } = require('../state/State');
 
 // Supported languages
-const SUPPORTED_LANGUAGES = ['fr', 'en'];
+const SUPPORTED_LANGUAGES = ['fr', 'en', 'es'];
 const DEFAULT_LANGUAGE = 'fr';
 
 // Load locale files
 const locales = {
   fr: require('./locales/fr.json'),
-  en: require('./locales/en.json')
+  en: require('./locales/en.json'),
+  es: require('./locales/es.json')
 };
 
 // Current language state

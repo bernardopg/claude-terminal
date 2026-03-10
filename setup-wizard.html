@@ -830,6 +830,11 @@
             <div class="language-card-name" data-i18n="setup.language.french">French</div>
             <div class="language-card-native">Francais</div>
           </div>
+          <div class="language-card" data-lang="es">
+            <div class="language-card-flag">ES</div>
+            <div class="language-card-name" data-i18n="setup.language.spanish">Spanish</div>
+            <div class="language-card-native">Español</div>
+          </div>
         </div>
       </div>
 
@@ -1071,6 +1076,7 @@
         'setup.language.subtitle': 'You can change this later in settings',
         'setup.language.english': 'English',
         'setup.language.french': 'French',
+        'setup.language.spanish': 'Spanish',
         'setup.appearance.title': 'Choose your accent color',
         'setup.appearance.subtitle': 'Personalize the look of your terminal',
         'setup.appearance.preview': 'Preview',
@@ -1145,6 +1151,7 @@
         'setup.language.subtitle': 'Vous pourrez la changer plus tard dans les parametres',
         'setup.language.english': 'English',
         'setup.language.french': 'Francais',
+        'setup.language.spanish': 'Espagnol',
         'setup.appearance.title': "Choisissez votre couleur d'accent",
         'setup.appearance.subtitle': "Personnalisez l'apparence de votre terminal",
         'setup.appearance.preview': 'Apercu',
@@ -1209,6 +1216,81 @@
         'setup.nav.next': 'Suivant',
         'setup.nav.previous': 'Precedent',
         'setup.nav.step': 'Etape {current} sur {total}'
+      },
+      es: {
+        'setup.welcome.title': 'Bienvenido a Claude Terminal',
+        'setup.welcome.subtitle': 'Tu entorno de terminal premium para Claude Code',
+        'setup.welcome.start': 'Empezar',
+        'setup.welcome.skip': 'Saltar configuracion',
+        'setup.language.title': 'Elige tu idioma',
+        'setup.language.subtitle': 'Puedes cambiarlo mas tarde en ajustes',
+        'setup.language.english': 'English',
+        'setup.language.french': 'Frances',
+        'setup.language.spanish': 'Espanol',
+        'setup.appearance.title': 'Elige tu color de acento',
+        'setup.appearance.subtitle': 'Personaliza la apariencia de tu terminal',
+        'setup.appearance.preview': 'Vista previa',
+        'setup.preferences.title': 'Configura tus preferencias',
+        'setup.preferences.subtitle': 'Configura tus herramientas por defecto',
+        'setup.preferences.editor': 'Editor de codigo por defecto',
+        'setup.preferences.launchStartup': 'Iniciar al arrancar',
+        'setup.preferences.launchStartupDesc': 'Iniciar Claude Terminal automaticamente al iniciar sesion',
+        'setup.preferences.notifications': 'Activar notificaciones',
+        'setup.preferences.notificationsDesc': 'Recibir notificaciones sobre actualizaciones y eventos',
+        'setup.terminalMode.title': 'Modo de terminal por defecto',
+        'setup.terminalMode.subtitle': 'Ambos modos usan Claude Code — solo cambia la interfaz',
+        'setup.terminalMode.terminal': 'Terminal',
+        'setup.terminalMode.terminalDesc': 'Terminal CLI clasico con experiencia xterm.js completa',
+        'setup.terminalMode.chat': 'Chat UI',
+        'setup.terminalMode.chatDesc': 'Interfaz conversacional moderna con mensajes enriquecidos',
+        'setup.done.title': 'Todo listo!',
+        'setup.done.subtitle': 'Claude Terminal esta listo para usar',
+        'setup.done.summary': 'Tus ajustes',
+        'setup.done.launch': 'Iniciar Claude Terminal',
+        'setup.done.languageLabel': 'Idioma',
+        'setup.done.colorLabel': 'Color de acento',
+        'setup.done.editorLabel': 'Editor',
+        'setup.done.startupLabel': 'Iniciar al arrancar',
+        'setup.done.notificationsLabel': 'Notificaciones',
+        'setup.done.enabled': 'Activado',
+        'setup.done.disabled': 'Desactivado',
+        'setup.done.hooksLabel': 'Hooks inteligentes',
+        'setup.done.terminalModeLabel': 'Modo terminal',
+        'setup.hooks.title': 'Hooks inteligentes',
+        'setup.hooks.subtitle': 'Mejora Claude Terminal con informacion en tiempo real de Claude Code',
+        'setup.hooks.description': 'Los hooks detectan cuando Claude inicia, se detiene o usa herramientas. Todos los datos permanecen en tu maquina local. Esto permite:',
+        'setup.hooks.benefit1': 'Seguimiento preciso del tiempo por proyecto',
+        'setup.hooks.benefit2': 'Notificaciones en tiempo real al completar tareas',
+        'setup.hooks.benefit3': 'Estadisticas e informacion del panel de control',
+        'setup.hooks.dataTitle': 'Que se captura',
+        'setup.hooks.data1': 'Horas de inicio y fin de sesion',
+        'setup.hooks.data2': 'Nombres de herramientas usadas (ej: edicion, bash)',
+        'setup.hooks.data3': 'Ruta del directorio del proyecto',
+        'setup.hooks.noDataTitle': 'Que NO se captura',
+        'setup.hooks.noData1': 'Contenido de archivos o codigo',
+        'setup.hooks.noData2': 'Mensajes de conversacion',
+        'setup.hooks.noData3': 'Datos personales o claves API',
+        'setup.hooks.enable': 'Activar hooks inteligentes',
+        'setup.hooks.enableDesc': 'Se puede cambiar mas tarde en ajustes',
+        'setup.telemetry.title': 'Ayuda a mejorar Claude Terminal',
+        'setup.telemetry.subtitle': 'Comparte datos anonimos para ayudarnos a mejorar la app',
+        'setup.telemetry.description': 'Nos gustaria recopilar datos de uso anonimos. Es completamente opcional, usa un identificador aleatorio, y nunca almacenamos direcciones IP ni informacion personal.',
+        'setup.telemetry.dataTitle': 'Que se recopila',
+        'setup.telemetry.data1': 'Identificador anonimo aleatorio (UUID)',
+        'setup.telemetry.data2': 'Version de la app y tipo de SO',
+        'setup.telemetry.data3': 'Uso de funcionalidades (terminal, chat, git)',
+        'setup.telemetry.data4': 'Informes de errores',
+        'setup.telemetry.noDataTitle': 'Que NO se recopila',
+        'setup.telemetry.noData1': 'Direcciones IP o ubicacion',
+        'setup.telemetry.noData2': 'Nombres de proyectos o rutas de archivos',
+        'setup.telemetry.noData3': 'Comandos de terminal o mensajes de chat',
+        'setup.telemetry.noData4': 'Ninguna informacion personal',
+        'setup.telemetry.enable': 'Activar telemetria anonima',
+        'setup.telemetry.enableDesc': 'Se puede cambiar mas tarde en ajustes',
+        'setup.done.telemetryLabel': 'Telemetria',
+        'setup.nav.next': 'Siguiente',
+        'setup.nav.previous': 'Anterior',
+        'setup.nav.step': 'Paso {current} de {total}'
       }
     };
 
@@ -1239,7 +1321,7 @@
     // ============================================
     const TOTAL_STEPS = 8;
     let currentStep = 0;
-    let selectedLang = navigator.language.startsWith('fr') ? 'fr' : 'en';
+    let selectedLang = navigator.language.startsWith('fr') ? 'fr' : navigator.language.startsWith('es') ? 'es' : 'en';
     let selectedColor = '#d97706';
     let selectedColorName = 'Amber';
 
@@ -1308,10 +1390,10 @@
 
     function detectLanguage() {
       const sysLang = navigator.language.substring(0, 2);
-      if (sysLang === 'fr') {
-        selectedLang = 'fr';
+      if (['fr', 'es'].includes(sysLang)) {
+        selectedLang = sysLang;
         document.querySelectorAll('.language-card').forEach(c => c.classList.remove('selected'));
-        document.querySelector('[data-lang="fr"]').classList.add('selected');
+        document.querySelector(`[data-lang="${sysLang}"]`).classList.add('selected');
       }
       applyTranslations();
     }
@@ -1478,7 +1560,7 @@
       const terminalMode = document.querySelector('.terminal-mode-card.selected')?.dataset.mode || 'terminal';
       const terminalModeNames = { terminal: 'Terminal', chat: 'Chat UI' };
 
-      const langName = selectedLang === 'fr' ? 'Francais' : 'English';
+      const langName = { fr: 'Français', en: 'English', es: 'Español' }[selectedLang] || 'English';
 
       document.getElementById('done-summary').innerHTML = `
         <div class="done-summary-row">

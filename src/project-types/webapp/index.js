@@ -787,7 +787,8 @@ module.exports = createType({
     try {
       return {
         en: require('./i18n/en.json'),
-        fr: require('./i18n/fr.json')
+        fr: require('./i18n/fr.json'),
+        es: require('./i18n/es.json')
       };
     } catch (e) {
       return null;

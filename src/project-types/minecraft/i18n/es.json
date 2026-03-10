@@ -1,0 +1,45 @@
+{
+  "minecraft": {
+    "serverConsole": "Consola del servidor",
+    "stopServer": "Detener servidor",
+    "startServer": "Iniciar servidor",
+    "stopped": "Detenido",
+    "starting": "Iniciando...",
+    "running": "En ejecución",
+    "players": "{count} jugador(es)",
+    "wizard": {
+      "serverType": "Tipo de servidor",
+      "typeAuto": "Autodetectar",
+      "typePaper": "Paper / Spigot",
+      "typeVanilla": "Vanilla",
+      "typeForge": "Forge (modded)",
+      "typeFabric": "Fabric (modded)",
+      "serverJar": "JAR del servidor",
+      "launchScript": "Script de inicio",
+      "jvmMemory": "Memoria JVM",
+      "jvmMemoryHint": "ej: 2G, 4G, 512M",
+      "serverPort": "Puerto del servidor"
+    },
+    "plugin": {
+      "createPlugin": "Crear un plugin Java",
+      "provider": "Proveedor",
+      "apiVersion": "Versión de API",
+      "buildTool": "Herramienta de compilación",
+      "groupId": "Group ID (paquete)",
+      "pluginName": "Nombre de clase del plugin",
+      "author": "Autor",
+      "description": "Descripción",
+      "maven": "Maven (pom.xml)",
+      "gradle": "Gradle (build.gradle)"
+    }
+  },
+  "newProject": {
+    "types": {
+      "minecraft": "Servidor Minecraft",
+      "minecraftDesc": "Servidor Java (Vanilla, Paper, Forge, Fabric)"
+    }
+  },
+  "dashboard": {
+    "minecraftServer": "Minecraft"
+  }
+}
