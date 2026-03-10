@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/github/downloads/Sterll/claude-terminal/total?color=d97706&label=downloads" alt="Downloads" />
-  <img src="https://img.shields.io/badge/version-1.0.3-orange" alt="Version" />
+  <img src="https://img.shields.io/badge/version-1.1.0-orange" alt="Version" />
   <img src="https://img.shields.io/badge/platform-Windows%20|%20macOS%20|%20Linux-blue" alt="Platform" />
   <img src="https://img.shields.io/badge/license-GPL--3.0-green" alt="License" />
   <img src="https://img.shields.io/badge/electron-28-purple" alt="Electron" />
@@ -152,6 +152,8 @@ npm install
 - **Dynamic model and effort switching**: change model (Sonnet, Opus, Haiku) and effort level (low, medium, high) mid-conversation without starting a new session
 - **Pin conversations**: keep important sessions at the top of the list
 - **Fork sessions**: branch from any message to explore alternative paths
+- **Follow-up suggestions**: context-aware suggestion chips appear after Claude responds to help guide the conversation
+- **Session recaps**: automatic AI-generated summaries of completed sessions
 - Type @project to attach README.md and file tree from any project as context
 - Type **@context** to inject a context pack or **@prompt** to insert a saved prompt template directly into your message
 - Interrupt streaming mid-turn, auto-generated tab names via haiku model
@@ -186,9 +188,31 @@ npm install
 
 ### GitHub Integration
 - OAuth Device Flow authentication (secure, no token copy-paste)
+- **CI/CD status pill**: live inline status of the latest workflow run shown directly in the terminal header bar, with a Fix-it button to jump straight to a failing step
 - View CI/CD workflow runs per repository
-- View and create pull requests
+- View and create pull requests from the app; multi-forge support (GitHub, GitLab)
 - Token stored securely via keytar (Windows Credential Manager, macOS Keychain, Linux libsecret)
+
+### Control Tower
+- Real-time overview of all active Claude agents across every project
+- See what each agent is doing (tools it's running, current status, last activity)
+- Interrupt any running session directly from the panel
+- Reply to AskUserQuestion prompts without switching to the chat tab
+- MCP tools for agent monitoring and remote interrupt
+
+### Parallel Tasks
+- Decompose a feature into parallel subtasks and run them simultaneously as separate Claude agents
+- Each task runs in its own Git worktree and branch, keeping work isolated
+- Auto mode lets Claude decide the optimal number of parallel tasks
+- Collapsible task cards with per-task diff viewer and terminal access
+- Auto-merge agent: Claude reviews and merges completed branches into your main branch
+- Full run state persisted to disk and restored on app restart
+
+### Session Replay
+- Browse past Claude Code sessions and replay them step by step
+- Timeline view shows all prompts, tool calls, and responses in chronological order
+- Video-player-style scrubber to jump to any point in a session
+- Q&A cards highlight question-and-answer exchanges for easy review
 
 ### Dashboard
 - Per-project overview: current branch, commits ahead/behind, recent commits, contributors
@@ -307,6 +331,20 @@ npm install
 - Cloud relay for access anywhere (via self-hosted server)
 - Real-time session monitoring, chat interaction, and project switching
 - 6-digit PIN authentication with QR code
+
+### Sidebar Customization
+- Drag and drop sidebar tabs to reorder them to your workflow
+- Pin frequently-used tabs; less-used tabs collapse into a More overflow menu
+- Customize via a modal or directly by dragging
+
+### Command Palette
+- Unified command palette (Ctrl+P) with fuzzy search across projects, commands, and quick actions
+- Smart launcher with shimmer skeleton loading and match highlighting
+- Navigate to any panel or trigger any action without touching the mouse
+
+### Auto CLAUDE.md Updates
+- After a session ends, Claude analyzes the conversation and proposes relevant additions to your project's CLAUDE.md
+- Review and accept suggestions in a diff-style modal before they're applied
 
 ### Other
 - **Session restore**: save and restore full workspace sessions across restarts
