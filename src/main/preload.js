@@ -84,7 +84,15 @@ contextBridge.exposeInMainWorld('electron_nodeModules', {
     },
     readdirSync: (p, options) => {
       throwIfBlocked(p);
-      return fs.readdirSync(p, options);
+      const result = fs.readdirSync(p, options);
+      if (options && options.withFileTypes) {
+        return result.map(e => ({
+          name: e.name,
+          isDirectory: () => e.isDirectory(),
+          isFile: () => e.isFile()
+        }));
+      }
+      return result;
     },
     statSync: (p) => {
       throwIfBlocked(p);
@@ -123,9 +131,17 @@ contextBridge.exposeInMainWorld('electron_nodeModules', {
         throwIfBlocked(p);
         return fs.promises.access(p, mode);
       },
-      readdir: (p, options) => {
+      readdir: async (p, options) => {
         throwIfBlocked(p);
-        return fs.promises.readdir(p, options);
+        const result = await fs.promises.readdir(p, options);
+        if (options && options.withFileTypes) {
+          return result.map(e => ({
+            name: e.name,
+            isDirectory: () => e.isDirectory(),
+            isFile: () => e.isFile()
+          }));
+        }
+        return result;
       },
       readFile: (p, options) => {
         throwIfBlocked(p);
