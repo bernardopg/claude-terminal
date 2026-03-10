@@ -658,7 +658,20 @@ function registerCloudHandlers() {
       `${url}/api/projects/${encodeURIComponent(cloudKey)}/files`,
       { headers: { 'Authorization': `Bearer ${key}` } }
     );
-    if (!resp.ok) throw new Error('Failed to fetch cloud files');
+    if (!resp.ok) {
+      // Project doesn't exist in cloud yet → everything is local-only
+      if (resp.status === 404) {
+        const localMap = new Map();
+        _scanLocalFiles(localProjectPath, localProjectPath, new Set([
+          'node_modules', '.git', 'build', 'dist', '.next', '__pycache__',
+          '.venv', 'venv', '.cache', 'coverage', '.tsbuildinfo', '.ct-cloud',
+          '.turbo', '.parcel-cache', '.svelte-kit', '.nuxt', '.output',
+        ]), localMap);
+        return { onlyLocal: [...localMap.keys()], onlyCloud: [], sizeDiff: [], hashVerified: false };
+      }
+      const body = await resp.text().catch(() => '');
+      throw new Error(`Failed to fetch cloud files (${resp.status}): ${body}`);
+    }
     const { files: cloudFiles } = await resp.json();
     const cloudMap = new Map(cloudFiles.map(f => [f.path, f.size]));
 
