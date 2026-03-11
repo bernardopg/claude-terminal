@@ -296,8 +296,12 @@ class ChatService {
    * @returns {Promise<string>} Session ID
    */
   async startSession({ cwd, prompt, permissionMode = 'default', resumeSessionId = null, sessionId = null, images = [], mentions = [], model = null, enable1MContext = false, forkSession = false, resumeSessionAt = null, effort = null, outputFormat = null, skills = null, systemPrompt = null, settingSources = null, maxTurns = null }) {
-    const sdk = await loadSDK();
     if (!sessionId) sessionId = `chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    // Notify renderer that session is initializing (runtime resolution can take a few seconds)
+    this._send('chat-initializing', { sessionId });
+
+    const sdk = await loadSDK();
 
     const messageQueue = createMessageQueue(() => {
       this._send('chat-idle', { sessionId });
@@ -633,7 +637,7 @@ class ChatService {
         || err.message === 'Aborted'
         || err.message?.includes('Request was aborted');
       if (wasInterrupted) {
-        this._send('chat-done', { sessionId, aborted: true });
+        this._send('chat-done', { sessionId, interrupted: true });
       } else {
         const stderrLog = session?._stderr || '';
         console.error(`[ChatService] Stream error after ${msgCount} msgs:`, err.message, stderrLog ? `\nstderr: ${stderrLog}` : '');

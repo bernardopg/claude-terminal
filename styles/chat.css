@@ -3348,3 +3348,89 @@
 .chat-followup-chip {
   animation: chat-followup-appear 0.18s ease-out both;
 }
+
+/* Fix #5: Focus visible for keyboard navigation */
+.chat-followup-chip:focus-visible {
+  outline: 2px solid var(--accent-color, #d97706);
+  outline-offset: 2px;
+  opacity: 1;
+}
+
+.chat-followup-chip:focus-visible .chat-followup-chip-text {
+  opacity: 1;
+  color: var(--text-primary, #e0e0e0);
+}
+
+/* Fix #1: Initializing indicator */
+.chat-initializing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+
+.chat-initializing-indicator .chat-thinking-logo {
+  animation: chat-thinking-pulse 1.2s ease-in-out infinite;
+}
+
+/* Fix #4: Interrupted marker */
+.chat-interrupted-marker {
+  padding: 4px 16px 8px;
+  text-align: left;
+}
+
+.chat-interrupted-label {
+  font-size: var(--font-xs);
+  font-style: italic;
+  color: var(--text-muted, #555);
+}
+
+/* Fix #2: Permission timer and attention */
+.chat-perm-timer {
+  margin-left: auto;
+  font-size: var(--font-2xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.chat-perm-card.perm-attention .chat-perm-actions {
+  animation: perm-pulse 1.5s ease-in-out 3;
+}
+
+@keyframes perm-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; background: rgba(217, 119, 6, 0.08); }
+}
+
+/* Fix #7: Disabled model/effort buttons during streaming */
+.chat-model-btn.disabled,
+.chat-effort-btn.disabled {
+  cursor: not-allowed;
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.chat-model-btn.disabled:hover,
+.chat-effort-btn.disabled:hover {
+  opacity: 0.3;
+}
+
+.chat-model-btn.disabled .chat-model-arrow,
+.chat-effort-btn.disabled .chat-effort-arrow {
+  display: none;
+}
+
+/* Fix #6: Markdown fallback pre block */
+.chat-markdown-fallback {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  margin: 4px 0;
+}

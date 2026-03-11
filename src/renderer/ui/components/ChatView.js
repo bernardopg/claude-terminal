@@ -84,8 +84,9 @@ function renderMarkdown(text) {
   ensureMarkedConfig();
   try {
     return marked.parse(text);
-  } catch {
-    return `<p>${escapeHtml(text)}</p>`;
+  } catch (err) {
+    console.error('[ChatView] Markdown render failed:', err.message, '\nContent:', text.slice(0, 200));
+    return `<pre class="chat-markdown-fallback">${escapeHtml(text)}</pre>`;
   }
 }
 
@@ -212,20 +213,53 @@ function createFollowupChips(suggestionsContainerEl, inputEl, project) {
 
     const chipsWrapper = document.createElement('div');
     chipsWrapper.className = 'chat-followup-chips';
+    chipsWrapper.setAttribute('role', 'listbox');
+    chipsWrapper.setAttribute('aria-label', t('chat.suggestionsLabel') || 'Suggestions');
 
-    chips.forEach((text) => {
+    chips.forEach((text, chipIndex) => {
       const chip = document.createElement('button');
       chip.className = 'chat-followup-chip';
+      chip.setAttribute('role', 'option');
+      chip.setAttribute('aria-selected', 'false');
+      chip.setAttribute('tabindex', chipIndex === 0 ? '0' : '-1');
       chip.innerHTML = `<span class="chat-followup-chip-icon">${SPARKLE_ICON}</span><span class="chat-followup-chip-text">${escapeHtml(text)}</span>`;
       chip.title = text;
       chip.addEventListener('click', () => {
-        inputEl.value = text;
-        inputEl.style.height = 'auto';
-        inputEl.style.height = Math.min(inputEl.scrollHeight, 200) + 'px';
-        inputEl.focus();
-        inputEl.selectionStart = inputEl.selectionEnd = text.length;
+        // If input has text, append the suggestion; otherwise replace
+        const existing = inputEl.value.trim();
+        if (existing) {
+          const combined = existing + ' ' + text;
+          inputEl.value = combined;
+          inputEl.style.height = 'auto';
+          inputEl.style.height = Math.min(inputEl.scrollHeight, 200) + 'px';
+          inputEl.focus();
+          inputEl.selectionStart = inputEl.selectionEnd = combined.length;
+        } else {
+          inputEl.value = text;
+          inputEl.style.height = 'auto';
+          inputEl.style.height = Math.min(inputEl.scrollHeight, 200) + 'px';
+          inputEl.focus();
+          inputEl.selectionStart = inputEl.selectionEnd = text.length;
+        }
         // Hide chips after selection
         clear();
+      });
+      // Keyboard navigation within chips
+      chip.addEventListener('keydown', (e) => {
+        const allChips = Array.from(chipsWrapper.querySelectorAll('.chat-followup-chip'));
+        const idx = allChips.indexOf(chip);
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          const next = allChips[idx + 1];
+          if (next) { chip.setAttribute('tabindex', '-1'); next.setAttribute('tabindex', '0'); next.focus(); }
+        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          const prev = allChips[idx - 1];
+          if (prev) { chip.setAttribute('tabindex', '-1'); prev.setAttribute('tabindex', '0'); prev.focus(); }
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          inputEl.focus();
+        }
       });
       chipsWrapper.appendChild(chip);
     });
@@ -501,6 +535,7 @@ function createChatView(wrapperEl, project, options = {}) {
   }
 
   function toggleModelDropdown() {
+    if (modelBtn.disabled) return;
     const visible = modelDropdown.style.display !== 'none';
     if (visible) {
       modelDropdown.style.display = 'none';
@@ -558,6 +593,7 @@ function createChatView(wrapperEl, project, options = {}) {
   }
 
   function toggleEffortDropdown() {
+    if (effortBtn.disabled) return;
     const visible = effortDropdown.style.display !== 'none';
     if (visible) {
       effortDropdown.style.display = 'none';
@@ -791,6 +827,15 @@ function createChatView(wrapperEl, project, options = {}) {
     // Context suggestion — Tab to accept
     if (e.key === 'Tab' && mentionDropdown.style.display === 'none' && slashDropdown.style.display === 'none') {
       if (contextSuggestions.handleTab(e)) return;
+      // Tab to focus follow-up suggestion chips (if visible and input empty or has text)
+      if (followupSuggestionsEl.style.display !== 'none') {
+        const firstChip = followupSuggestionsEl.querySelector('.chat-followup-chip');
+        if (firstChip) {
+          e.preventDefault();
+          firstChip.focus();
+          return;
+        }
+      }
     }
 
     if (e.key === 'Enter' && !shiftHeld && !e.shiftKey && !e.getModifierState('Shift')) {
@@ -1869,6 +1914,9 @@ function createChatView(wrapperEl, project, options = {}) {
     if (!card) return;
     const requestId = card.dataset.requestId;
     const action = btn.dataset.action;
+
+    // Clear permission reminder timers
+    _clearPermTimers(requestId);
 
     card.querySelectorAll('.chat-perm-btn').forEach(b => {
       b.disabled = true;
@@ -3132,6 +3180,16 @@ function createChatView(wrapperEl, project, options = {}) {
     stopBtn.style.display = streaming ? '' : 'none';
     chatView.classList.toggle('streaming', streaming);
 
+    // Fix #7: Disable model/effort dropdowns during streaming
+    modelBtn.disabled = streaming;
+    effortBtn.disabled = streaming;
+    modelBtn.classList.toggle('disabled', streaming);
+    effortBtn.classList.toggle('disabled', streaming);
+    if (streaming) {
+      modelDropdown.style.display = 'none';
+      effortDropdown.style.display = 'none';
+    }
+
     if (streaming) {
       inputEl.placeholder = t('chat.queuePlaceholder') || 'Queue a follow-up message...';
       setStatus('thinking', t('chat.thinking'));
@@ -3263,6 +3321,10 @@ function createChatView(wrapperEl, project, options = {}) {
     // System messages
     if (message.type === 'system') {
       if (message.subtype === 'init') {
+        // Clear initializing indicator (runtime resolved, SDK ready)
+        if (_initSecondaryTimer) { clearTimeout(_initSecondaryTimer); _initSecondaryTimer = null; }
+        const initIndicator = messagesEl.querySelector('.chat-initializing-indicator');
+        if (initIndicator) initIndicator.remove();
         model = message.model || '';
         updateStatusInfo();
         // Capture available slash commands for autocomplete
@@ -3670,6 +3732,8 @@ function createChatView(wrapperEl, project, options = {}) {
     messagesEl.querySelectorAll('.chat-perm-card:not(.resolved), .chat-question-card:not(.resolved), .chat-plan-card:not(.resolved)').forEach(card => {
       card.classList.add('resolved');
       card.querySelectorAll('button').forEach(b => b.disabled = true);
+      // Clear permission timers for resolved cards
+      if (card.dataset.requestId) _clearPermTimers(card.dataset.requestId);
     });
   }
 
@@ -3697,11 +3761,22 @@ function createChatView(wrapperEl, project, options = {}) {
 
   // ── IPC: Done ──
 
-  const unsubDone = api.chat.onDone(({ sessionId: sid }) => {
+  const unsubDone = api.chat.onDone(({ sessionId: sid, interrupted }) => {
     if (sid !== sessionId) return;
+    const wasInterrupted = interrupted || isAborting;
     isAborting = false;
     removeThinkingIndicator();
     finalizeStreamBlock();
+
+    // Fix #4: Show interrupted marker if stream was interrupted
+    if (wasInterrupted) {
+      const marker = document.createElement('div');
+      marker.className = 'chat-interrupted-marker';
+      marker.innerHTML = `<span class="chat-interrupted-label">[${escapeHtml(t('chat.interrupted'))}]</span>`;
+      messagesEl.appendChild(marker);
+      scrollToBottom();
+    }
+
     setStreaming(false);
     // Complete all tool cards
     for (const [, card] of toolCards) {
@@ -3747,15 +3822,91 @@ function createChatView(wrapperEl, project, options = {}) {
   });
   unsubscribers.push(unsubRemoteMsg);
 
+  // ── IPC: Initializing (runtime resolution in progress) ──
+
+  let _initSecondaryTimer = null;
+  const unsubInitializing = api.chat.onInitializing(({ sessionId: sid }) => {
+    if (sid !== sessionId) return;
+    // Show initializing indicator in place of thinking indicator
+    removeThinkingIndicator();
+    const el = document.createElement('div');
+    el.className = 'chat-thinking-indicator chat-initializing-indicator';
+    el.innerHTML = `
+      <img class="chat-thinking-logo" src="assets/claude-mascot.svg" alt="" draggable="false" />
+      <span class="chat-thinking-label">${escapeHtml(t('chat.initializing'))}</span>
+    `;
+    messagesEl.appendChild(el);
+    scrollToBottom();
+    setStatus('thinking', t('chat.initializing'));
+    // After 3s, show secondary message if still initializing
+    _initSecondaryTimer = setTimeout(() => {
+      const indicator = messagesEl.querySelector('.chat-initializing-indicator');
+      if (indicator) {
+        const label = indicator.querySelector('.chat-thinking-label');
+        if (label) label.textContent = t('chat.initializingRuntime');
+      }
+    }, 3000);
+  });
+  unsubscribers.push(unsubInitializing);
+
   // ── IPC: Permission request ──
 
+  let _permTimers = new Map(); // requestId -> { pulseTimer, notifTimer, counterId }
   const unsubPerm = api.chat.onPermissionRequest((data) => {
     if (data.sessionId !== sessionId) return;
     removeThinkingIndicator();
     appendPermissionCard(data);
     setStatus('waiting', t('chat.waitingForInput') || 'Waiting for input...');
+
+    // Fix #2: Permission timeout reminders
+    const requestId = data.requestId;
+    const startTime = Date.now();
+
+    // Counter update interval
+    const counterId = setInterval(() => {
+      const card = messagesEl.querySelector(`.chat-perm-card[data-request-id="${CSS.escape(requestId)}"]:not(.resolved)`);
+      if (!card) { _clearPermTimers(requestId); return; }
+      const elapsed = Math.round((Date.now() - startTime) / 1000);
+      let counter = card.querySelector('.chat-perm-timer');
+      if (!counter) {
+        counter = document.createElement('span');
+        counter.className = 'chat-perm-timer';
+        const header = card.querySelector('.chat-perm-header');
+        if (header) header.appendChild(counter);
+      }
+      counter.textContent = t('chat.permissionWaitingSince', { seconds: elapsed });
+    }, 1000);
+
+    // After 30s, pulse the action buttons
+    const pulseTimer = setTimeout(() => {
+      const card = messagesEl.querySelector(`.chat-perm-card[data-request-id="${CSS.escape(requestId)}"]:not(.resolved)`);
+      if (card) card.classList.add('perm-attention');
+    }, 30000);
+
+    // After 60s, send a system notification
+    const notifTimer = setTimeout(() => {
+      const card = messagesEl.querySelector(`.chat-perm-card[data-request-id="${CSS.escape(requestId)}"]:not(.resolved)`);
+      if (card) {
+        api.notification?.show?.({
+          title: t('chat.permissionRequired'),
+          body: t('chat.permissionNotification', { tool: data.toolName }),
+        });
+      }
+    }, 60000);
+
+    _permTimers.set(requestId, { pulseTimer, notifTimer, counterId });
   });
   unsubscribers.push(unsubPerm);
+
+  function _clearPermTimers(requestId) {
+    const timers = _permTimers.get(requestId);
+    if (timers) {
+      clearTimeout(timers.pulseTimer);
+      clearTimeout(timers.notifTimer);
+      clearInterval(timers.counterId);
+      _permTimers.delete(requestId);
+    }
+  }
 
   // ── Control Tower: question answered externally ──
   // When CT answers an AskUserQuestion, it dispatches this event so we can
@@ -4015,6 +4166,9 @@ function createChatView(wrapperEl, project, options = {}) {
       if (sessionId) api.chat.close({ sessionId });
       contextSuggestions.reset();
       followupChips.clear();
+      // Clear permission reminder timers
+      for (const [id] of _permTimers) _clearPermTimers(id);
+      if (_initSecondaryTimer) { clearTimeout(_initSecondaryTimer); _initSecondaryTimer = null; }
       // Trigger CLAUDE.md analysis if enabled and session had exchanges
       if (getSetting('autoClaudeMdUpdate') !== false && conversationHistory.length >= 2 && project?.path) {
         const { showClaudeMdSuggestionModal } = require('./ClaudeMdSuggestionModal');
