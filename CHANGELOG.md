@@ -2,6 +2,18 @@
 
 All notable changes to Claude Terminal are documented in this file.
 
+## [1.1.1] - 2026-03-11
+
+### Added
+- **Database**: toggle for allowing destructive queries (DROP, DELETE, TRUNCATE) with safety confirmation
+- **Control Tower**: collapsible agent cards for a cleaner multi-session overview
+
+### Changed
+- Spanish language badge added to README and CI workflow
+
+### Fixed
+- Database MCP module resolution in packaged app
+
 ## [1.0.2] - 2026-03-03
 
 ### Added
