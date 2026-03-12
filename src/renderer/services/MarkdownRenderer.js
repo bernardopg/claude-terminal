@@ -720,9 +720,15 @@ function renderTabsBlock(code) {
     `<button class="chat-tab-btn${i === 0 ? ' active' : ''}" data-tab-idx="${i}" data-tabs-id="${id}">${escapeHtml(tab.title)}</button>`
   ).join('');
 
+  const langNameToExt = {
+    javascript: 'js', typescript: 'ts', python: 'py', rust: 'rs',
+    ruby: 'rb', golang: 'go', bash: 'sh', shell: 'sh', markdown: 'md',
+  };
+
   const panelsHtml = tabs.map((tab, i) => {
     const content = tab.content.trimEnd();
-    const lang = tab.title.toLowerCase().replace(/[^a-z]/g, '');
+    const raw = tab.title.toLowerCase().replace(/[^a-z+#]/g, '');
+    const lang = langNameToExt[raw] || raw;
     const highlighted = lang ? highlight(content, lang) : escapeHtml(content);
     return `<div class="chat-tab-panel${i === 0 ? ' active' : ''}" data-tab-idx="${i}" data-tabs-id="${id}"><pre><code>${highlighted}</code></pre></div>`;
   }).join('');
