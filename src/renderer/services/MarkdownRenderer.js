@@ -161,14 +161,18 @@ function configure() {
 
       // ── Blockquotes with callout detection ──
       blockquote({ text }) {
-        // Detect [!TYPE] callout pattern in the rendered HTML
-        const calloutMatch = text.match(/^\s*<p>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*/i);
+        // Detect [!TYPE] callout pattern — marked v17 may or may not wrap in <p>
+        const calloutMatch = text.match(/^\s*(?:<p>\s*)?\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*/i);
         if (calloutMatch) {
           const type = calloutMatch[1].toUpperCase();
           const callout = CALLOUT_TYPES[type];
           if (callout) {
-            // Remove the [!TYPE] prefix from content
-            const content = text.replace(calloutMatch[0], '<p>');
+            // Remove the [!TYPE] prefix from content and render remaining as markdown
+            let content = text.slice(calloutMatch[0].length).trim();
+            // Parse remaining content as inline markdown for formatting support
+            if (content) {
+              content = marked.parse(content);
+            }
             const title = t(`chat.callout.${type.toLowerCase()}`) || type;
             return `<div class="chat-callout chat-callout-${callout.class}">`
               + `<div class="chat-callout-header">`
