@@ -601,6 +601,22 @@ code.line-numbers-off .code-line::before {
   justify-content: center;
   font-size: 13px;
 }
+.ft-icon-ext {
+  flex-shrink: 0;
+  width: 20px;
+  height: 16px;
+  margin-right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.ft-ext {
+  font-size: 9px;
+  font-weight: 700;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  letter-spacing: -0.5px;
+  line-height: 1;
+}
 .ft-name { color: var(--text-primary); }
 .ft-name.folder { font-weight: 500; color: var(--accent-color); }
 .ft-meta {

@@ -336,12 +336,23 @@ function renderFileTree(code) {
   const lines = code.split('\n').filter(l => l.trim());
   const items = [];
 
+  // Tree-drawing characters regex: ├ └ │ ─ ┬ ┤ ┘ ┐ ┌ ╭ ╰ ╮ ╯
+  const treeCharsRe = /[├└│─┬┤┘┐┌╭╰╮╯┊┆┃┈╌]/g;
+
   for (const line of lines) {
-    const match = line.match(/^(\s*)(.*)/);
+    // Count depth from tree chars and leading whitespace
+    // Strip tree-drawing chars and leading spaces to get the name
+    const stripped = line.replace(treeCharsRe, ' ');
+    const match = stripped.match(/^(\s*)(.*)/);
     if (!match) continue;
-    const indent = match[1].length;
-    const depth = Math.floor(indent / 2);
+
+    // Compute depth: count groups of tree-char + spaces (typically 4 chars per level)
+    const prefix = line.match(/^[\s├└│─┬┤┘┐┌╭╰╮╯┊┆┃┈╌]*/)?.[0] || '';
+    // Each nesting level is roughly 4 chars (│   or ├── or └── )
+    const depth = Math.round(prefix.length / 4);
+
     let name = match[2].trim();
+    if (!name) continue;
 
     // Parse optional metadata after tab or multiple spaces
     let meta = '';
@@ -355,6 +366,36 @@ function renderFileTree(code) {
     items.push({ name, depth, isDir, meta });
   }
 
+  // File extension icons
+  const extIcons = {
+    js: '<span class="ft-ext" style="color:#f7df1e">JS</span>',
+    mjs: '<span class="ft-ext" style="color:#f7df1e">JS</span>',
+    ts: '<span class="ft-ext" style="color:#3178c6">TS</span>',
+    tsx: '<span class="ft-ext" style="color:#3178c6">TX</span>',
+    jsx: '<span class="ft-ext" style="color:#61dafb">JX</span>',
+    json: '<span class="ft-ext" style="color:#a8a8a8">{ }</span>',
+    css: '<span class="ft-ext" style="color:#1572b6">CS</span>',
+    scss: '<span class="ft-ext" style="color:#c6538c">SC</span>',
+    html: '<span class="ft-ext" style="color:#e44d26">HT</span>',
+    py: '<span class="ft-ext" style="color:#3776ab">PY</span>',
+    lua: '<span class="ft-ext" style="color:#000080">LU</span>',
+    md: '<span class="ft-ext" style="color:#888">MD</span>',
+    yaml: '<span class="ft-ext" style="color:#cb171e">YM</span>',
+    yml: '<span class="ft-ext" style="color:#cb171e">YM</span>',
+    sh: '<span class="ft-ext" style="color:#4eaa25">SH</span>',
+    sql: '<span class="ft-ext" style="color:#e38c00">SQ</span>',
+    rs: '<span class="ft-ext" style="color:#dea584">RS</span>',
+    go: '<span class="ft-ext" style="color:#00add8">GO</span>',
+    java: '<span class="ft-ext" style="color:#b07219">JV</span>',
+    rb: '<span class="ft-ext" style="color:#cc342d">RB</span>',
+  };
+  const defaultFileIcon = '<span class="ft-ext" style="color:#888">&#9632;</span>';
+
+  function getFileIcon(name) {
+    const ext = name.split('.').pop()?.toLowerCase();
+    return extIcons[ext] || defaultFileIcon;
+  }
+
   const chevronSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>';
 
   const rowsHtml = items.map(item => {
@@ -364,7 +405,7 @@ function renderFileTree(code) {
       : '<span class="ft-toggle-placeholder"></span>';
     const icon = item.isDir
       ? '<span class="ft-icon">&#128194;</span>'
-      : '<span class="ft-icon" style="color:#dcdcaa;font-size:11px;font-weight:700">&#128196;</span>';
+      : `<span class="ft-icon-ext">${getFileIcon(item.name)}</span>`;
     const nameClass = item.isDir ? 'ft-name folder' : 'ft-name';
     const metaHtml = item.meta ? `<span class="ft-meta">${escapeHtml(item.meta)}</span>` : '';
 
