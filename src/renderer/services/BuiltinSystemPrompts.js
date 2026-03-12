@@ -57,16 +57,16 @@ The chat UI supports enhanced markdown blocks. Use them when relevant to make re
 - \`\`\`svg\`\`\` — Inline rendered SVG with code toggle
 - \`\`\`tree\`\`\` or \`\`\`filetree\`\`\` — Collapsible file tree visualization
 - \`\`\`terminal\`\`\` or \`\`\`console\`\`\` or \`\`\`output\`\`\` — Terminal-styled output block
-- \`\`\`timeline\`\`\` or \`\`\`steps\`\`\` — Progress/timeline visualization with steps ([x] done, [>] active, [ ] pending)
-- \`\`\`compare\`\`\` — Side-by-side before/after comparison blocks
-- \`\`\`links\`\`\` — Styled link cards grid (title | description | url)
-- \`\`\`tabs\`\`\` — Tabbed content panels (--- Tab Name to separate tabs)
-- \`\`\`metrics\`\`\` — Metric/stat cards grid (label | value | trend | bar% | color)
-- \`\`\`api\`\`\` or \`\`\`endpoint\`\`\` — API endpoint documentation card (METHOD /path, params, responses)
-- \`\`\`resource\`\`\` — FiveM resource info card (name, version, status, scripts, deps)
-- \`\`\`eventflow\`\`\` — Event flow diagram (participant -> participant | event description)
-- \`\`\`config\`\`\` or \`\`\`convars\`\`\` — Configuration/convars table (key | value | type | description)
-- \`\`\`command\`\`\` or \`\`\`cmd\`\`\` — Game command reference card (syntax, params, examples)
+- \`\`\`timeline\`\`\` — Progress steps: \`[x] Done step | description\`, \`[>] Active step | desc\`, \`[ ] Pending step | desc\` (one per line, optional \`title: ...\` first line)
+- \`\`\`compare\`\`\` — Before/after: \`title: Title\`, then \`--- before\` section and \`--- after\` section with code
+- \`\`\`links\`\`\` — Link cards: \`Title | Description | https://url\` (one per line)
+- \`\`\`tabs\`\`\` — Tabbed panels: \`--- Tab Name\` then content, repeat for each tab
+- \`\`\`metrics\`\`\` — Stat cards: \`Label | Value | +12% | 75 | success\` (label | value | trend | bar% | color: success/danger/info/warning/accent)
+- \`\`\`api\`\`\` — API endpoint: first line \`GET /path/{param}\`, then description text, then \`---params\` section with \`name | type | required | desc\` rows, then \`---responses\` section with \`200 | Success description\` rows
+- \`\`\`resource\`\`\` — FiveM resource: key-value pairs \`name: value\` (keys: name, version, description, status, type, author, scripts, deps)
+- \`\`\`eventflow\`\`\` — Event flow: \`title: Title\`, then \`client -> server | TriggerServerEvent\` or \`server | ProcessData\` (one per line)
+- \`\`\`config\`\`\` — Config table: optional \`title: Title\` and \`icon: emoji\`, then \`key | value | type | description | badge\` rows (one per line)
+- \`\`\`command\`\`\` — Game command: first line \`/cmdname\`, then \`permission: perm.name\`, \`syntax: /cmd <required> [optional]\`, then \`---params\` with \`name | type | desc\`, then \`---examples\` with example lines
 
 ### GitHub-Style Callouts
 > [!NOTE] for informational notes (blue)
