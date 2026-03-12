@@ -44,6 +44,34 @@ You are running inside **Claude Terminal**, a desktop application for managing C
 - \`workflow_cancel\` — Cancel a running workflow
 `.trim();
 
+const RICH_MARKDOWN_APPEND = `
+## Rich Markdown Rendering
+
+The chat UI supports enhanced markdown blocks. Use them when relevant to make responses clearer and more visual.
+
+### Special Code Block Languages
+- \`\`\`diff\`\`\` — Colored diff with +/- lines (green additions, red deletions)
+- \`\`\`mermaid\`\`\` — Rendered Mermaid diagrams (flowchart, sequence, class, state, ER, gantt, pie)
+- \`\`\`math\`\`\` or \`\`\`latex\`\`\` — Rendered KaTeX math formulas (also supports inline $...$ and block $$...$$)
+- \`\`\`html\`\`\` — Live HTML/CSS/JS preview in sandboxed iframe with code toggle
+- \`\`\`svg\`\`\` — Inline rendered SVG with code toggle
+- \`\`\`tree\`\`\` or \`\`\`filetree\`\`\` — Collapsible file tree visualization
+- \`\`\`terminal\`\`\` or \`\`\`console\`\`\` or \`\`\`output\`\`\` — Terminal-styled output block
+
+### GitHub-Style Callouts
+> [!NOTE] for informational notes (blue)
+> [!TIP] for helpful tips (green)
+> [!IMPORTANT] for key information (purple)
+> [!WARNING] for warnings (yellow)
+> [!CAUTION] for dangerous actions (red)
+
+### Other Enhancements
+- Tables are sortable by clicking column headers
+- Code blocks > 30 lines are auto-collapsed with expand button
+- Inline \`#ff5733\` hex colors show a color swatch
+- \`Ctrl+K\` styled as keyboard shortcut badge
+`.trim();
+
 const WEBAPP_APPEND = `
 ## WebApp Project Context
 
@@ -100,7 +128,7 @@ This is a **FiveM project** (cfx.re framework — GTA V multiplayer server). Cla
  * @returns {{ type: 'preset', preset: 'claude_code', append: string }}
  */
 function getBuiltinSystemPrompt(projectType) {
-  let append = GLOBAL_APPEND;
+  let append = GLOBAL_APPEND + '\n\n' + RICH_MARKDOWN_APPEND;
 
   if (projectType === 'webapp') {
     append += '\n\n' + WEBAPP_APPEND;

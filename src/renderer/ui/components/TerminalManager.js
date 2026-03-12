@@ -4033,6 +4033,7 @@ async function switchTerminalMode(id) {
     const chatView = createChatView(wrapper, project, {
       terminalId: id,
       skipPermissions: getSetting('skipPermissions') || false,
+      builtinSystemPrompt: getBuiltinSystemPrompt(project.type),
       onStatusChange: (status, substatus) => updateChatTerminalStatus(id, status, substatus),
       onSwitchTerminal: (dir) => callbacks.onSwitchTerminal?.(dir),
       onSwitchProject: (dir) => callbacks.onSwitchProject?.(dir),
