@@ -213,16 +213,17 @@ function configure() {
       },
 
       // ── Blockquotes with callout detection ──
-      blockquote({ text }) {
-        // Detect [!TYPE] callout pattern — marked v17 may or may not wrap in <p>
+      blockquote({ text, tokens }) {
+        // Parse tokens to get HTML for display
+        const html = tokens ? this.parser.parse(tokens) : text;
+        // Detect [!TYPE] callout pattern in raw text
         const calloutMatch = text.match(/^\s*(?:<p>\s*)?\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*/i);
         if (calloutMatch) {
           const type = calloutMatch[1].toUpperCase();
           const callout = CALLOUT_TYPES[type];
           if (callout) {
-            // Remove the [!TYPE] prefix from content and render remaining as markdown
+            // Remove the [!TYPE] prefix from raw text, then parse as markdown
             let content = text.slice(calloutMatch[0].length).trim();
-            // Parse remaining content as inline markdown for formatting support
             if (content) {
               content = marked.parse(content);
             }
@@ -236,20 +237,22 @@ function configure() {
               + `</div>`;
           }
         }
-        return `<blockquote>${text}</blockquote>`;
+        return `<blockquote>${html}</blockquote>`;
       },
 
       // ── Links ──
-      link({ href, text }) {
+      link({ href, tokens }) {
         const raw = (href || '').trim();
         const safePrefixes = ['https://', 'http://', '#'];
         const isSafe = safePrefixes.some(p => raw.startsWith(p));
         const safeHref = isSafe ? escapeHtml(raw) : '#';
-        return `<a href="${safeHref}" class="chat-link" target="_blank" rel="noopener noreferrer">${escapeHtml(typeof text === 'string' ? text : String(text || ''))}</a>`;
+        const body = tokens ? this.parser.parseInline(tokens) : '';
+        return `<a href="${safeHref}" class="chat-link" target="_blank" rel="noopener noreferrer">${body}</a>`;
       },
 
       // ── Paragraphs ──
-      paragraph({ text }) {
+      paragraph({ tokens }) {
+        const text = this.parser.parseInline(tokens);
         return `<p>${text.replace(/(<br\s*\/?>)+\s*$/, '')}</p>\n`;
       }
     },
