@@ -878,11 +878,8 @@ function initializePreviewIframe(container) {
     html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{margin:0;padding:16px;background:#1a1a1a;color:#e0e0e0;font-family:system-ui,sans-serif;}</style></head><body>${code}</body></html>`;
   }
 
-  // Use blob URL for security
-  const blob = new Blob([html], { type: 'text/html' });
-  const url = URL.createObjectURL(blob);
-  iframe.src = url;
-  iframe.addEventListener('load', () => URL.revokeObjectURL(url), { once: true });
+  // Use srcdoc for Electron compatibility (blob URLs blocked by sandbox)
+  iframe.srcdoc = html;
 }
 
 /**
