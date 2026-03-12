@@ -77,7 +77,7 @@ function configure() {
 
         // Diff highlighting
         if (langLower === 'diff') {
-          return renderDiffBlock(raw);
+          return renderDiffBlock(raw, filename);
         }
 
         // File tree
@@ -230,7 +230,7 @@ function configure() {
 // Special Block Renderers
 // ══════════════════════════════════════════════
 
-function renderDiffBlock(code) {
+function renderDiffBlock(code, filename) {
   const lines = code.split('\n');
   const diffLines = lines.map((line, i) => {
     let cls = 'diff-ctx';
@@ -239,11 +239,19 @@ function renderDiffBlock(code) {
     else if (line.startsWith('-')) { cls = 'diff-del'; symbol = '-'; }
     else if (line.startsWith('@@')) { cls = 'diff-info'; symbol = '@'; }
     const content = line.startsWith('+') || line.startsWith('-') ? line.slice(1) : line;
+    // @@ lines: render full line content without symbol split
+    if (cls === 'diff-info') {
+      return `<div class="diff-line ${cls}"><span class="diff-ln">${i + 1}</span><span class="diff-info-content">${escapeHtml(line)}</span></div>`;
+    }
     return `<div class="diff-line ${cls}"><span class="diff-ln">${i + 1}</span><span class="diff-sym">${symbol}</span><span class="diff-content">${escapeHtml(content)}</span></div>`;
   }).join('');
 
+  const filenameHtml = filename
+    ? `<span class="chat-code-filename">${escapeHtml(filename)}</span>`
+    : '';
+
   return `<div class="chat-code-block chat-diff-block">`
-    + `<div class="chat-code-header"><span class="chat-code-lang">diff</span>`
+    + `<div class="chat-code-header"><span class="chat-code-lang">diff</span>${filenameHtml}`
     + `<button class="chat-code-copy" title="${t('common.copy')}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>`
     + `<pre class="diff-pre">${diffLines}</pre></div>`;
 }

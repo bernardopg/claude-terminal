@@ -148,7 +148,7 @@ code.line-numbers-off .code-line::before {
 }
 
 .diff-line.diff-add {
-  background: rgba(34, 197, 94, 0.08);
+  background: rgba(34, 197, 94, 0.12);
 }
 .diff-line.diff-add .diff-sym {
   color: var(--success);
@@ -158,7 +158,7 @@ code.line-numbers-off .code-line::before {
 }
 
 .diff-line.diff-del {
-  background: rgba(239, 68, 68, 0.08);
+  background: rgba(239, 68, 68, 0.12);
 }
 .diff-line.diff-del .diff-sym {
   color: var(--danger);
@@ -168,11 +168,13 @@ code.line-numbers-off .code-line::before {
 }
 
 .diff-line.diff-info {
-  background: rgba(168, 85, 247, 0.06);
+  background: rgba(168, 85, 247, 0.15);
 }
-.diff-line.diff-info .diff-sym,
-.diff-line.diff-info .diff-content {
+.diff-info-content {
   color: #a855f7;
+  flex: 1;
+  padding: 0 8px;
+  font-style: italic;
 }
 
 .diff-line.diff-ctx .diff-content {
