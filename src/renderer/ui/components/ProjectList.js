@@ -180,7 +180,7 @@ function renderFolderHtml(folder, depth) {
   return `
     <div class="folder-item" data-folder-id="${folder.id}" data-depth="${depth}" draggable="true">
       <div class="folder-header" style="padding-left: ${depth * 16 + 8}px;">
-        <span class="drag-handle" title="${t('projects.dragToReorder')}">⋮⋮</span>
+        <span class="drag-handle">⋮⋮</span>
         <span class="folder-chevron ${folder.collapsed ? 'collapsed' : ''} ${!hasChildren ? 'hidden' : ''}">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>
         </span>
@@ -399,7 +399,7 @@ function renderProjectHtml(project, depth) {
          data-project-id="${project.id}" data-depth="${depth}" draggable="true" tabindex="0"
          style="margin-left: ${depth * 16}px;">
       ${tooltipHtml}
-      <span class="drag-handle" title="${t('projects.dragToReorder')}">⋮⋮</span>
+      <span class="drag-handle">⋮⋮</span>
       <div class="project-info">
         <div class="project-name">
           ${colorIndicator}
