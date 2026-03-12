@@ -591,7 +591,7 @@ code.line-numbers-off .code-line::before {
   color: var(--text-muted);
   transition: transform 0.15s;
 }
-.ft-toggle.collapsed { transform: rotate(-90deg); }
+.ft-item.ft-collapsed > .ft-toggle { transform: rotate(-90deg); }
 .ft-toggle svg { width: 10px; height: 10px; }
 .ft-toggle-placeholder { width: 18px; flex-shrink: 0; }
 .ft-icon {

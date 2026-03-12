@@ -465,8 +465,9 @@ function renderFileTree(code) {
       : `<span class="ft-icon-ext">${getFileIcon(item.name)}</span>`;
     const nameClass = item.isDir ? 'ft-name folder' : 'ft-name';
     const metaHtml = item.meta ? `<span class="ft-meta">${escapeHtml(item.meta)}</span>` : '';
+    const dirAttr = item.isDir ? ' data-ft-dir' : '';
 
-    return `<div class="ft-item">${indent}${toggle}${icon}<span class="${nameClass}">${escapeHtml(item.name)}</span>${metaHtml}</div>`;
+    return `<div class="ft-item${item.isDir ? ' ft-dir' : ''}" data-ft-depth="${item.depth}"${dirAttr}>${indent}${toggle}${icon}<span class="${nameClass}">${escapeHtml(item.name)}</span>${metaHtml}</div>`;
   }).join('');
 
   return `<div class="chat-filetree">`
@@ -1375,15 +1376,17 @@ function attachInteractivity(container) {
 
     // ── File tree folder toggle ──
     if (target.closest('.ft-toggle')) {
-      const toggle = target.closest('.ft-toggle');
-      toggle.classList.toggle('collapsed');
-      // Toggle next sibling ft-children
-      const item = toggle.closest('.ft-item');
-      if (item) {
-        const next = item.nextElementSibling;
-        if (next && next.classList.contains('ft-children')) {
-          next.classList.toggle('hidden');
-        }
+      const item = target.closest('.ft-item');
+      if (!item || !item.hasAttribute('data-ft-dir')) return;
+      const depth = parseInt(item.dataset.ftDepth, 10);
+      const collapsed = item.classList.toggle('ft-collapsed');
+      // Hide/show all following siblings that are deeper than this folder
+      let sibling = item.nextElementSibling;
+      while (sibling && sibling.classList.contains('ft-item')) {
+        const sibDepth = parseInt(sibling.dataset.ftDepth, 10);
+        if (sibDepth <= depth) break; // same or higher level = stop
+        sibling.style.display = collapsed ? 'none' : '';
+        sibling = sibling.nextElementSibling;
       }
       return;
     }
@@ -1643,8 +1646,8 @@ function initMermaidBlocks(blocks) {
 
 async function loadMermaid() {
   try {
-    // Mermaid is ESM-only, must use dynamic import
-    const mod = await import('mermaid');
+    // Load pre-bundled mermaid ESM (built by build-renderer.js)
+    const mod = await import('./dist/mermaid.bundle.js');
     const mermaid = mod.default;
     mermaid.initialize({
       startOnLoad: false,
