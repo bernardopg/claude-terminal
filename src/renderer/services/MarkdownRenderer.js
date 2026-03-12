@@ -125,8 +125,8 @@ function configure() {
 
       // ── Inline code ──
       codespan({ text }) {
-        // Detect keyboard shortcuts: `Ctrl+C`, `Alt+Tab`, etc.
-        if (/^(Ctrl|Alt|Shift|Cmd|Meta|Super|Win|Tab|Enter|Esc|Backspace|Delete|Home|End|PageUp|PageDown|Space|F\d{1,2})(\+.+)*$/i.test(text)) {
+        // Detect keyboard shortcuts: `Ctrl+C`, `Alt+Tab`, `Escape`, etc.
+        if (/^(Ctrl|Alt|Shift|Cmd|Meta|Super|Win|Tab|Enter|Esc(?:ape)?|Backspace|Delete|Home|End|PageUp|PageDown|Space|Arrow(?:Up|Down|Left|Right)|Insert|F\d{1,2})(\+.+)*$/i.test(text)) {
           const keys = text.split('+').map(k => `<kbd>${escapeHtml(k.trim())}</kbd>`);
           return `<span class="chat-kbd-group">${keys.join('<span class="chat-kbd-sep">+</span>')}</span>`;
         }
