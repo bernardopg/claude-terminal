@@ -236,7 +236,7 @@
   cursor: pointer;
   margin-bottom: 8px;
   transition: all 0.15s;
-  border: 1px solid var(--border-color);
+  border: 1px solid transparent;
   background: var(--bg-tertiary);
 }
 
@@ -1805,7 +1805,6 @@ body.compact-projects .project-item:not(.active):hover {
 .drag-active .folder-header,
 .drag-active .project-item,
 .drag-active .drop-zone-root {
-  border: 2px dashed var(--accent-dim);
   transition: border-color 0.15s, background 0.15s;
 }
 
