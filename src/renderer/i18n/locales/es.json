@@ -623,6 +623,8 @@
     "explorerGroup": "Explorador",
     "showDotfiles": "Mostrar archivos ocultos",
     "showDotfilesDesc": "Mostrar archivos y carpetas ocultos (que empiezan con punto) en el explorador",
+    "explorerIgnorePatterns": "Patrones a ignorar",
+    "explorerIgnorePatternsDesc": "Nombres de carpetas/archivos adicionales a ocultar (separados por comas)",
     "telemetryGroup": "Telemetría",
     "telemetryEnabled": "Telemetría anónima",
     "telemetryEnabledDesc": "Ayuda a mejorar Claude Terminal compartiendo datos de uso anónimos",
@@ -878,7 +880,18 @@
     "noResults": "Sin resultados",
     "deleteMultipleConfirm": "¿Eliminar {count} elementos?",
     "selectedItems": "elementos seleccionados",
-    "watchLimitWarning": "Proyecto grande: monitorizando {count} rutas. La actualización automática del explorador puede ser más lenta."
+    "watchLimitWarning": "Proyecto grande: monitorizando {count} rutas. La actualización automática del explorador puede ser más lenta.",
+    "cut": "Cortar",
+    "copy": "Copiar",
+    "duplicate": "Duplicar",
+    "pasteHere": "Pegar aquí",
+    "searchContentPlaceholder": "Buscar en el contenido...",
+    "searchContentToggle": "Buscar en el contenido",
+    "sortFiles": "Ordenar archivos",
+    "sortByName": "Nombre",
+    "sortBySize": "Tamaño",
+    "sortByDate": "Fecha",
+    "sortByType": "Tipo"
   },
   "quickActions": {
     "title": "Acciones rápidas",

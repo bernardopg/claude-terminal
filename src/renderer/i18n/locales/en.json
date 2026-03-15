@@ -699,6 +699,8 @@
     "explorerGroup": "Explorer",
     "showDotfiles": "Show dotfiles",
     "showDotfilesDesc": "Show hidden files and folders (starting with a dot) in the file explorer",
+    "explorerIgnorePatterns": "Ignore patterns",
+    "explorerIgnorePatternsDesc": "Additional folder/file names to hide (comma-separated, added to built-in patterns)",
     "telemetryGroup": "Telemetry",
     "telemetryEnabled": "Anonymous telemetry",
     "telemetryEnabledDesc": "Help improve Claude Terminal by sharing anonymous usage data",
@@ -966,7 +968,16 @@
     "renameOverwriteConfirm": "A file named \"{name}\" already exists. Overwrite?",
     "overwrite": "Overwrite",
     "cut": "Cut",
+    "copy": "Copy",
+    "duplicate": "Duplicate",
     "pasteHere": "Paste here",
+    "searchContentPlaceholder": "Search in file contents...",
+    "searchContentToggle": "Search in contents",
+    "sortFiles": "Sort files",
+    "sortByName": "Name",
+    "sortBySize": "Size",
+    "sortByDate": "Date",
+    "sortByType": "Type",
     "watchLimitWarning": "Large project: watching {count} paths. Explorer auto-refresh may be slower."
   },
   "quickActions": {
@@ -1080,7 +1091,20 @@
     "endDate": "End date",
     "chartStart": "start",
     "chartEnd": "end",
-    "chartProjects": "projects"
+    "chartProjects": "projects",
+    "ofGoal": "of goal",
+    "configureGoal": "Set daily goal",
+    "goalTitle": "Daily Goal",
+    "goalDesc": "Set a daily time target",
+    "goalMinutes": "minutes",
+    "goalDisable": "Disable",
+    "goalApply": "Apply",
+    "goalReached": "Goal reached!",
+    "vsYesterday": "vs yesterday",
+    "vsLastWeek": "vs last week",
+    "vsLastMonth": "vs last month",
+    "export": "Export",
+    "exportTitle": "Export time tracking data"
   },
   "setup": {
     "welcome": {
@@ -1477,7 +1501,15 @@
     "helpSecurityTitle": "Security",
     "helpSecurityPoint1": "Temporary single-use PIN (expires in 2 min)",
     "helpSecurityPoint2": "Encrypted WSS connection for cloud mode",
-    "helpSecurityPoint3": "No third-party servers — everything stays with you"
+    "helpSecurityPoint3": "No third-party servers — everything stays with you",
+    "persistentPin": "Persistent PIN",
+    "customPin": "Custom PIN",
+    "persistentPinHint": "Fixed 6-digit PIN that never expires. Use only on trusted networks.",
+    "pinPersistent": "Persistent (never expires)",
+    "connectedDevices": "Connected devices",
+    "noDevices": "No devices connected",
+    "disconnectDevice": "Disconnect this device",
+    "unknownDevice": "Unknown device"
   },
   "cloud": {
     "tabTitle": "Cloud",

@@ -153,7 +153,16 @@
     "renameOverwriteConfirm": "Un fichier nommé \"{name}\" existe déjà. Écraser ?",
     "overwrite": "Écraser",
     "cut": "Couper",
+    "copy": "Copier",
+    "duplicate": "Dupliquer",
     "pasteHere": "Coller ici",
+    "searchContentPlaceholder": "Rechercher dans le contenu...",
+    "searchContentToggle": "Rechercher dans le contenu",
+    "sortFiles": "Trier les fichiers",
+    "sortByName": "Nom",
+    "sortBySize": "Taille",
+    "sortByDate": "Date",
+    "sortByType": "Type",
     "watchLimitWarning": "Projet volumineux : {count} chemins surveillés. L'actualisation automatique de l'explorateur peut être plus lente."
   },
   "quickActions": {
@@ -779,6 +788,8 @@
     "explorerGroup": "Explorateur",
     "showDotfiles": "Afficher les dotfiles",
     "showDotfilesDesc": "Afficher les fichiers et dossiers cachés (commençant par un point) dans l'explorateur de fichiers",
+    "explorerIgnorePatterns": "Patterns à ignorer",
+    "explorerIgnorePatternsDesc": "Noms de dossiers/fichiers supplémentaires à masquer (séparés par des virgules, ajoutés aux patterns intégrés)",
     "telemetryGroup": "Télémétrie",
     "telemetryEnabled": "Télémétrie anonyme",
     "telemetryEnabledDesc": "Aidez à améliorer Claude Terminal en partageant des données d'utilisation anonymes",
@@ -1080,7 +1091,20 @@
     "endDate": "Date de fin",
     "chartStart": "début",
     "chartEnd": "fin",
-    "chartProjects": "projets"
+    "chartProjects": "projets",
+    "ofGoal": "de l'objectif",
+    "configureGoal": "Objectif quotidien",
+    "goalTitle": "Objectif quotidien",
+    "goalDesc": "Définir un objectif de temps journalier",
+    "goalMinutes": "minutes",
+    "goalDisable": "Désactiver",
+    "goalApply": "Appliquer",
+    "goalReached": "Objectif atteint !",
+    "vsYesterday": "vs hier",
+    "vsLastWeek": "vs sem. dernière",
+    "vsLastMonth": "vs mois dernier",
+    "export": "Exporter",
+    "exportTitle": "Exporter les données de time tracking"
   },
   "setup": {
     "welcome": {
@@ -1477,7 +1501,15 @@
     "helpSecurityTitle": "Sécurité",
     "helpSecurityPoint1": "PIN temporaire à usage unique (expire en 2 min)",
     "helpSecurityPoint2": "Connexion chiffrée en WSS pour le mode cloud",
-    "helpSecurityPoint3": "Aucun serveur tiers — tout reste chez vous"
+    "helpSecurityPoint3": "Aucun serveur tiers — tout reste chez vous",
+    "persistentPin": "PIN permanent",
+    "customPin": "PIN personnalisé",
+    "persistentPinHint": "PIN fixe à 6 chiffres qui n'expire jamais. À utiliser uniquement sur un réseau de confiance.",
+    "pinPersistent": "Permanent (n'expire jamais)",
+    "connectedDevices": "Appareils connectés",
+    "noDevices": "Aucun appareil connecté",
+    "disconnectDevice": "Déconnecter cet appareil",
+    "unknownDevice": "Appareil inconnu"
   },
   "cloud": {
     "tabTitle": "Cloud",
