@@ -532,7 +532,7 @@ function switchToSettingsTab(initialSubTab = 'general') {
   document.getElementById('btn-settings').classList.add('active');
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   document.getElementById('tab-settings').classList.add('active');
-  ctx.TimeTrackingDashboard.cleanup();
+  ctx.TimeTrackingDashboard?.cleanup();
   renderSettingsTab(initialSubTab);
 }
 
