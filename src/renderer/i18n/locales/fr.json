@@ -1806,7 +1806,19 @@
     "exportNoData": "Aucune donnée à exporter",
     "selected": "sélectionnée(s)",
     "deleteSelected": "Supprimer les lignes sélectionnées",
-    "deleteSelectedConfirm": "Êtes-vous sûr de vouloir supprimer {count} ligne(s) ?"
+    "deleteSelectedConfirm": "Êtes-vous sûr de vouloir supprimer {count} ligne(s) ?",
+    "cellViewer": "Valeur de la cellule",
+    "cellCopy": "Copier dans le presse-papier",
+    "cellCopied": "Valeur copiée",
+    "cellExpand": "Voir la valeur complète",
+    "inputFields": "Champs",
+    "inputConnectionString": "Chaîne de connexion",
+    "explain": "Expliquer",
+    "explainTitle": "Plan d'exécution",
+    "explainTooltip": "Afficher le plan d'exécution",
+    "newTab": "Nouvel onglet",
+    "renameTab": "Renommer l'onglet",
+    "closeTab": "Fermer l'onglet"
   },
   "mdViewer": {
     "tableOfContents": "Table des matières",

@@ -381,7 +381,7 @@
 .db-browser-sidebar {
   width: 240px;
   min-width: 180px;
-  max-width: 300px;
+  max-width: 400px;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--border-color);
@@ -2175,4 +2175,303 @@
 }
 .database-results-table th {
   position: relative;
+}
+
+/* ========== SIDEBAR RESIZE ========== */
+.db-browser-resize-handle {
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.db-browser-resize-handle:hover,
+.db-browser-resize-handle:active {
+  background: var(--accent);
+}
+
+/* ========== CELL VALUE VIEWER ========== */
+.db-cell-expand-btn {
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  z-index: 2;
+}
+.db-grid-cell:hover .db-cell-expand-btn,
+.database-results-table td:hover .db-cell-expand-btn {
+  display: flex;
+}
+.db-cell-expand-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.db-grid-cell,
+.database-results-table td {
+  position: relative;
+}
+.db-cell-viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.db-cell-viewer-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-xs);
+}
+.db-cell-viewer-col {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.db-cell-viewer-type {
+  font-family: 'Cascadia Code', monospace;
+  font-size: var(--font-2xs);
+  color: var(--accent);
+}
+.db-cell-viewer-length {
+  color: var(--text-muted);
+  font-size: var(--font-2xs);
+}
+.db-cell-viewer-badge {
+  padding: 1px 6px;
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--success);
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+}
+.db-cell-viewer-content {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 14px;
+  font-family: 'Cascadia Code', monospace;
+  font-size: var(--font-xs);
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 400px;
+  overflow: auto;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ========== CONNECTION STRING TOGGLE ========== */
+.database-form-connstring-toggle {
+  display: flex;
+  gap: 0;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  padding: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  margin-bottom: 8px;
+}
+.database-form-toggle-btn {
+  flex: 1;
+  padding: 5px 12px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.database-form-toggle-btn:hover {
+  color: var(--text-primary);
+}
+.database-form-toggle-btn.active {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* ========== EXPLAIN VIEW ========== */
+.db-query-explain {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.db-query-explain:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+.db-query-explain:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.db-explain-view {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.db-explain-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  color: var(--info);
+  font-size: 11px;
+  font-weight: 600;
+}
+.db-explain-content {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 14px;
+  font-family: 'Cascadia Code', monospace;
+  font-size: var(--font-xs);
+  color: var(--text-primary);
+  max-height: 400px;
+  overflow: auto;
+  white-space: pre-wrap;
+  line-height: 1.5;
+  margin: 0;
+}
+.db-explain-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.db-explain-tree-node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  font-size: var(--font-xs);
+  border-radius: var(--radius-sm);
+}
+.db-explain-tree-node:hover {
+  background: var(--bg-hover);
+}
+.db-explain-tree-id {
+  font-size: var(--font-2xs);
+  color: var(--text-muted);
+  font-family: 'Cascadia Code', monospace;
+  min-width: 20px;
+}
+.db-explain-tree-detail {
+  color: var(--text-primary);
+  font-family: 'Cascadia Code', monospace;
+}
+
+/* ========== QUERY TABS ========== */
+.db-query-tab-bar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+.db-query-tabs-scroll {
+  display: flex;
+  flex: 1;
+  overflow-x: auto;
+  gap: 0;
+}
+.db-query-tabs-scroll::-webkit-scrollbar {
+  height: 0;
+}
+.db-query-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.12s;
+  white-space: nowrap;
+  user-select: none;
+}
+.db-query-tab:hover {
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.02);
+}
+.db-query-tab.active {
+  color: var(--text-primary);
+  border-bottom-color: var(--accent);
+}
+.db-query-tab-name {
+  font-weight: 500;
+}
+.db-query-tab-close {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: 3px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  opacity: 0;
+  transition: all 0.1s;
+}
+.db-query-tab:hover .db-query-tab-close {
+  opacity: 0.6;
+}
+.db-query-tab-close:hover {
+  opacity: 1 !important;
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger);
+}
+.db-query-tab-add {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-left: 2px;
+  transition: all 0.12s;
+}
+.db-query-tab-add:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.db-query-tab-rename-input {
+  background: var(--bg-primary);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  color: var(--text-primary);
+  font-size: var(--font-xs);
+  font-weight: 500;
+  padding: 1px 4px;
+  width: 80px;
+  outline: none;
 }

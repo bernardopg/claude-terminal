@@ -1806,7 +1806,19 @@
     "exportNoData": "No data to export",
     "selected": "selected",
     "deleteSelected": "Delete selected rows",
-    "deleteSelectedConfirm": "Are you sure you want to delete {count} row(s)?"
+    "deleteSelectedConfirm": "Are you sure you want to delete {count} row(s)?",
+    "cellViewer": "Cell Value",
+    "cellCopy": "Copy to clipboard",
+    "cellCopied": "Value copied",
+    "cellExpand": "View full value",
+    "inputFields": "Fields",
+    "inputConnectionString": "Connection String",
+    "explain": "Explain",
+    "explainTitle": "Query Execution Plan",
+    "explainTooltip": "Show execution plan",
+    "newTab": "New query tab",
+    "renameTab": "Rename tab",
+    "closeTab": "Close tab"
   },
   "mdViewer": {
     "tableOfContents": "Table of Contents",

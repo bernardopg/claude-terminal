@@ -62,6 +62,9 @@ let panelState = {
   queryResultColumnWidths: {}, // { colName: widthPx }
   browserSelectedRows: new Set(),
   browserLastSelectedRow: null,
+  browserSidebarWidth: 240,
+  explainResult: null,         // { dbType, rawResult, sql }
+  tabStates: {},               // { [tabId]: { queryRunning, explainResult, queryResultColumnWidths } }
 };
 
 function init(context) {
@@ -315,7 +318,7 @@ function renderSchema(container) {
 
   container.innerHTML = `
     <div class="db-browser">
-      <div class="db-browser-sidebar">
+      <div class="db-browser-sidebar" style="width:${panelState.browserSidebarWidth}px">
         <div class="db-browser-search">
           <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
           <input type="text" class="db-browser-search-input" id="db-browser-filter" placeholder="${tableLabel}..." value="${escapeHtml(panelState.browserTableFilter)}">
@@ -335,6 +338,7 @@ function renderSchema(container) {
           }).join('')}
         </div>
       </div>
+      <div class="db-browser-resize-handle"></div>
       <div class="db-browser-main">
         ${selectedTable && selectedMeta ? renderBrowserDataPanel(selectedTable, selectedMeta, isMongo, columnLabel) : renderBrowserEmptyState(tableLabel)}
       </div>
@@ -418,7 +422,7 @@ function renderBrowserDataPanel(tableName, tableMeta, isMongo, columnLabel) {
                   if (isEditing) {
                     return `<td class="db-grid-cell editing"><input class="db-grid-edit-input" data-row="${ri}" data-col="${escapeHtml(col)}" value="${isNull ? '' : escapeHtml(String(val))}" autofocus></td>`;
                   }
-                  return `<td class="${cellClass}" data-row="${ri}" data-col="${escapeHtml(col)}">${displayVal}</td>`;
+                  return `<td class="${cellClass}" data-row="${ri}" data-col="${escapeHtml(col)}">${displayVal}<button class="db-cell-expand-btn" data-expand-row="${ri}" data-expand-col="${escapeHtml(col)}" title="${t('database.cellExpand')}"><svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10"><path d="M21 11V3h-8l3.29 3.29-10 10L3 13v8h8l-3.29-3.29 10-10z"/></svg></button></td>`;
                 }).join('')}
               </tr>`;
             }).join('')}
@@ -731,6 +735,27 @@ function bindBrowserEvents(container) {
 
   // Column resize
   setupColumnResize(container, 'browserColumnWidths', panelState.browserSelectedTable);
+
+  // Sidebar resize
+  setupSidebarResize(container);
+
+  // Cell expand buttons (browser data grid)
+  container.querySelectorAll('.db-cell-expand-btn[data-expand-row]').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const row = parseInt(btn.dataset.expandRow);
+      const col = btn.dataset.expandCol;
+      const data = panelState.browserData;
+      if (!data || !data.rows[row]) return;
+      const val = data.rows[row][col];
+      const state = require('../../state');
+      const activeId = state.getActiveConnection();
+      const schema = state.getDatabaseSchema(activeId);
+      const tableMeta = schema?.tables?.find(t => t.name === panelState.browserSelectedTable);
+      const colMeta = tableMeta?.columns?.find(c => c.name === col);
+      showCellViewerModal(val, col, colMeta?.type);
+    };
+  });
 }
 
 async function commitCellEdit(input) {
@@ -1597,12 +1622,23 @@ function renderQuery(container) {
     return;
   }
 
+  // Ensure at least one tab exists
+  let tabs = state.getQueryTabs();
+  if (tabs.length === 0) {
+    state.addQueryTab({ id: 'tab-1', name: 'Query 1', query: '' });
+    tabs = state.getQueryTabs();
+  }
+  const activeTabId = state.getActiveQueryTabId();
+  const activeTab = state.getActiveQueryTab();
+
   const conn = state.getDatabaseConnection(activeId);
   const isMongo = conn && conn.type === 'mongodb';
   const isRedis = conn && conn.type === 'redis';
   const placeholder = isMongo ? t('database.mongoPlaceholder') : isRedis ? 'GET mykey' : t('database.queryPlaceholder');
-  const currentQuery = state.getCurrentQuery();
-  const queryResult = state.getQueryResult(activeId);
+  const currentQuery = activeTab ? activeTab.query : '';
+  const tabState = activeTab ? getTabState(activeTab.id) : { queryRunning: false, explainResult: null };
+  const queryResult = activeTab ? state.getQueryResult(activeTab.id) : null;
+  const isRunning = tabState.queryRunning || panelState.queryRunning;
   const templates = getQueryTemplates(isMongo, conn ? conn.type : 'mysql', isRedis);
 
   // Build autocomplete index if needed
@@ -1624,7 +1660,9 @@ function renderQuery(container) {
 
   // Build results
   let resultsHtml = '';
-  if (queryResult) {
+  if (tabState.explainResult || panelState.explainResult) {
+    resultsHtml = buildExplainView(tabState.explainResult || panelState.explainResult);
+  } else if (queryResult) {
     if (queryResult.error) {
       resultsHtml = `<div class="db-query-error">
         <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
@@ -1662,8 +1700,24 @@ function renderQuery(container) {
     }
   }
 
+  // Tab bar HTML
+  const tabBarHtml = `<div class="db-query-tab-bar">
+    <div class="db-query-tabs-scroll">
+      ${tabs.map(tab => `
+        <div class="db-query-tab ${tab.id === activeTabId ? 'active' : ''}" data-tab-id="${escapeHtml(tab.id)}">
+          <span class="db-query-tab-name" data-tab-name="${escapeHtml(tab.id)}">${escapeHtml(tab.name)}</span>
+          ${tabs.length > 1 ? `<button class="db-query-tab-close" data-close-tab="${escapeHtml(tab.id)}" title="${t('database.closeTab')}"><svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>` : ''}
+        </div>
+      `).join('')}
+    </div>
+    <button class="db-query-tab-add" id="db-query-tab-add" title="${t('database.newTab')}">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+    </button>
+  </div>`;
+
   container.innerHTML = `
     <div class="db-query-layout">
+      ${tabBarHtml}
       <div class="db-query-top">
         <div class="db-query-templates">${templatesHtml}</div>
         <div class="db-query-editor-wrap">
@@ -1672,11 +1726,15 @@ function renderQuery(container) {
             <textarea class="database-query-editor" id="database-query-input" placeholder="${escapeHtml(placeholder)}" spellcheck="false">${escapeHtml(currentQuery)}</textarea>
           </div>
           <div class="db-query-actions">
-            <button class="db-query-run" id="database-run-btn" ${panelState.queryRunning ? 'disabled' : ''}>
-              ${panelState.queryRunning
+            <button class="db-query-run" id="database-run-btn" ${isRunning ? 'disabled' : ''}>
+              ${isRunning
                 ? `<span class="db-query-run-spinner"></span> ${t('database.connecting')}`
                 : `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg> ${t('database.runQuery')}`
               }
+            </button>
+            <button class="db-query-explain" id="database-explain-btn" ${isRunning || isMongo || isRedis ? 'disabled' : ''} title="${t('database.explainTooltip')}">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+              ${t('database.explain')}
             </button>
             <button class="db-query-save" id="database-save-query-btn" title="${t('database.saveQuery')}">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
@@ -1705,10 +1763,20 @@ function renderQuery(container) {
   const destructiveCheckbox = document.getElementById('database-allow-destructive');
   if (destructiveCheckbox) destructiveCheckbox.onchange = () => { panelState.allowDestructive = destructiveCheckbox.checked; };
 
+  // Explain button
+  const explainBtn = document.getElementById('database-explain-btn');
+  if (explainBtn) explainBtn.onclick = () => runExplain();
+
   const clearBtn = document.getElementById('database-clear-btn');
   if (clearBtn) clearBtn.onclick = () => {
     state.setCurrentQuery('');
-    state.setQueryResult(activeId, null);
+    if (activeTab) {
+      state.setQueryResult(activeTab.id, null);
+      getTabState(activeTab.id).explainResult = null;
+    } else {
+      state.setQueryResult(activeId, null);
+    }
+    panelState.explainResult = null;
     renderContent();
   };
 
@@ -1873,7 +1941,7 @@ function renderQuery(container) {
   container.querySelectorAll('[data-query-export]').forEach(btn => {
     btn.onclick = () => {
       queryExportMenu && queryExportMenu.classList.remove('open');
-      const result = state.getQueryResult(activeId);
+      const result = activeTab ? state.getQueryResult(activeTab.id) : state.getQueryResult(activeId);
       exportResults(btn.dataset.queryExport, result, 'query-results');
     };
   });
@@ -1883,6 +1951,87 @@ function renderQuery(container) {
   if (resultsWrapper) {
     setupColumnResize(resultsWrapper, 'queryResultColumnWidths', null);
   }
+
+  // Cell expand buttons (query results)
+  container.querySelectorAll('.db-cell-expand-btn[data-expand-qcol]').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const col = btn.dataset.expandQcol;
+      const rowIdx = parseInt(btn.dataset.expandQrow);
+      const result = activeTab ? state.getQueryResult(activeTab.id) : state.getQueryResult(activeId);
+      if (!result || !result.rows || !result.rows[rowIdx]) return;
+      const val = result.rows[rowIdx][col];
+      showCellViewerModal(val, col, null);
+    };
+  });
+
+  // === Query Tab Events ===
+  // Tab click to switch
+  container.querySelectorAll('.db-query-tab').forEach(tab => {
+    tab.onclick = (e) => {
+      if (e.target.closest('.db-query-tab-close')) return;
+      const tabId = tab.dataset.tabId;
+      if (tabId !== activeTabId) {
+        // Save current query text before switching
+        const textarea = document.getElementById('database-query-input');
+        if (textarea && activeTab) {
+          state.updateQueryTab(activeTab.id, { query: textarea.value });
+        }
+        state.setActiveQueryTabId(tabId);
+        renderContent();
+      }
+    };
+  });
+
+  // Close tab
+  container.querySelectorAll('.db-query-tab-close').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      state.removeQueryTab(btn.dataset.closeTab);
+      renderContent();
+    };
+  });
+
+  // Add tab
+  const addTabBtn = document.getElementById('db-query-tab-add');
+  if (addTabBtn) addTabBtn.onclick = () => {
+    // Save current query first
+    const textarea = document.getElementById('database-query-input');
+    if (textarea && activeTab) {
+      state.updateQueryTab(activeTab.id, { query: textarea.value });
+    }
+    const tabId = 'tab-' + Date.now().toString(36);
+    const tabNum = state.getQueryTabs().length + 1;
+    state.addQueryTab({ id: tabId, name: `Query ${tabNum}`, query: '' });
+    renderContent();
+  };
+
+  // Double-click tab name to rename
+  container.querySelectorAll('.db-query-tab-name').forEach(nameEl => {
+    nameEl.ondblclick = (e) => {
+      e.stopPropagation();
+      const tabId = nameEl.dataset.tabName;
+      const tab = state.getQueryTabs().find(t => t.id === tabId);
+      if (!tab) return;
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'db-query-tab-rename-input';
+      input.value = tab.name;
+      nameEl.replaceWith(input);
+      input.focus();
+      input.select();
+      const finish = () => {
+        const newName = input.value.trim() || tab.name;
+        state.updateQueryTab(tabId, { name: newName });
+        renderContent();
+      };
+      input.onblur = finish;
+      input.onkeydown = (ke) => {
+        if (ke.key === 'Enter') { ke.preventDefault(); finish(); }
+        if (ke.key === 'Escape') { ke.preventDefault(); renderContent(); }
+      };
+    };
+  });
 }
 
 async function exportResults(format, data, sourceName) {
@@ -1957,7 +2106,7 @@ function buildResultsTable(result) {
     for (const col of result.columns) {
       const val = row[col];
       const display = val === null ? '<span class="null-value">NULL</span>' : escapeHtml(String(val));
-      html += `<td>${display}</td>`;
+      html += `<td>${display}<button class="db-cell-expand-btn" data-expand-qcol="${escapeHtml(String(col))}" data-expand-qrow="${result.rows.indexOf(row)}" title="${t('database.cellExpand')}"><svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10"><path d="M21 11V3h-8l3.29 3.29-10 10L3 13v8h8l-3.29-3.29 10-10z"/></svg></button></td>`;
     }
     html += '</tr>';
   }
@@ -2039,18 +2188,28 @@ async function runQuery() {
   const conn = state.getDatabaseConnection(activeId);
   const isMongo = conn && conn.type === 'mongodb';
 
+  const activeTab = state.getActiveQueryTab ? state.getActiveQueryTab() : null;
   const input = document.getElementById('database-query-input');
-  const sql = input ? input.value.trim() : state.getCurrentQuery().trim();
+  const sql = input ? input.value.trim() : (activeTab ? activeTab.query : state.getCurrentQuery()).trim();
   if (!sql) return;
 
+  // Save query text to tab
+  if (activeTab && input) state.updateQueryTab(activeTab.id, { query: input.value });
+
+  const tabId = activeTab ? activeTab.id : null;
+  if (tabId) {
+    getTabState(tabId).queryRunning = true;
+    getTabState(tabId).explainResult = null;
+  }
   panelState.queryRunning = true;
+  panelState.explainResult = null;
   renderContent();
 
   try {
     // MongoDB: send as-is (not SQL, no semicolon splitting)
     if (isMongo) {
       const result = await ctx.api.database.executeQuery({ id: activeId, sql, limit: 100, allowDestructive: panelState.allowDestructive });
-      state.setQueryResult(activeId, result);
+      state.setQueryResult(tabId || activeId, result);
       _recordHistory(state, sql, conn, activeId, result, result.duration);
     } else {
       const statements = splitSqlStatements(sql);
@@ -2075,8 +2234,9 @@ async function runQuery() {
             error: t('database.statementError', { current: statementsRun, total: statements.length, error: result.error }),
             duration: totalDuration
           };
-          state.setQueryResult(activeId, errorResult);
+          state.setQueryResult(tabId || activeId, errorResult);
           _recordHistory(state, sql, conn, activeId, errorResult, totalDuration);
+          if (tabId) getTabState(tabId).queryRunning = false;
           panelState.queryRunning = false;
           renderContent();
           return;
@@ -2097,15 +2257,16 @@ async function runQuery() {
       if (statements.length > 1) {
         lastResult.statementsRun = statementsRun;
       }
-      state.setQueryResult(activeId, lastResult);
+      state.setQueryResult(tabId || activeId, lastResult);
       _recordHistory(state, sql, conn, activeId, lastResult, totalDuration);
     }
   } catch (e) {
     const errorResult = { error: e.message };
-    state.setQueryResult(activeId, errorResult);
+    state.setQueryResult(tabId || activeId, errorResult);
     _recordHistory(state, sql, conn, activeId, errorResult, 0);
   }
 
+  if (tabId) getTabState(tabId).queryRunning = false;
   panelState.queryRunning = false;
   renderContent();
 }
@@ -2372,31 +2533,93 @@ function renderFormFields(data, type) {
   } else {
     // MySQL / MariaDB / PostgreSQL
     const defaultPort = (type === 'mysql' || type === 'mariadb') ? '3306' : '5432';
+    const placeholder = type === 'postgresql' ? 'postgresql://user:pass@host:5432/dbname' : 'mysql://user:pass@host:3306/dbname';
     container.innerHTML = `
-      <div class="database-form-row">
-        <div class="database-form-group database-form-grow-2">
-          <label class="database-form-label">${t('database.host')}</label>
-          <input type="text" class="database-form-input" id="db-form-host" value="${escapeHtml(data.host || 'localhost')}" placeholder="localhost">
+      <div class="database-form-connstring-toggle">
+        <button class="database-form-toggle-btn active" data-mode="fields" id="db-form-mode-fields">${t('database.inputFields')}</button>
+        <button class="database-form-toggle-btn" data-mode="uri" id="db-form-mode-uri">${t('database.inputConnectionString')}</button>
+      </div>
+      <div id="db-form-fields-area">
+        <div class="database-form-row">
+          <div class="database-form-group database-form-grow-2">
+            <label class="database-form-label">${t('database.host')}</label>
+            <input type="text" class="database-form-input" id="db-form-host" value="${escapeHtml(data.host || 'localhost')}" placeholder="localhost">
+          </div>
+          <div class="database-form-group database-form-grow">
+            <label class="database-form-label">${t('database.port')}</label>
+            <input type="number" class="database-form-input" id="db-form-port" value="${escapeHtml(String(data.port || defaultPort))}" placeholder="${defaultPort}">
+          </div>
         </div>
-        <div class="database-form-group database-form-grow">
-          <label class="database-form-label">${t('database.port')}</label>
-          <input type="number" class="database-form-input" id="db-form-port" value="${escapeHtml(String(data.port || defaultPort))}" placeholder="${defaultPort}">
+        <div class="database-form-group">
+          <label class="database-form-label">${t('database.databaseName')}</label>
+          <input type="text" class="database-form-input" id="db-form-database" value="${escapeHtml(data.database || '')}" placeholder="mydb">
+        </div>
+        <div class="database-form-row">
+          <div class="database-form-group database-form-grow">
+            <label class="database-form-label">${t('database.username')}</label>
+            <input type="text" class="database-form-input" id="db-form-username" value="${escapeHtml(data.username || '')}" placeholder="user">
+          </div>
+          <div class="database-form-group database-form-grow">
+            <label class="database-form-label">${t('database.password')}</label>
+            <input type="password" class="database-form-input" id="db-form-password" value="" placeholder="********">
+          </div>
         </div>
       </div>
-      <div class="database-form-group">
-        <label class="database-form-label">${t('database.databaseName')}</label>
-        <input type="text" class="database-form-input" id="db-form-database" value="${escapeHtml(data.database || '')}" placeholder="mydb">
-      </div>
-      <div class="database-form-row">
-        <div class="database-form-group database-form-grow">
-          <label class="database-form-label">${t('database.username')}</label>
-          <input type="text" class="database-form-input" id="db-form-username" value="${escapeHtml(data.username || '')}" placeholder="user">
-        </div>
-        <div class="database-form-group database-form-grow">
-          <label class="database-form-label">${t('database.password')}</label>
-          <input type="password" class="database-form-input" id="db-form-password" value="" placeholder="********">
+      <div id="db-form-uri-area" style="display:none">
+        <div class="database-form-group">
+          <label class="database-form-label">${t('database.connectionString')}</label>
+          <input type="text" class="database-form-input" style="font-family:'Cascadia Code',monospace;font-size:12px" id="db-form-connstring-input" value="" placeholder="${placeholder}">
         </div>
       </div>`;
+
+    // Toggle handlers
+    const fieldsBtn = document.getElementById('db-form-mode-fields');
+    const uriBtn = document.getElementById('db-form-mode-uri');
+    const fieldsArea = document.getElementById('db-form-fields-area');
+    const uriArea = document.getElementById('db-form-uri-area');
+    const connInput = document.getElementById('db-form-connstring-input');
+
+    if (fieldsBtn && uriBtn) {
+      uriBtn.onclick = () => {
+        fieldsBtn.classList.remove('active');
+        uriBtn.classList.add('active');
+        if (fieldsArea) fieldsArea.style.display = 'none';
+        if (uriArea) uriArea.style.display = '';
+        // Build URI from current field values
+        if (connInput) {
+          const cfg = {
+            host: document.getElementById('db-form-host')?.value || 'localhost',
+            port: parseInt(document.getElementById('db-form-port')?.value) || parseInt(defaultPort),
+            database: document.getElementById('db-form-database')?.value || '',
+            username: document.getElementById('db-form-username')?.value || '',
+            password: document.getElementById('db-form-password')?.value || '',
+          };
+          connInput.value = buildConnectionString(type, cfg);
+        }
+      };
+      fieldsBtn.onclick = () => {
+        uriBtn.classList.remove('active');
+        fieldsBtn.classList.add('active');
+        if (uriArea) uriArea.style.display = 'none';
+        if (fieldsArea) fieldsArea.style.display = '';
+        // Parse URI back into fields
+        if (connInput && connInput.value.trim()) {
+          const parsed = parseConnectionString(type, connInput.value.trim());
+          if (parsed) {
+            const hostEl = document.getElementById('db-form-host');
+            const portEl = document.getElementById('db-form-port');
+            const dbEl = document.getElementById('db-form-database');
+            const userEl = document.getElementById('db-form-username');
+            const passEl = document.getElementById('db-form-password');
+            if (hostEl) hostEl.value = parsed.host;
+            if (portEl) portEl.value = parsed.port;
+            if (dbEl) dbEl.value = parsed.database;
+            if (userEl) userEl.value = parsed.username;
+            if (passEl) passEl.value = parsed.password;
+          }
+        }
+      };
+    }
   }
 }
 
@@ -2418,11 +2641,25 @@ function collectFormData() {
     config.password = document.getElementById('db-form-password')?.value || '';
     config.database = parseInt(document.getElementById('db-form-database')?.value) || 0;
   } else {
-    config.host = document.getElementById('db-form-host')?.value.trim() || 'localhost';
-    config.port = parseInt(document.getElementById('db-form-port')?.value) || ((type === 'mysql' || type === 'mariadb') ? 3306 : 5432);
-    config.database = document.getElementById('db-form-database')?.value.trim() || '';
-    config.username = document.getElementById('db-form-username')?.value.trim() || '';
-    config.password = document.getElementById('db-form-password')?.value || '';
+    // Check if URI mode is active
+    const connStringInput = document.getElementById('db-form-connstring-input');
+    const uriArea = document.getElementById('db-form-uri-area');
+    if (connStringInput && uriArea && uriArea.style.display !== 'none' && connStringInput.value.trim()) {
+      const parsed = parseConnectionString(type, connStringInput.value.trim());
+      if (parsed) {
+        config.host = parsed.host;
+        config.port = parsed.port;
+        config.database = parsed.database;
+        config.username = parsed.username;
+        config.password = parsed.password;
+      }
+    } else {
+      config.host = document.getElementById('db-form-host')?.value.trim() || 'localhost';
+      config.port = parseInt(document.getElementById('db-form-port')?.value) || ((type === 'mysql' || type === 'mariadb') ? 3306 : 5432);
+      config.database = document.getElementById('db-form-database')?.value.trim() || '';
+      config.username = document.getElementById('db-form-username')?.value.trim() || '';
+      config.password = document.getElementById('db-form-password')?.value || '';
+    }
   }
 
   return config;
@@ -2447,6 +2684,237 @@ function getProject(id) {
 function getProjectName(id) {
   const project = getProject(id);
   return project ? (project.name || ctx.path.basename(project.path)) : '';
+}
+
+// ==================== Cell Value Viewer ====================
+
+function showCellViewerModal(value, columnName, dataType) {
+  const isNull = value === null || value === undefined;
+  const strVal = isNull ? '' : String(value);
+  const length = isNull ? 0 : strVal.length;
+
+  let displayHtml;
+  let isJson = false;
+  if (!isNull) {
+    try {
+      const parsed = JSON.parse(strVal);
+      isJson = true;
+      displayHtml = highlight(JSON.stringify(parsed, null, 2), 'json');
+    } catch (_) {
+      displayHtml = escapeHtml(strVal);
+    }
+  } else {
+    displayHtml = '<span class="null-value">NULL</span>';
+  }
+
+  const content = `
+    <div class="db-cell-viewer">
+      <div class="db-cell-viewer-meta">
+        <span class="db-cell-viewer-col">${escapeHtml(columnName)}</span>
+        <span class="db-cell-viewer-type">${escapeHtml(dataType || 'unknown')}</span>
+        <span class="db-cell-viewer-length">${isNull ? 'NULL' : `${length} chars`}</span>
+        ${isJson ? '<span class="db-cell-viewer-badge">JSON</span>' : ''}
+      </div>
+      <pre class="db-cell-viewer-content${isJson ? ' json' : ''}">${displayHtml}</pre>
+    </div>`;
+
+  const modal = createModal({
+    id: 'cell-viewer-modal',
+    title: t('database.cellViewer'),
+    content,
+    size: 'medium',
+    buttons: [
+      { label: t('database.cellCopy'), action: 'copy', onClick: () => {
+        navigator.clipboard.writeText(strVal);
+        ctx.showToast({ type: 'success', title: t('database.cellCopied') });
+      }},
+      { label: t('database.close') || 'Close', action: 'close', primary: true, onClick: (m) => closeModal(m) }
+    ]
+  });
+  showModal(modal);
+}
+
+// ==================== Sidebar Resize ====================
+
+function setupSidebarResize(container) {
+  const handle = container.querySelector('.db-browser-resize-handle');
+  if (!handle) return;
+
+  handle.onmousedown = (e) => {
+    e.preventDefault();
+    const sidebar = container.querySelector('.db-browser-sidebar');
+    if (!sidebar) return;
+    const startX = e.clientX;
+    const startWidth = sidebar.offsetWidth;
+
+    const onMouseMove = (moveEvt) => {
+      const delta = moveEvt.clientX - startX;
+      const newWidth = Math.max(180, Math.min(400, startWidth + delta));
+      sidebar.style.width = newWidth + 'px';
+    };
+
+    const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      panelState.browserSidebarWidth = sidebar.offsetWidth;
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  };
+}
+
+// ==================== EXPLAIN / Query Plan ====================
+
+function getTabState(tabId) {
+  if (!panelState.tabStates[tabId]) {
+    panelState.tabStates[tabId] = { queryRunning: false, explainResult: null, queryResultColumnWidths: {} };
+  }
+  return panelState.tabStates[tabId];
+}
+
+async function runExplain() {
+  const state = require('../../state');
+  const activeId = state.getActiveConnection();
+  if (!activeId) return;
+
+  const conn = state.getDatabaseConnection(activeId);
+  if (!conn || conn.type === 'mongodb' || conn.type === 'redis') return;
+
+  const activeTab = state.getActiveQueryTab ? state.getActiveQueryTab() : null;
+  const input = document.getElementById('database-query-input');
+  let sql = input ? input.value.trim() : (activeTab ? activeTab.query : state.getCurrentQuery()).trim();
+  if (!sql) return;
+
+  // Strip existing EXPLAIN prefix
+  sql = sql.replace(/^\s*EXPLAIN\s+(ANALYZE\s+)?(QUERY\s+PLAN\s+)?(FORMAT\s*=?\s*\w+\s+)?/i, '').trim();
+  if (!sql) return;
+
+  let explainSql;
+  switch (conn.type) {
+    case 'postgresql':
+      explainSql = `EXPLAIN (ANALYZE, FORMAT JSON) ${sql}`;
+      break;
+    case 'mysql':
+    case 'mariadb':
+      explainSql = `EXPLAIN FORMAT=JSON ${sql}`;
+      break;
+    case 'sqlite':
+      explainSql = `EXPLAIN QUERY PLAN ${sql}`;
+      break;
+    default:
+      explainSql = `EXPLAIN ${sql}`;
+  }
+
+  const tabId = activeTab ? activeTab.id : null;
+  if (tabId) {
+    getTabState(tabId).queryRunning = true;
+  } else {
+    panelState.queryRunning = true;
+  }
+  renderContent();
+
+  try {
+    const result = await ctx.api.database.executeQuery({
+      id: activeId, sql: explainSql, limit: 1000, allowDestructive: false
+    });
+    if (result.error) {
+      if (tabId) {
+        state.setQueryResult(tabId, result);
+        getTabState(tabId).explainResult = null;
+      } else {
+        state.setQueryResult(activeId, result);
+        panelState.explainResult = null;
+      }
+    } else {
+      if (tabId) {
+        getTabState(tabId).explainResult = { dbType: conn.type, rawResult: result, sql };
+        state.setQueryResult(tabId, null);
+      } else {
+        panelState.explainResult = { dbType: conn.type, rawResult: result, sql };
+        state.setQueryResult(activeId, null);
+      }
+    }
+  } catch (e) {
+    const errResult = { error: e.message };
+    if (tabId) {
+      state.setQueryResult(tabId, errResult);
+    } else {
+      state.setQueryResult(activeId, errResult);
+    }
+  }
+
+  if (tabId) {
+    getTabState(tabId).queryRunning = false;
+  } else {
+    panelState.queryRunning = false;
+  }
+  renderContent();
+}
+
+function buildExplainView(explainResult) {
+  const { dbType, rawResult } = explainResult;
+
+  if (dbType === 'postgresql' || dbType === 'mysql' || dbType === 'mariadb') {
+    try {
+      const firstCol = rawResult.columns[0];
+      const planJson = rawResult.rows[0][firstCol];
+      const plan = typeof planJson === 'string' ? JSON.parse(planJson) : planJson;
+      return `<div class="db-explain-view">
+        <div class="db-explain-header">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+          ${t('database.explainTitle')}
+        </div>
+        <pre class="db-explain-content">${highlight(JSON.stringify(plan, null, 2), 'json')}</pre>
+      </div>`;
+    } catch (_) {
+      return buildResultsTable(rawResult);
+    }
+  }
+
+  if (dbType === 'sqlite') {
+    return `<div class="db-explain-view">
+      <div class="db-explain-header">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        ${t('database.explainTitle')}
+      </div>
+      <div class="db-explain-tree">
+        ${rawResult.rows.map(row => {
+          const indent = (row.parent || 0) * 20;
+          return `<div class="db-explain-tree-node" style="padding-left:${indent + 12}px">
+            <span class="db-explain-tree-id">${row.id !== undefined ? row.id : ''}</span>
+            <span class="db-explain-tree-detail">${escapeHtml(row.detail || '')}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
+
+  return buildResultsTable(rawResult);
+}
+
+// ==================== Connection String Helpers ====================
+
+function parseConnectionString(type, uri) {
+  try {
+    const url = new URL(uri);
+    return {
+      host: url.hostname || 'localhost',
+      port: parseInt(url.port) || (type === 'postgresql' ? 5432 : 3306),
+      database: url.pathname.replace(/^\//, '') || '',
+      username: decodeURIComponent(url.username || ''),
+      password: decodeURIComponent(url.password || ''),
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+function buildConnectionString(type, config) {
+  const proto = type === 'postgresql' ? 'postgresql' : 'mysql';
+  const userPart = config.username ? `${encodeURIComponent(config.username)}${config.password ? ':' + encodeURIComponent(config.password) : ''}@` : '';
+  const port = config.port || (type === 'postgresql' ? 5432 : 3306);
+  return `${proto}://${userPart}${config.host || 'localhost'}:${port}/${config.database || ''}`;
 }
 
 module.exports = { init, loadPanel };

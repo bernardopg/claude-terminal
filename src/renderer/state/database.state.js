@@ -21,8 +21,10 @@ const initialState = {
   activeConnection: null,    // connection id
   connectionStatuses: {},    // { [id]: 'disconnected'|'connecting'|'connected'|'error' }
   schemas: {},               // { [id]: { tables: [...] } }
-  queryResults: {},          // { [id]: { columns, rows, rowCount, duration, error } }
-  currentQuery: '',          // SQL text in editor
+  queryResults: {},          // { [tabId or connId]: { columns, rows, rowCount, duration, error } }
+  currentQuery: '',          // DEPRECATED — kept for migration. Use queryTabs
+  queryTabs: [],             // [{ id, name, query }]
+  activeQueryTabId: null,    // active tab id
   detectedDatabases: [],     // Auto-detected configs from project scan
   queryHistory: [],          // [{ id, timestamp, sql, connectionId, connectionName, dbType, duration, rowCount, error, success }]
   savedQueries: [],          // [{ id, name, sql, createdAt }]
@@ -116,11 +118,61 @@ function setQueryResult(id, result) {
 }
 
 function getCurrentQuery() {
-  return databaseState.get().currentQuery;
+  const tab = getActiveQueryTab();
+  return tab ? tab.query : databaseState.get().currentQuery;
 }
 
 function setCurrentQuery(sql) {
-  databaseState.setProp('currentQuery', sql);
+  const tab = getActiveQueryTab();
+  if (tab) {
+    updateQueryTab(tab.id, { query: sql });
+  } else {
+    databaseState.setProp('currentQuery', sql);
+  }
+}
+
+// ========== Query Tabs ==========
+
+function getQueryTabs() {
+  return databaseState.get().queryTabs;
+}
+
+function getActiveQueryTabId() {
+  return databaseState.get().activeQueryTabId;
+}
+
+function setActiveQueryTabId(id) {
+  databaseState.setProp('activeQueryTabId', id);
+}
+
+function addQueryTab(tab) {
+  const tabs = [...databaseState.get().queryTabs, tab];
+  databaseState.set({ queryTabs: tabs, activeQueryTabId: tab.id });
+}
+
+function removeQueryTab(id) {
+  const state = databaseState.get();
+  const tabs = state.queryTabs.filter(t => t.id !== id);
+  let activeId = state.activeQueryTabId;
+  if (activeId === id) {
+    activeId = tabs.length > 0 ? tabs[tabs.length - 1].id : null;
+  }
+  // Clean up results for this tab
+  const queryResults = { ...state.queryResults };
+  delete queryResults[id];
+  databaseState.set({ queryTabs: tabs, activeQueryTabId: activeId, queryResults });
+}
+
+function updateQueryTab(id, updates) {
+  const tabs = databaseState.get().queryTabs.map(t =>
+    t.id === id ? { ...t, ...updates } : t
+  );
+  databaseState.setProp('queryTabs', tabs);
+}
+
+function getActiveQueryTab() {
+  const state = databaseState.get();
+  return state.queryTabs.find(t => t.id === state.activeQueryTabId) || null;
 }
 
 // ========== Detection ==========
@@ -231,6 +283,13 @@ function loadDatabasePersistence() {
     console.warn('[Database] Failed to load history:', e.message);
   }
 
+  // Migrate single-query to tab system
+  const currentState = databaseState.get();
+  if ((!currentState.queryTabs || currentState.queryTabs.length === 0)) {
+    const defaultTab = { id: 'tab-1', name: 'Query 1', query: currentState.currentQuery || '' };
+    databaseState.set({ queryTabs: [defaultTab], activeQueryTabId: 'tab-1' });
+  }
+
   // Load saved queries
   try {
     if (fs.existsSync(savedQueriesFile)) {
@@ -265,6 +324,13 @@ module.exports = {
   setQueryResult,
   getCurrentQuery,
   setCurrentQuery,
+  getQueryTabs,
+  getActiveQueryTabId,
+  setActiveQueryTabId,
+  addQueryTab,
+  removeQueryTab,
+  updateQueryTab,
+  getActiveQueryTab,
   getDetectedDatabases,
   setDetectedDatabases,
   getQueryHistory,
