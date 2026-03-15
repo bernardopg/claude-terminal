@@ -92,14 +92,20 @@ function registerDialogHandlers() {
     // Allowlist checked against basename only — prevents ../../evil/code bypasses
     const ALLOWED_EDITORS = ['code', 'cursor', 'webstorm', 'idea', 'subl', 'atom', 'notepad++', 'notepad', 'vim', 'nvim', 'nano', 'zed'];
     const editorBin = (editor || '').trim();
+    if (!editorBin) return;
     const baseName = path.basename(editorBin).replace(/\.exe$/i, '').toLowerCase();
     if (!ALLOWED_EDITORS.includes(baseName)) {
-      console.error(`[Dialog IPC] Editor not in allowlist: "${editorBin}"`);
-      return;
+      // Custom editor: reject if it contains shell metacharacters
+      const DANGEROUS_CHARS = /[;&|$`(){}<>\n\r]/;
+      if (DANGEROUS_CHARS.test(editorBin)) {
+        console.error(`[Dialog IPC] Custom editor rejected (dangerous chars): "${editorBin}"`);
+        return;
+      }
+      console.debug(`[Dialog IPC] Using custom editor: "${editorBin}"`);
     }
     // shell:true is required on Windows for PATH-based launchers (.cmd wrappers like `idea`, `cursor`, `zed`).
-    // Injection is prevented by validating editorBin against the allowlist (basename only) and passing
-    // projectPath as a separate argument array — never via string interpolation.
+    // Injection is prevented by validating editorBin against the allowlist (basename only) or rejecting
+    // dangerous chars for custom editors, and passing projectPath as a separate argument array.
     const { spawn } = require('child_process');
     const proc = spawn(editorBin, [projectPath], { shell: process.platform === 'win32', detached: true, stdio: 'ignore' });
     proc.on('error', (error) => {

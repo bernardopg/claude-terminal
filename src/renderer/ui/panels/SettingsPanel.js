@@ -834,6 +834,31 @@ async function renderSettingsTab(initialTab = 'general') {
             </div>
           </div>
           <div class="settings-group">
+            <div class="settings-group-title">${t('settings.importExportGroup')}</div>
+            <div class="settings-card">
+              <div class="settings-row">
+                <div class="settings-label">
+                  <div>${t('settings.exportSettings')}</div>
+                  <div class="settings-desc">${t('settings.exportSettingsDesc')}</div>
+                </div>
+                <button type="button" class="btn-outline" id="btn-export-settings">
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                  ${t('settings.exportBtn')}
+                </button>
+              </div>
+              <div class="settings-row">
+                <div class="settings-label">
+                  <div>${t('settings.importSettings')}</div>
+                  <div class="settings-desc">${t('settings.importSettingsDesc')}</div>
+                </div>
+                <button type="button" class="btn-outline" id="btn-import-settings">
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg>
+                  ${t('settings.importBtn')}
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="settings-group">
             <div class="settings-group-title">${t('settings.aboutGroup')}</div>
             <div class="settings-card">
               <div class="settings-row">
@@ -1415,6 +1440,18 @@ async function renderSettingsTab(initialTab = 'general') {
       };
     });
   });
+  // Show/hide custom editor input when editor dropdown changes
+  const editorDropdownEl = document.getElementById('editor-dropdown');
+  if (editorDropdownEl) {
+    const observer = new MutationObserver(() => {
+      const customRow = document.getElementById('custom-editor-row');
+      if (customRow) {
+        customRow.style.display = editorDropdownEl.dataset.value === 'custom' ? 'block' : 'none';
+      }
+    });
+    observer.observe(editorDropdownEl, { attributes: true, attributeFilter: ['data-value'] });
+  }
+
   // Issue 7: centralized cleanup — tear down previous listeners before registering new ones
   _runCleanups();
 
@@ -1621,6 +1658,83 @@ async function renderSettingsTab(initialTab = 'general') {
   if (btnRerunSetup) {
     btnRerunSetup.onclick = () => {
       ctx.api.setupWizard.rerun();
+    };
+  }
+
+  // Export settings
+  const btnExportSettings = document.getElementById('btn-export-settings');
+  if (btnExportSettings) {
+    btnExportSettings.onclick = async () => {
+      const settings = ctx.settingsState.get();
+      const exportData = {
+        _exportVersion: 1,
+        _appVersion: await ctx.api.app.getVersion(),
+        _exportedAt: new Date().toISOString(),
+        settings
+      };
+      const content = JSON.stringify(exportData, null, 2);
+      const filePath = await ctx.api.dialog.saveFileDialog({
+        defaultPath: `claude-terminal-settings-${new Date().toISOString().slice(0, 10)}.json`,
+        filters: [{ name: 'JSON', extensions: ['json'] }]
+      });
+      if (filePath) {
+        try {
+          const { fs } = window.electron_nodeModules;
+          fs.writeFileSync(filePath, content, 'utf8');
+          const { showSuccess } = require('../components/Toast');
+          showSuccess(t('settings.exportSuccess'));
+        } catch (err) {
+          console.error('Export settings error:', err);
+          const { showError } = require('../components/Toast');
+          showError(t('settings.importError'));
+        }
+      }
+    };
+  }
+
+  // Import settings
+  const btnImportSettings = document.getElementById('btn-import-settings');
+  if (btnImportSettings) {
+    btnImportSettings.onclick = async () => {
+      const filePath = await ctx.api.dialog.selectFile({
+        filters: [{ name: 'JSON', extensions: ['json'] }]
+      });
+      if (!filePath) return;
+      try {
+        const { fs } = window.electron_nodeModules;
+        const raw = fs.readFileSync(filePath, 'utf8');
+        const data = JSON.parse(raw);
+
+        // Accept both wrapped format { settings: {...} } and raw settings object
+        const importedSettings = data.settings || data;
+        if (typeof importedSettings !== 'object' || Array.isArray(importedSettings)) {
+          throw new Error('Invalid settings format');
+        }
+
+        // Merge with defaults: only keep known keys
+        const { defaultSettings } = require('../../state/settings.state');
+        const validKeys = Object.keys(defaultSettings);
+        const merged = { ...defaultSettings };
+        for (const key of validKeys) {
+          if (key in importedSettings) {
+            merged[key] = importedSettings[key];
+          }
+        }
+
+        ctx.settingsState.set(merged);
+        ctx.saveSettingsImmediate();
+        ctx.applyAccentColor(merged.accentColor);
+
+        const { showSuccess } = require('../components/Toast');
+        showSuccess(t('settings.importSuccess'));
+
+        // Re-render to reflect imported settings
+        renderSettingsTab('general');
+      } catch (err) {
+        console.error('Import settings error:', err);
+        const { showError } = require('../components/Toast');
+        showError(t('settings.importError'));
+      }
     };
   }
 }
