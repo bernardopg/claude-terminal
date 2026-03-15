@@ -30,7 +30,8 @@ const {
   getSetting,
   setSetting,
   heartbeat,
-  stopProject
+  stopProject,
+  getProjectSettings: getProjectSettingsState,
 } = require('../../state');
 const { Marked } = require('marked');
 const { escapeHtml, getFileIcon, highlight } = require('../../utils');
@@ -3966,17 +3967,23 @@ async function createChatTerminal(project, options = {}) {
 
   document.getElementById('empty-terminals').style.display = 'none';
 
+  // Apply per-project settings as defaults (explicit options take priority)
+  const projSettings = getProjectSettingsState(parentProjectId || project.id);
+  const effectiveSkipPermissions = skipPermissions || (projSettings.skipPermissions === true);
+  const effectiveModel = initialModel || projSettings.chatModel || null;
+  const effectiveEffort = initialEffort || projSettings.effortLevel || null;
+
   // Create ChatView inside wrapper
   const chatView = createChatView(wrapper, project, {
     terminalId: id,
-    skipPermissions,
+    skipPermissions: effectiveSkipPermissions,
     resumeSessionId,
     forkSession,
     resumeSessionAt,
     initialPrompt,
     initialImages,
-    initialModel,
-    initialEffort,
+    initialModel: effectiveModel,
+    initialEffort: effectiveEffort,
     builtinSystemPrompt: getBuiltinSystemPrompt(project.type),
     onSessionStart: (sid) => {
       _chatSessionId = sid;

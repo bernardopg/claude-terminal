@@ -29,7 +29,18 @@ const {
   setProjectEditor,
   getSetting,
   EDITOR_OPTIONS,
-  getEditorCommand
+  getEditorCommand,
+  // Archive
+  archiveProject,
+  unarchiveProject,
+  getArchivedCount,
+  // Tags
+  getProjectTags,
+  setProjectTags,
+  getAllTags,
+  // Project settings
+  getProjectSettings,
+  setProjectSettings,
 } = require('../../state');
 const { escapeHtml } = require('../../utils');
 const { sanitizeColor } = require('../../utils/color');
@@ -43,6 +54,8 @@ const menuIcons = require('../icons/menuIcons');
 
 // Local state
 let dragState = { dragging: null, dropTarget: null };
+let showArchived = false;
+let selectedTagFilter = null;
 let callbacks = {
   onCreateTerminal: null,
   onCreateBasicTerminal: null,
@@ -153,8 +166,9 @@ function renderFolderHtml(folder, depth) {
       } else {
         const childProject = getProject(childId);
         if (childProject && childProject.folderId === folder.id) {
-          childrenHtml += renderProjectHtml(childProject, depth + 1);
-          renderedIds.add(childId);
+          if (!showArchived && childProject.archived) { renderedIds.add(childId); }
+          else if (selectedTagFilter && !(childProject.tags || []).includes(selectedTagFilter)) { renderedIds.add(childId); }
+          else { childrenHtml += renderProjectHtml(childProject, depth + 1); renderedIds.add(childId); }
         }
       }
     });
@@ -162,6 +176,8 @@ function renderFolderHtml(folder, depth) {
     // Render any projects not in children array (legacy data)
     childProjects.forEach(project => {
       if (!renderedIds.has(project.id)) {
+        if (!showArchived && project.archived) return;
+        if (selectedTagFilter && !(project.tags || []).includes(selectedTagFilter)) return;
         childrenHtml += renderProjectHtml(project, depth + 1);
       }
     });
@@ -350,11 +366,23 @@ function renderProjectHtml(project, depth) {
       ${menuIcons.palette}
       ${t('projects.customize')}
     </button>
+    <button class="more-actions-item btn-chat-settings" data-project-id="${project.id}">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
+      ${t('projects.chatSettings')}
+    </button>
+    <button class="more-actions-item btn-manage-tags" data-project-id="${project.id}">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z"/></svg>
+      ${t('projects.tags')}
+    </button>
     <button class="more-actions-item btn-rename-project" data-project-id="${project.id}">
       ${menuIcons.rename}
       ${t('common.rename')}
     </button>
     <div class="more-actions-divider"></div>
+    <button class="more-actions-item btn-archive-project" data-project-id="${project.id}">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.54 5.23l-1.39-1.68C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.48-.17-.93-.46-1.27zM12 17.5L6.5 12H10v-2h4v2h3.5L12 17.5zM5.12 5l.81-1h12l.94 1H5.12z"/></svg>
+      ${project.archived ? t('projects.unarchive') : t('projects.archive')}
+    </button>
     <button class="more-actions-item danger btn-delete-project" data-project-id="${project.id}">
       ${menuIcons.trash}
       ${t('common.delete')}
@@ -395,7 +423,7 @@ function renderProjectHtml(project, depth) {
   const tooltipHtml = `<div class="project-tooltip">${tooltipLines.join('')}</div>`;
 
   return `
-    <div class="project-item ${isSelected ? 'active' : ''} ${typeHandler.getProjectItemClass(typeCtx)}"
+    <div class="project-item ${isSelected ? 'active' : ''} ${project.archived ? 'archived' : ''} ${typeHandler.getProjectItemClass(typeCtx)}"
          data-project-id="${project.id}" data-depth="${depth}" draggable="true" tabindex="0"
          style="margin-left: ${depth * 16}px;">
       ${tooltipHtml}
@@ -415,6 +443,7 @@ function renderProjectHtml(project, depth) {
           <span class="time-separator">\u2022</span>
           <span class="time-total" title="${t('common.total')}">${formatDuration(times.total)}</span>
         </div>` : ''}
+        ${(() => { const tags = project.tags || []; return tags.length > 0 ? `<div class="project-tags">${tags.map(tag => `<span class="project-tag-chip">${escapeHtml(tag)}</span>`).join('')}</div>` : ''; })()}
       </div>
       <div class="project-actions">
         ${primaryActionsHtml}
@@ -895,6 +924,27 @@ function attachListeners(list) {
         if (callbacks.onCloudDelete) callbacks.onCloudDelete(projectId);
       } else if (btn.classList.contains('btn-cloud-sync')) {
         if (callbacks.onCloudSync) callbacks.onCloudSync(projectId);
+      } else if (btn.classList.contains('btn-archive-project')) {
+        const project = getProject(projectId);
+        closeAllMoreActionsMenus();
+        if (project) {
+          if (project.archived) { unarchiveProject(projectId); } else { archiveProject(projectId); }
+          if (callbacks.onRenderProjects) callbacks.onRenderProjects();
+        }
+      } else if (btn.classList.contains('btn-chat-settings')) {
+        const project = getProject(projectId);
+        closeAllMoreActionsMenus();
+        if (project) showChatSettingsModal(project);
+      } else if (btn.classList.contains('btn-manage-tags')) {
+        const project = getProject(projectId);
+        closeAllMoreActionsMenus();
+        if (project) showTagsModal(project);
+      } else if (btn.classList.contains('btn-toggle-archived')) {
+        showArchived = !showArchived;
+        if (callbacks.onRenderProjects) callbacks.onRenderProjects();
+      } else if (btn.classList.contains('btn-clear-tag-filter')) {
+        selectedTagFilter = null;
+        if (callbacks.onRenderProjects) callbacks.onRenderProjects();
       } else if (btn.classList.contains('btn-customize-project')) {
         const project = getProject(projectId);
         closeAllMoreActionsMenus();
@@ -906,6 +956,14 @@ function attachListeners(list) {
           });
         }
       }
+      return;
+    }
+
+    // Tag filter chip click
+    const tagChip = target.closest('.tag-filter-option');
+    if (tagChip) {
+      selectedTagFilter = tagChip.dataset.tag;
+      if (callbacks.onRenderProjects) callbacks.onRenderProjects();
       return;
     }
 
@@ -1043,6 +1101,138 @@ function attachListeners(list) {
 }
 
 /**
+ * Show chat settings modal for a project
+ */
+function showChatSettingsModal(project) {
+  const settings = getProjectSettings(project.id);
+  const models = [
+    { value: '', label: t('projects.useGlobal') },
+    { value: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
+    { value: 'claude-opus-4-6', label: 'Opus 4.6' },
+    { value: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' },
+  ];
+  const efforts = [
+    { value: '', label: t('projects.useGlobal') },
+    { value: 'low', label: 'Low' },
+    { value: 'medium', label: 'Medium' },
+    { value: 'high', label: 'High' },
+    { value: 'max', label: 'Max' },
+  ];
+
+  const modelOptions = models.map(m => `<option value="${m.value}" ${(settings.chatModel || '') === m.value ? 'selected' : ''}>${m.label}</option>`).join('');
+  const effortOptions = efforts.map(e => `<option value="${e.value}" ${(settings.effortLevel || '') === e.value ? 'selected' : ''}>${e.label}</option>`).join('');
+
+  const modal = createModal({
+    id: 'chat-settings-modal',
+    title: `${t('projects.chatSettingsTitle')} — ${escapeHtml(project.name)}`,
+    content: `<div class="project-settings-form">
+      <div class="project-settings-field">
+        <label class="project-settings-label">${t('projects.chatModel')}</label>
+        <select id="cs-model" class="project-settings-input">${modelOptions}</select>
+      </div>
+      <div class="project-settings-field">
+        <label class="project-settings-label">${t('projects.effortLevel')}</label>
+        <select id="cs-effort" class="project-settings-input">${effortOptions}</select>
+      </div>
+      <div class="project-settings-field">
+        <label class="project-settings-label">${t('projects.skipPermissions')}</label>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+          <select id="cs-skip" class="project-settings-input">
+            <option value="" ${settings.skipPermissions === null || settings.skipPermissions === undefined ? 'selected' : ''}>${t('projects.useGlobal')}</option>
+            <option value="true" ${settings.skipPermissions === true ? 'selected' : ''}>On</option>
+            <option value="false" ${settings.skipPermissions === false ? 'selected' : ''}>Off</option>
+          </select>
+        </div>
+      </div>
+    </div>`,
+    buttons: [
+      { label: t('common.cancel'), action: 'cancel', onClick: (m) => closeModal(m) },
+      { label: t('common.save'), action: 'save', primary: true, onClick: (m) => {
+        const model = m.querySelector('#cs-model').value || null;
+        const effort = m.querySelector('#cs-effort').value || null;
+        const skipVal = m.querySelector('#cs-skip').value;
+        const skip = skipVal === '' ? null : skipVal === 'true';
+        setProjectSettings(project.id, { chatModel: model, effortLevel: effort, skipPermissions: skip });
+        closeModal(m);
+        Toast.show(t('settings.saved'), 'success');
+      }},
+    ],
+    size: 'small'
+  });
+  showModal(modal);
+}
+
+/**
+ * Show tags management modal for a project
+ */
+function showTagsModal(project) {
+  const tags = [...getProjectTags(project.id)];
+  const allExisting = getAllTags();
+
+  function renderTagsList() {
+    return tags.length === 0
+      ? `<div style="color:var(--text-muted);font-size:var(--font-xs);padding:8px 0">${t('projects.noTags')}</div>`
+      : tags.map(tag => `<span class="project-tag-chip tag-removable">${escapeHtml(tag)} <button class="btn-remove-tag" data-tag="${escapeHtml(tag)}">&times;</button></span>`).join('');
+  }
+
+  const suggestionsHtml = allExisting.filter(t => !tags.includes(t)).slice(0, 10).map(tag =>
+    `<span class="project-tag-chip tag-suggestion" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</span>`
+  ).join('');
+
+  const modal = createModal({
+    id: 'tags-modal',
+    title: `${t('projects.tags')} — ${escapeHtml(project.name)}`,
+    content: `<div style="display:flex;flex-direction:column;gap:12px">
+      <div>
+        <div class="tags-list" id="tags-list">${renderTagsList()}</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <input id="tag-input" class="project-settings-input" placeholder="${t('projects.addTag')}" style="flex:1" maxlength="30" />
+        <button class="btn-primary" id="btn-add-tag" style="padding:4px 12px">${t('common.add')}</button>
+      </div>
+      ${suggestionsHtml ? `<div><div style="font-size:var(--font-2xs);color:var(--text-muted);margin-bottom:4px">${t('projects.existingTags')}</div><div class="tags-suggestions">${suggestionsHtml}</div></div>` : ''}
+    </div>`,
+    buttons: [
+      { label: t('common.close'), action: 'close', onClick: (m) => { setProjectTags(project.id, tags); closeModal(m); if (callbacks.onRenderProjects) callbacks.onRenderProjects(); }},
+    ],
+    size: 'small'
+  });
+
+  showModal(modal);
+
+  const tagInput = modal.querySelector('#tag-input');
+  const tagsList = modal.querySelector('#tags-list');
+
+  function addTag(value) {
+    const v = value.trim().toLowerCase();
+    if (!v || tags.includes(v)) return;
+    tags.push(v);
+    tagsList.innerHTML = renderTagsList();
+    bindTagRemoveButtons();
+    tagInput.value = '';
+    tagInput.focus();
+  }
+
+  function bindTagRemoveButtons() {
+    tagsList.querySelectorAll('.btn-remove-tag').forEach(btn => {
+      btn.onclick = () => {
+        const idx = tags.indexOf(btn.dataset.tag);
+        if (idx >= 0) tags.splice(idx, 1);
+        tagsList.innerHTML = renderTagsList();
+        bindTagRemoveButtons();
+      };
+    });
+  }
+  bindTagRemoveButtons();
+
+  modal.querySelector('#btn-add-tag').onclick = () => addTag(tagInput.value);
+  tagInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(tagInput.value); } });
+  modal.querySelectorAll('.tag-suggestion').forEach(chip => {
+    chip.onclick = () => addTag(chip.dataset.tag);
+  });
+}
+
+/**
  * Render the project list (debounced via rAF to avoid redundant renders)
  */
 let _renderScheduled = false;
@@ -1070,16 +1260,39 @@ function _renderNow() {
     return;
   }
 
+  // Tag filter bar
   let html = '';
+  const allTags = getAllTags();
+  if (allTags.length > 0 || selectedTagFilter) {
+    html += `<div class="tag-filter-bar">`;
+    if (selectedTagFilter) {
+      html += `<span class="tag-filter-active"><span class="project-tag-chip">${escapeHtml(selectedTagFilter)}</span><button class="btn-clear-tag-filter" title="${t('projects.clearTagFilter')}">&times;</button></span>`;
+    } else {
+      html += allTags.slice(0, 8).map(tag => `<span class="project-tag-chip tag-filter-option" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</span>`).join('');
+    }
+    html += `</div>`;
+  }
+
   state.rootOrder.forEach(itemId => {
     const folder = getFolder(itemId);
     if (folder) {
       html += renderFolderHtml(folder, 0);
     } else {
       const project = getProject(itemId);
-      if (project) html += renderProjectHtml(project, 0);
+      if (project) {
+        if (!showArchived && project.archived) return;
+        if (selectedTagFilter && !(project.tags || []).includes(selectedTagFilter)) return;
+        html += renderProjectHtml(project, 0);
+      }
     }
   });
+
+  // Archive toggle
+  const archivedCount = getArchivedCount();
+  if (archivedCount > 0) {
+    html += `<button class="btn-toggle-archived">${showArchived ? t('projects.hideArchived') : t('projects.showArchived', { count: archivedCount })}</button>`;
+  }
+
   html += `<div class="drop-zone-root" data-target="root"></div>`;
   list.innerHTML = html;
   attachListeners(list);
