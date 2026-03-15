@@ -3239,3 +3239,112 @@
   font-size: inherit;
   white-space: pre;
 }
+
+/* ── Smart Commit ───────────────────────────────────────────────────────────── */
+
+.btn-smart-commit {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  background: transparent;
+  border: 1px solid rgba(var(--accent-rgb, 217,119,6), 0.3);
+  border-radius: 6px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-smart-commit:hover {
+  background: rgba(var(--accent-rgb, 217,119,6), 0.1);
+  border-color: var(--accent);
+}
+.btn-smart-commit:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-smart-commit svg { width: 12px; height: 12px; }
+
+.sc-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.sc-group {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sc-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sc-group-name {
+  font-weight: 600;
+  font-size: var(--font-sm);
+  color: var(--accent);
+}
+
+.sc-group-count {
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+}
+
+.sc-group-status {
+  margin-left: auto;
+}
+
+.sc-group-files {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.sc-file {
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+  font-family: 'Cascadia Code', monospace;
+  padding: 2px 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sc-group-message {
+  width: 100%;
+  padding: 7px 10px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 7px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: 'Cascadia Code', monospace;
+  resize: none;
+}
+.sc-group-message:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+.sc-group-message:disabled {
+  opacity: 0.5;
+}
+
+.sc-group-commit {
+  align-self: flex-end;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 14px;
+  font-size: 11px;
+}

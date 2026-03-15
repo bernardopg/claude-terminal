@@ -5,7 +5,7 @@
 
 const { ipcMain } = require('electron');
 const { execGit, getGitInfo, getGitInfoFull, getGitStatusQuick, getGitStatusDetailed, gitPull, gitPush, gitPushBranch, gitMerge, gitMergeAbort, gitMergeContinue, getMergeConflicts, isMergeInProgress, gitClone, gitStageFiles, gitCommit, getProjectStats, getBranches, getCurrentBranch, checkoutBranch, createBranch, deleteBranch, getCommitHistory, getFileDiff, getCommitDetail, cherryPick, revertCommit, gitUnstageFiles, stashApply, stashDrop, gitStashSave, getWorktrees, createWorktree, removeWorktree, lockWorktree, unlockWorktree, pruneWorktrees, detectWorktree, diffWorktreeBranches, diffWorktreeBranchesWithStats, deleteRemoteBranch, gitFetch, renameBranch, gitRebase, gitRebaseAbort, gitRebaseContinue, getFileHistory, getCommitFileDiffs, getCommitFileDiff, gitBlame, getTags, createTag, deleteTag, pushTag, pushAllTags, getRemotes } = require('../utils/git');
-const { generateCommitMessage, generateSessionRecap } = require('../utils/commitMessageGenerator');
+const { generateCommitMessage, generateMultiCommitMessages, generateSessionRecap, groupFiles } = require('../utils/commitMessageGenerator');
 const GitHubAuthService = require('../services/GitHubAuthService');
 const { sendFeaturePing } = require('../services/TelemetryService');
 
@@ -347,6 +347,53 @@ function registerGitHandlers() {
       const githubToken = useAi !== false ? await GitHubAuthService.getToken() : null;
       const result = await generateCommitMessage(files, diffContent, githubToken);
       return { success: true, ...result };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  // Generate multi-commit messages (one per file group)
+  ipcMain.handle('git-generate-multi-commit', async (event, { projectPath, files, useAi }) => {
+    try {
+      const path = require('path');
+      const fs = require('fs');
+
+      const groups = groupFiles(files);
+      const diffs = {};
+
+      for (const g of groups) {
+        const diffParts = [];
+        const tracked = g.files.filter(f => f.status !== '?');
+        const untracked = g.files.filter(f => f.status === '?');
+
+        if (tracked.length > 0) {
+          const diff = await execGit(projectPath, ['diff', 'HEAD', '--', ...tracked.map(f => f.path)], 15000);
+          if (diff) diffParts.push(diff);
+        }
+
+        for (const f of untracked) {
+          try {
+            const fullPath = path.join(projectPath, f.path);
+            const stat = fs.statSync(fullPath);
+            if (stat.isDirectory()) {
+              diffParts.push(`--- New directory: ${f.path}/`);
+            } else if (stat.size > 500000) {
+              diffParts.push(`--- New file: ${f.path} (${(stat.size / 1024).toFixed(0)}KB)`);
+            } else {
+              const content = fs.readFileSync(fullPath, 'utf8').slice(0, 3000);
+              diffParts.push(`--- New file: ${f.path}\n${content.split('\n').map(l => '+' + l).join('\n')}`);
+            }
+          } catch (_) {
+            diffParts.push(`--- New file: ${f.path}`);
+          }
+        }
+
+        diffs[g.name] = diffParts.join('\n\n');
+      }
+
+      const githubToken = useAi !== false ? await GitHubAuthService.getToken() : null;
+      const results = await generateMultiCommitMessages(files, diffs, githubToken);
+      return { success: true, commits: results };
     } catch (e) {
       return { success: false, error: e.message };
     }
