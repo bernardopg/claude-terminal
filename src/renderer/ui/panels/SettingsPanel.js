@@ -567,6 +567,7 @@ async function renderSettingsTab(initialTab = 'general') {
         <button class="settings-tab ${initialTab === 'shortcuts' ? 'active' : ''}" data-tab="shortcuts">${t('settings.tabShortcuts')}</button>
         <button class="settings-tab ${initialTab === 'library' ? 'active' : ''}" data-tab="library">${t('settings.tabLibrary')}</button>
         <button class="settings-tab ${initialTab === 'agents' ? 'active' : ''}" data-tab="agents">${t('settings.tabAgents')}</button>
+        <button class="settings-tab ${initialTab === 'performance' ? 'active' : ''}" data-tab="performance">${t('settings.tabPerformance')}</button>
         <button class="settings-tab ${initialTab === 'remote' ? 'active' : ''}" data-tab="remote">${t('remote.tabTitle')}</button>
         ${(() => {
           const registry = require('../../../project-types/registry');
@@ -650,16 +651,6 @@ async function renderSettingsTab(initialTab = 'general') {
               </div>
               <label class="settings-toggle">
                 <input type="checkbox" id="compact-projects-toggle" ${settings.compactProjects !== false ? 'checked' : ''}>
-                <span class="settings-toggle-slider"></span>
-              </label>
-            </div>
-            <div class="settings-toggle-row">
-              <div class="settings-toggle-label">
-                <div>${t('settings.reduceMotion')}</div>
-                <div class="settings-toggle-desc">${t('settings.reduceMotionDesc')}</div>
-              </div>
-              <label class="settings-toggle">
-                <input type="checkbox" id="reduce-motion-toggle" ${settings.reduceMotion ? 'checked' : ''}>
                 <span class="settings-toggle-slider"></span>
               </label>
             </div>
@@ -1106,6 +1097,23 @@ async function renderSettingsTab(initialTab = 'general') {
         </div>
         <div class="settings-panel ${initialTab === 'agents' ? 'active' : ''}" data-panel="agents">
           <div id="agent-colors-content"><div class="settings-loading-hint">${t('common.loading')}</div></div>
+        </div>
+        <div class="settings-panel ${initialTab === 'performance' ? 'active' : ''}" data-panel="performance">
+          <div class="settings-group">
+            <div class="settings-group-title">${t('settings.performanceAnimations')}</div>
+            <div class="settings-card">
+              <div class="settings-toggle-row">
+                <div class="settings-toggle-label">
+                  <div>${t('settings.reduceMotion')}</div>
+                  <div class="settings-toggle-desc">${t('settings.reduceMotionDesc')}</div>
+                </div>
+                <label class="settings-toggle">
+                  <input type="checkbox" id="reduce-motion-toggle" ${settings.reduceMotion ? 'checked' : ''}>
+                  <span class="settings-toggle-slider"></span>
+                </label>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="settings-panel ${initialTab === 'remote' ? 'active' : ''}" data-panel="remote">
           ${RemotePanel.buildHtml(settings)}

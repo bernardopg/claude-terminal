@@ -710,6 +710,8 @@
     "tabShortcuts": "Shortcuts",
     "tabLibrary": "Library",
     "tabAgents": "Agents",
+    "tabPerformance": "Performance",
+    "performanceAnimations": "Animations",
     "agentColorsBuiltin": "Built-in tools",
     "agentColorsAgents": "Custom agents",
     "agentColorsMcp": "MCP Servers",

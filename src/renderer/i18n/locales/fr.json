@@ -799,6 +799,8 @@
     "tabShortcuts": "Raccourcis",
     "tabLibrary": "Bibliothèque",
     "tabAgents": "Agents",
+    "tabPerformance": "Performance",
+    "performanceAnimations": "Animations",
     "agentColorsBuiltin": "Outils intégrés",
     "agentColorsAgents": "Agents personnalisés",
     "agentColorsMcp": "Serveurs MCP",

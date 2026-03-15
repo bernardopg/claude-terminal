@@ -615,6 +615,8 @@
     "tabShortcuts": "Atajos",
     "tabLibrary": "Biblioteca",
     "tabAgents": "Agentes",
+    "tabPerformance": "Rendimiento",
+    "performanceAnimations": "Animaciones",
     "agentColorsBuiltin": "Herramientas integradas",
     "agentColorsAgents": "Agentes personalizados",
     "agentColorsMcp": "Servidores MCP",
