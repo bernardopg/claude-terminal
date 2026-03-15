@@ -614,7 +614,14 @@ class ChatService {
     for (const [id, pending] of this.pendingPermissions) {
       if (pending.sessionId === sessionId) {
         this.pendingPermissions.delete(id);
-        pending.reject(new Error(reason));
+        // Swallow unhandled rejection before rejecting — the promise may not
+        // have a .catch() handler attached yet, which would crash on Node 18+.
+        pending.promise?.catch?.(() => {});
+        try {
+          pending.reject(new Error(reason));
+        } catch (e) {
+          // Already settled, ignore
+        }
       }
     }
   }
@@ -794,11 +801,15 @@ class ChatService {
    * Generate a short tab name via the persistent haiku session.
    */
   async generateTabName(userMessage) {
+    // Mutex: skip if a naming request is already in flight
+    if (this._namingInFlight) return null;
+
+    this._namingInFlight = true;
     try {
       await this._ensureNamingSession();
       if (!this._namingQueue) return null;
 
-      return new Promise((resolve) => {
+      return await new Promise((resolve) => {
         // Timeout: if haiku doesn't respond in 4s, give up
         const timeout = setTimeout(() => {
           this._namingResolve = null;
@@ -831,6 +842,8 @@ class ChatService {
       this._namingReady = false;
       this._namingStarting = null;
       return null;
+    } finally {
+      this._namingInFlight = false;
     }
   }
 
