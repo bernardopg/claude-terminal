@@ -4,7 +4,7 @@
  */
 
 const { ipcMain } = require('electron');
-const { execGit, getGitInfo, getGitInfoFull, getGitStatusQuick, getGitStatusDetailed, gitPull, gitPush, gitPushBranch, gitMerge, gitMergeAbort, gitMergeContinue, getMergeConflicts, isMergeInProgress, gitClone, gitStageFiles, gitCommit, getProjectStats, getBranches, getCurrentBranch, checkoutBranch, createBranch, deleteBranch, getCommitHistory, getFileDiff, getCommitDetail, cherryPick, revertCommit, gitUnstageFiles, stashApply, stashDrop, gitStashSave, getWorktrees, createWorktree, removeWorktree, lockWorktree, unlockWorktree, pruneWorktrees, detectWorktree, diffWorktreeBranches, diffWorktreeBranchesWithStats, deleteRemoteBranch, gitFetch, renameBranch, gitRebase, gitRebaseAbort, gitRebaseContinue, getFileHistory, getCommitFileDiffs, getCommitFileDiff, gitBlame, getTags, createTag, deleteTag, pushTag, pushAllTags, getRemotes } = require('../utils/git');
+const { execGit, getGitInfo, getGitInfoFull, getGitStatusQuick, getGitStatusDetailed, gitPull, gitPush, gitPushBranch, gitMerge, gitMergeAbort, gitMergeContinue, getMergeConflicts, isMergeInProgress, gitClone, gitStageFiles, gitCommit, getProjectStats, getBranches, getCurrentBranch, checkoutBranch, createBranch, deleteBranch, getCommitHistory, getFileDiff, getCommitDetail, cherryPick, revertCommit, gitUnstageFiles, stashApply, stashDrop, gitStashSave, getWorktrees, createWorktree, removeWorktree, lockWorktree, unlockWorktree, pruneWorktrees, detectWorktree, diffWorktreeBranches, diffWorktreeBranchesWithStats, deleteRemoteBranch, gitFetch, renameBranch, gitRebase, gitRebaseAbort, gitRebaseContinue, getFileHistory, getCommitFileDiffs, getCommitFileDiff, gitBlame, getTags, createTag, deleteTag, pushTag, pushAllTags, getRemotes, resolveConflict, getBranchOrphanCommitCount } = require('../utils/git');
 const { generateCommitMessage, generateMultiCommitMessages, generateSessionRecap, groupFiles } = require('../utils/commitMessageGenerator');
 const GitHubAuthService = require('../services/GitHubAuthService');
 const { sendFeaturePing } = require('../services/TelemetryService');
@@ -156,6 +156,19 @@ function registerGitHandlers() {
     } catch (err) {
       return false;
     }
+  });
+
+  // Resolve a merge conflict with ours/theirs strategy
+  ipcMain.handle('git-resolve-conflict', async (event, { projectPath, filePath, strategy }) => {
+    if (!filePath || typeof filePath !== 'string') return { success: false, error: 'Invalid file path' };
+    if (strategy !== 'ours' && strategy !== 'theirs') return { success: false, error: 'Invalid strategy' };
+    return resolveConflict(projectPath, filePath, strategy);
+  });
+
+  // Get orphan commit count for a branch
+  ipcMain.handle('git-branch-orphan-commits', async (event, { projectPath, branch }) => {
+    if (!isValidBranchName(branch)) return 0;
+    return getBranchOrphanCommitCount(projectPath, branch);
   });
 
   // Git clone (auto-uses GitHub token if available)

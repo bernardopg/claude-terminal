@@ -255,6 +255,8 @@ contextBridge.exposeInMainWorld('electron_api', {
     tagDelete: (params) => ipcRenderer.invoke('git-tag-delete', params),
     tagPush: (params) => ipcRenderer.invoke('git-tag-push', params),
     remotes: (params) => ipcRenderer.invoke('git-remotes', params),
+    resolveConflict: (params) => ipcRenderer.invoke('git-resolve-conflict', params),
+    branchOrphanCommits: (params) => ipcRenderer.invoke('git-branch-orphan-commits', params),
   },
 
   // ==================== WEBAPP ====================

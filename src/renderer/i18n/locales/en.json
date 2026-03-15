@@ -83,7 +83,15 @@
     "noTags": "No tags yet",
     "existingTags": "Existing tags",
     "clearTagFilter": "Clear filter",
-    "manageTags": "Manage tags"
+    "manageTags": "Manage tags",
+    "searchPlaceholder": "Search projects...",
+    "emptyGuide": "Add a project to get started with Claude Code",
+    "addFirstProject": "Add a project",
+    "orCreateFolder": "or create a folder",
+    "sectionGit": "Git",
+    "sectionOpen": "Open",
+    "sectionCloud": "Cloud",
+    "sectionProject": "Project"
   },
   "terminals": {
     "noTerminals": "No terminal for this project",
@@ -329,7 +337,32 @@
     "issueCreated": "Issue #{number} created",
     "closeIssue": "Close",
     "confirmCloseIssue": "Close issue #{number}?",
-    "issueClosed": "Issue #{number} closed"
+    "issueClosed": "Issue #{number} closed",
+    "searchBranches": "Search branches...",
+    "ours": "Ours",
+    "theirs": "Theirs",
+    "resolveOurs": "Keep our version",
+    "resolveTheirs": "Keep their version",
+    "resolvedWith": "Resolved with {strategy}",
+    "orphanCommitWarning": "{count} commit(s) will become unreachable."
+  },
+  "gitErrors": {
+    "notARepo": "This folder is not a Git repository. Initialize one with 'git init'.",
+    "notSymbolicRef": "The reference is not valid. The branch may have been deleted.",
+    "pathNotFound": "The specified file or path was not found in the repository.",
+    "invalidBranchName": "Invalid branch name. Avoid spaces and special characters.",
+    "localChangesOverwrite": "You have uncommitted changes that would be overwritten. Commit or stash them first.",
+    "branchNotMerged": "This branch has unmerged changes. Use force delete if you're sure.",
+    "remoteRefNotFound": "The remote branch was not found. It may have been deleted.",
+    "remoteNotFound": "Cannot connect to the remote repository. Check the URL.",
+    "authFailed": "Authentication failed. Check your credentials or token.",
+    "networkError": "Network error. Check your internet connection.",
+    "pushRejected": "Push rejected. Pull the latest changes first.",
+    "mergeConflict": "Merge conflicts detected. Resolve them before continuing.",
+    "unrelatedHistories": "Cannot merge unrelated histories. The branches have no common ancestor.",
+    "lockFailed": "Cannot lock the reference. Another git operation may be in progress.",
+    "alreadyExists": "This already exists. Choose a different name.",
+    "nothingToCommit": "Nothing to commit. The working tree is clean."
   },
   "dashboard": {
     "openFolder": "Open folder",
@@ -510,7 +543,8 @@
     "moveToRoot": "Move to root",
     "delete": "Delete",
     "newFolder": "New folder",
-    "newProject": "New project"
+    "newProject": "New project",
+    "customize": "Customize"
   },
   "closeDialog": {
     "whatToDo": "What would you like to do?",
@@ -557,6 +591,7 @@
     "placeholder": "Search everywhere...",
     "noResult": "No results",
     "noResultFor": "No results for \"{query}\"",
+    "moreResults": "{count} more results...",
     "searchHint": "Try a different search term or use a prefix (>, @, #, ~)",
     "loadError": "Failed to load",
     "loading": "Loading...",
@@ -859,6 +894,7 @@
     "newMcp": "New MCP",
     "tabClaude": "Claude",
     "moreTabs": "More",
+    "hiddenTabsCount": "{count} hidden",
     "separatorTools": "Tools",
     "separatorAI": "AI",
     "separatorExtensions": "Extensions",
@@ -1141,7 +1177,14 @@
     "vsLastWeek": "vs last week",
     "vsLastMonth": "vs last month",
     "export": "Export",
-    "exportTitle": "Export time tracking data"
+    "exportTitle": "Export time tracking data",
+    "streakTooltip": "Number of consecutive days with coding activity",
+    "avgTooltip": "Average time spent coding per day in this period",
+    "sessionsTooltip": "Number of separate coding sessions (a session ends after 15 min of inactivity)",
+    "topProjectTooltip": "Project with the most time spent in this period",
+    "startTooltip": "Time of the first coding session today",
+    "endTooltip": "Time of the last coding session today",
+    "projectsTooltip": "Number of different projects worked on today"
   },
   "setup": {
     "welcome": {
@@ -1289,6 +1332,7 @@
     "browseToInstall": "Browse the Discover tab to install skills",
     "confirmUninstall": "Uninstall \"{name}\"?",
     "installError": "Installation failed",
+    "uninstallError": "Uninstall failed",
     "installedOn": "Installed on {date}",
     "noReadme": "No description available",
     "readmeError": "Could not load description",

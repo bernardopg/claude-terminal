@@ -83,7 +83,15 @@
     "noTags": "Aucun tag",
     "existingTags": "Tags existants",
     "clearTagFilter": "Supprimer le filtre",
-    "manageTags": "Gérer les tags"
+    "manageTags": "Gérer les tags",
+    "searchPlaceholder": "Rechercher un projet...",
+    "emptyGuide": "Ajoutez un projet pour commencer avec Claude Code",
+    "addFirstProject": "Ajouter un projet",
+    "orCreateFolder": "ou créer un dossier",
+    "sectionGit": "Git",
+    "sectionOpen": "Ouvrir",
+    "sectionCloud": "Cloud",
+    "sectionProject": "Projet"
   },
   "terminals": {
     "noTerminals": "Aucun terminal pour ce projet",
@@ -418,7 +426,32 @@
     "issueCreated": "Issue #{number} créée",
     "closeIssue": "Fermer",
     "confirmCloseIssue": "Fermer l'issue #{number} ?",
-    "issueClosed": "Issue #{number} fermée"
+    "issueClosed": "Issue #{number} fermée",
+    "searchBranches": "Rechercher des branches...",
+    "ours": "Notre",
+    "theirs": "La leur",
+    "resolveOurs": "Garder notre version",
+    "resolveTheirs": "Garder leur version",
+    "resolvedWith": "Résolu avec {strategy}",
+    "orphanCommitWarning": "{count} commit(s) deviendront inaccessibles."
+  },
+  "gitErrors": {
+    "notARepo": "Ce dossier n'est pas un dépôt Git. Initialisez-en un avec 'git init'.",
+    "notSymbolicRef": "La référence n'est pas valide. La branche a peut-être été supprimée.",
+    "pathNotFound": "Le fichier ou chemin spécifié n'a pas été trouvé dans le dépôt.",
+    "invalidBranchName": "Nom de branche invalide. Évitez les espaces et caractères spéciaux.",
+    "localChangesOverwrite": "Vous avez des modifications non commitées qui seraient écrasées. Commitez ou stashez-les d'abord.",
+    "branchNotMerged": "Cette branche a des changements non fusionnés. Utilisez la suppression forcée si vous êtes sûr.",
+    "remoteRefNotFound": "La branche distante n'a pas été trouvée. Elle a peut-être été supprimée.",
+    "remoteNotFound": "Impossible de se connecter au dépôt distant. Vérifiez l'URL.",
+    "authFailed": "Échec de l'authentification. Vérifiez vos identifiants ou votre token.",
+    "networkError": "Erreur réseau. Vérifiez votre connexion internet.",
+    "pushRejected": "Push rejeté. Faites un pull des dernières modifications d'abord.",
+    "mergeConflict": "Conflits de fusion détectés. Résolvez-les avant de continuer.",
+    "unrelatedHistories": "Impossible de fusionner des historiques sans ancêtre commun.",
+    "lockFailed": "Impossible de verrouiller la référence. Une autre opération git est peut-être en cours.",
+    "alreadyExists": "Cet élément existe déjà. Choisissez un autre nom.",
+    "nothingToCommit": "Rien à commiter. L'arbre de travail est propre."
   },
   "dashboard": {
     "openFolder": "Ouvrir dossier",
@@ -599,7 +632,8 @@
     "moveToRoot": "Déplacer à la racine",
     "delete": "Supprimer",
     "newFolder": "Nouveau dossier",
-    "newProject": "Nouveau projet"
+    "newProject": "Nouveau projet",
+    "customize": "Personnaliser"
   },
   "closeDialog": {
     "whatToDo": "Que souhaitez-vous faire ?",
@@ -646,6 +680,7 @@
     "placeholder": "Rechercher partout...",
     "noResult": "Aucun résultat",
     "noResultFor": "Aucun résultat pour \"{query}\"",
+    "moreResults": "{count} résultats supplémentaires...",
     "searchHint": "Essayez un autre terme ou utilisez un préfixe (>, @, #, ~)",
     "loadError": "Échec du chargement",
     "loading": "Chargement...",
@@ -948,6 +983,7 @@
     "newMcp": "Nouveau MCP",
     "tabClaude": "Claude",
     "moreTabs": "Plus",
+    "hiddenTabsCount": "{count} masqué(s)",
     "separatorTools": "Outils",
     "separatorAI": "AI",
     "separatorExtensions": "Extensions",
@@ -1141,7 +1177,14 @@
     "vsLastWeek": "vs sem. dernière",
     "vsLastMonth": "vs mois dernier",
     "export": "Exporter",
-    "exportTitle": "Exporter les données de time tracking"
+    "exportTitle": "Exporter les données de time tracking",
+    "streakTooltip": "Nombre de jours consécutifs avec de l'activité de code",
+    "avgTooltip": "Temps moyen passé à coder par jour sur cette période",
+    "sessionsTooltip": "Nombre de sessions de code séparées (une session se termine après 15 min d'inactivité)",
+    "topProjectTooltip": "Projet avec le plus de temps passé sur cette période",
+    "startTooltip": "Heure de la première session de code aujourd'hui",
+    "endTooltip": "Heure de la dernière session de code aujourd'hui",
+    "projectsTooltip": "Nombre de projets différents travaillés aujourd'hui"
   },
   "setup": {
     "welcome": {
@@ -1289,6 +1332,7 @@
     "browseToInstall": "Parcourez l'onglet Découvrir pour installer des skills",
     "confirmUninstall": "Désinstaller \"{name}\" ?",
     "installError": "Échec de l'installation",
+    "uninstallError": "Échec de la désinstallation",
     "installedOn": "Installé le {date}",
     "noReadme": "Aucune description disponible",
     "readmeError": "Impossible de charger la description",
