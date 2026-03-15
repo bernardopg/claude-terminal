@@ -2061,6 +2061,7 @@ ProjectList.setExternalState({
   cloudUploadStatus,
   cloudConnected
 });
+QuickActions.setGitRepoStatus(localState.gitRepoStatus);
 
 ProjectList.setCallbacks({
   onCreateTerminal: createTerminalForProject,
