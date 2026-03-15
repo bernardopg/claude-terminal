@@ -18,6 +18,9 @@ const KanbanPanel = require('../ui/panels/KanbanPanel');
 // Per-project active view: 'overview' | 'kanban'
 const _dashViews = new Map();
 
+// Stored reference to session-recap-updated handler for cleanup
+let _sessionRecapHandler = null;
+
 // ========== CACHE SYSTEM (LRU with size limit) ==========
 const MAX_CACHE_SIZE = 50; // Max cached projects
 const dashboardCache = new Map(); // projectId -> { data, timestamp, loading }
@@ -1536,7 +1539,11 @@ function renderDashboardHtml(container, project, data, options, isRefreshing = f
   `;
 
   // Live-update session recaps section when a new recap arrives
-  const onRecapUpdated = (e) => {
+  // Remove previous listener to prevent accumulation across re-renders
+  if (_sessionRecapHandler) {
+    window.removeEventListener('session-recap-updated', _sessionRecapHandler);
+  }
+  _sessionRecapHandler = (e) => {
     if (e.detail?.projectId !== project.id) return;
     const existing = container.querySelector('.session-recaps-section');
     const newHtml = buildSessionRecapsHtml(project.id);
@@ -1551,7 +1558,7 @@ function renderDashboardHtml(container, project, data, options, isRefreshing = f
       if (statsSection) statsSection.prepend(newSection);
     }
   };
-  window.addEventListener('session-recap-updated', onRecapUpdated);
+  window.addEventListener('session-recap-updated', _sessionRecapHandler);
 
   // Attach click handlers for workflow runs
   container.querySelectorAll('.workflow-run-item').forEach(item => {
@@ -1788,11 +1795,15 @@ async function renderDashboard(container, project, options = {}) {
     }
 
     // Start background refresh
+    const targetProjectId = projectId;
     setCacheLoading(projectId, true);
 
     try {
       const newData = await loadDashboardData(project.path);
-      setCacheData(projectId, newData);
+      setCacheData(targetProjectId, newData);
+
+      // Discard if user switched to a different project during refresh
+      if (targetProjectId !== projectsState.get().openedProjectId) return;
 
       // Only update UI if this project is still displayed — discrete refresh, no animation
       if (container.querySelector('#dash-btn-open-folder')) {
@@ -1800,12 +1811,13 @@ async function renderDashboard(container, project, options = {}) {
       }
     } catch (e) {
       console.error('Error refreshing dashboard:', e);
-      setCacheLoading(projectId, false);
+      setCacheLoading(targetProjectId, false);
     }
     return;
   }
 
   // Case 2: No cache - show loading and fetch
+  const targetProjectId = projectId;
   container.innerHTML = `
     <div class="dashboard-loading">
       <div class="loading-spinner"></div>
@@ -1817,12 +1829,20 @@ async function renderDashboard(container, project, options = {}) {
 
   try {
     const data = await loadDashboardData(project.path);
-    setCacheData(projectId, data);
+    setCacheData(targetProjectId, data);
+
+    // Discard if user switched to a different project during load
+    if (targetProjectId !== projectsState.get().openedProjectId) return;
+
     renderDashboardHtml(container, project, data, options, false);
     animateDashboardIn(container);
   } catch (e) {
     console.error('Error loading dashboard:', e);
-    setCacheLoading(projectId, false);
+    setCacheLoading(targetProjectId, false);
+
+    // Don't show error UI if user already switched away
+    if (targetProjectId !== projectsState.get().openedProjectId) return;
+
     container.innerHTML = `
       <div class="dashboard-error">
         <p>${escapeHtml(t('dashboard.loadError'))}</p>
@@ -2177,6 +2197,10 @@ module.exports = {
     if (_cacheCleanupInterval) {
       clearInterval(_cacheCleanupInterval);
       _cacheCleanupInterval = null;
+    }
+    if (_sessionRecapHandler) {
+      window.removeEventListener('session-recap-updated', _sessionRecapHandler);
+      _sessionRecapHandler = null;
     }
   },
 };
