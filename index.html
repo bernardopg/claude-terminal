@@ -602,6 +602,12 @@
               </div>
               <div class="git-worktrees-list" id="git-worktrees-list"></div>
             </div>
+            <div class="git-sidebar-section git-sidebar-tags">
+              <div class="git-sidebar-header">
+                <h3 data-i18n="gitTab.tags">Tags</h3>
+              </div>
+              <div class="git-tags-list" id="git-tags-list"></div>
+            </div>
             <div class="git-sidebar-section git-sidebar-stashes">
               <div class="git-sidebar-header">
                 <h3 data-i18n="ui.stashes">Stashes</h3>
@@ -624,6 +630,11 @@
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM4 6a2 2 0 1 1 4 0 2 2 0 0 1-4 0zm2 8a1 1 0 0 0-1 1v3a3 3 0 1 0 2 0v-3a1 1 0 0 0-1-1zm-2 7a2 2 0 1 1 4 0 2 2 0 0 1-4 0zm14-7a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm-2 3a2 2 0 1 1 4 0 2 2 0 0 1-4 0zM6 7a1 1 0 0 0-1 1v5a1 1 0 1 0 2 0V8a1 1 0 0 0-1-1zm12-4a3 3 0 0 0-3 3v8a1 1 0 1 0 2 0V6a1 1 0 1 1 2 0v8a1 1 0 1 0 2 0V6a3 3 0 0 0-3-3z"/></svg>
                 <span data-i18n="gitTab.pullRequests">Pull Requests</span>
                 <span class="git-sub-tab-badge" id="git-pr-badge" style="display:none">0</span>
+              </button>
+              <button class="git-sub-tab" data-subtab="issues">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+                <span data-i18n="gitTab.issues">Issues</span>
+                <span class="git-sub-tab-badge" id="git-issues-badge" style="display:none">0</span>
               </button>
             </div>
             <div class="git-sub-content" id="git-sub-content">

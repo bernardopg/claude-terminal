@@ -238,6 +238,22 @@ contextBridge.exposeInMainWorld('electron_api', {
     worktreeDiff: (params) => ipcRenderer.invoke('git-worktree-diff', params),
     worktreeDiffStats: (params) => ipcRenderer.invoke('git-worktree-diff-stats', params),
     generateSessionRecap: (context) => ipcRenderer.invoke('git-generate-session-recap', context),
+    // New git operations
+    deleteRemoteBranch: (params) => ipcRenderer.invoke('git-delete-remote-branch', params),
+    fetch: (params) => ipcRenderer.invoke('git-fetch', params),
+    renameBranch: (params) => ipcRenderer.invoke('git-rename-branch', params),
+    rebase: (params) => ipcRenderer.invoke('git-rebase', params),
+    rebaseAbort: (params) => ipcRenderer.invoke('git-rebase-abort', params),
+    rebaseContinue: (params) => ipcRenderer.invoke('git-rebase-continue', params),
+    fileHistory: (params) => ipcRenderer.invoke('git-file-history', params),
+    commitFileDiffs: (params) => ipcRenderer.invoke('git-commit-file-diffs', params),
+    commitFileDiff: (params) => ipcRenderer.invoke('git-commit-file-diff', params),
+    blame: (params) => ipcRenderer.invoke('git-blame', params),
+    tagList: (params) => ipcRenderer.invoke('git-tag-list', params),
+    tagCreate: (params) => ipcRenderer.invoke('git-tag-create', params),
+    tagDelete: (params) => ipcRenderer.invoke('git-tag-delete', params),
+    tagPush: (params) => ipcRenderer.invoke('git-tag-push', params),
+    remotes: (params) => ipcRenderer.invoke('git-remotes', params),
   },
 
   // ==================== WEBAPP ====================
@@ -370,8 +386,14 @@ contextBridge.exposeInMainWorld('electron_api', {
     workflowRuns: (remoteUrl) => ipcRenderer.invoke('github-workflow-runs', { remoteUrl }),
     workflowJobs: (remoteUrl, runId) => ipcRenderer.invoke('github-workflow-jobs', { remoteUrl, runId }),
     jobLogs: (remoteUrl, jobId) => ipcRenderer.invoke('github-job-logs', { remoteUrl, jobId }),
-    pullRequests: (remoteUrl) => ipcRenderer.invoke('github-pull-requests', { remoteUrl }),
-    createPR: (params) => ipcRenderer.invoke('github-create-pr', params)
+    pullRequests: (params) => ipcRenderer.invoke('github-pull-requests', params),
+    createPR: (params) => ipcRenderer.invoke('github-create-pr', params),
+    workflowRunsPaginated: (params) => ipcRenderer.invoke('github-workflow-runs-paginated', params),
+    checkRuns: (params) => ipcRenderer.invoke('github-check-runs', params),
+    mergePR: (params) => ipcRenderer.invoke('github-merge-pr', params),
+    issues: (params) => ipcRenderer.invoke('github-issues', params),
+    createIssue: (params) => ipcRenderer.invoke('github-create-issue', params),
+    closeIssue: (params) => ipcRenderer.invoke('github-close-issue', params),
   },
 
   // ==================== MCP REGISTRY ====================

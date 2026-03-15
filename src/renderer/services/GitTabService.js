@@ -36,6 +36,23 @@ let historyAllBranches = false;
 // Worktree data
 let worktreesData = [];
 
+// Tags data
+let tagsData = [];
+
+// Remotes data
+let remotesData = [];
+
+// Issues data
+let issuesData = null;
+let issuesPage = 1;
+let issuesState = 'open';
+
+// PR/Workflow pagination
+let prPage = 1;
+
+// File filter in history
+let historyFileFilter = '';
+
 // Merge conflict state
 let mergeInProgress = false;
 let conflictFiles = [];
@@ -110,14 +127,29 @@ async function loadAllData(project) {
   historyPage = 0;
   historyHasMore = historyData.length >= 50;
 
-  // Load worktrees
+  // Load worktrees, tags, remotes in parallel
   worktreesData = [];
-  try {
-    const wtResult = await api.git.worktreeList({ projectPath: path });
-    if (wtResult?.success && wtResult.worktrees?.length > 1) {
-      worktreesData = wtResult.worktrees;
-    }
-  } catch (_) {}
+  tagsData = [];
+  remotesData = [];
+  const [wtRes, tagsRes, remotesRes] = await Promise.allSettled([
+    api.git.worktreeList({ projectPath: path }),
+    api.git.tagList({ projectPath: path }),
+    api.git.remotes({ projectPath: path })
+  ]);
+  if (wtRes.status === 'fulfilled' && wtRes.value?.success && wtRes.value.worktrees?.length > 1) {
+    worktreesData = wtRes.value.worktrees;
+  }
+  if (tagsRes.status === 'fulfilled' && tagsRes.value?.success) {
+    tagsData = tagsRes.value.tags || [];
+  }
+  if (remotesRes.status === 'fulfilled' && remotesRes.value?.success) {
+    remotesData = remotesRes.value.remotes || [];
+  }
+
+  // Reset pagination
+  prPage = 1;
+  issuesPage = 1;
+  historyFileFilter = '';
 
   // Check merge in progress
   mergeInProgress = await api.git.mergeInProgress({ projectPath: path });
@@ -128,13 +160,22 @@ async function loadAllData(project) {
   }
 
   if (remoteUrl) {
-    api.github.pullRequests(remoteUrl).then(result => {
+    api.github.pullRequests({ remoteUrl }).then(result => {
       prsData = result;
       const badge = document.getElementById('git-pr-badge');
       if (badge && result?.pullRequests) {
         const openCount = result.pullRequests.filter(pr => pr.state === 'open').length;
         badge.textContent = openCount;
         badge.style.display = openCount > 0 ? '' : 'none';
+      }
+    }).catch(() => {});
+    // Load issues count
+    api.github.issues({ remoteUrl }).then(result => {
+      issuesData = result;
+      const badge = document.getElementById('git-issues-badge');
+      if (badge && result?.issues) {
+        badge.textContent = result.issues.length;
+        badge.style.display = result.issues.length > 0 ? '' : 'none';
       }
     }).catch(() => {});
   }
@@ -178,6 +219,7 @@ function renderSidebar() {
   renderProjectsList();
   renderQuickActions();
   renderBranches();
+  renderTags();
   renderWorktrees();
   renderStashes();
 }
@@ -422,8 +464,11 @@ function renderBranchTreeNode(node, type, depth) {
       <div class="git-branch-actions">
         ${!isCurrent && isLocal ? `<button class="git-branch-action-btn checkout" title="Checkout"><svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></button>` : ''}
         ${!isCurrent && isLocal ? `<button class="git-branch-action-btn merge" title="${t('gitTab.mergeBranch')}"><svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M17 20.41L18.41 19 15 15.59 13.59 17 17 20.41zM7.5 8H11v5.59L5.59 19 7 20.41l6-6V8h3.5L12 3.5 7.5 8z"/></svg></button>` : ''}
+        ${!isCurrent && isLocal ? `<button class="git-branch-action-btn rebase" title="${t('gitTab.rebaseBranch')}"><svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M8 4a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM4 6a4 4 0 1 1 8 0 4 4 0 0 1-8 0zm12 12a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-4 2a4 4 0 1 1 8 0 4 4 0 0 1-8 0zM8 10v4h2v-4H8zm8-6V8h2V4h-2zm0 8v2h2v-2h-2z"/></svg></button>` : ''}
+        ${isLocal ? `<button class="git-branch-action-btn rename" title="${t('gitTab.renameBranch')}"><svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></button>` : ''}
         ${!isCurrent && isLocal ? `<button class="git-branch-action-btn delete" title="${t('common.delete')}"><svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></button>` : ''}
         ${!isLocal ? `<button class="git-branch-action-btn checkout" title="Checkout"><svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></button>` : ''}
+        ${!isLocal ? `<button class="git-branch-action-btn delete-remote" title="${t('gitTab.deleteRemoteBranch')}"><svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></button>` : ''}
       </div>
     </div>`;
   }
@@ -483,7 +528,10 @@ function renderBranches() {
       const branch = btn.closest('.git-branch-item').dataset.branch;
       if (btn.classList.contains('checkout')) handleCheckout(branch);
       else if (btn.classList.contains('merge')) handleMerge(branch);
+      else if (btn.classList.contains('rebase')) handleRebase(branch);
+      else if (btn.classList.contains('rename')) handleRenameBranch(branch);
       else if (btn.classList.contains('delete')) handleDeleteBranch(branch);
+      else if (btn.classList.contains('delete-remote')) handleDeleteRemoteBranch(branch);
     }
   };
 
@@ -845,6 +893,59 @@ async function handlePruneWorktrees() {
   });
 }
 
+// ========== TAGS ==========
+
+function renderTags() {
+  const container = document.getElementById('git-tags-list');
+  if (!container) return;
+
+  // Tag create button in header
+  const tagHeader = container.closest('.git-sidebar-section')?.querySelector('.git-sidebar-header');
+  if (tagHeader && !tagHeader.querySelector('.git-tag-create-btn')) {
+    const createBtn = document.createElement('button');
+    createBtn.className = 'git-tag-create-btn';
+    createBtn.title = t('gitTab.createTag');
+    createBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>';
+    createBtn.onclick = handleCreateTag;
+    tagHeader.appendChild(createBtn);
+  }
+
+  if (!tagsData || tagsData.length === 0) {
+    container.innerHTML = `<div class="git-sidebar-empty">${t('gitTab.noTags')}</div>`;
+    return;
+  }
+
+  let html = '';
+  for (const tag of tagsData) {
+    const dateStr = tag.date ? new Date(tag.date).toLocaleDateString() : '';
+    html += `<div class="git-tag-item" data-tag="${escapeAttr(tag.name)}">
+      <div class="git-tag-info">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z"/></svg>
+        <span class="git-tag-name">${escapeHtml(tag.name)}</span>
+        ${dateStr ? `<span class="git-tag-date">${dateStr}</span>` : ''}
+      </div>
+      <div class="git-tag-actions">
+        <button class="git-tag-btn push" title="${t('gitTab.pushTag')}">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M12 21V9"/><path d="M7 14l5-5 5 5"/></svg>
+        </button>
+        <button class="git-tag-btn delete" title="${t('common.delete')}">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+        </button>
+      </div>
+    </div>`;
+  }
+
+  container.innerHTML = html;
+
+  container.onclick = (e) => {
+    const btn = e.target.closest('.git-tag-btn');
+    if (!btn) return;
+    const tag = btn.closest('.git-tag-item').dataset.tag;
+    if (btn.classList.contains('push')) handlePushTag(tag);
+    else if (btn.classList.contains('delete')) handleDeleteTag(tag);
+  };
+}
+
 // ========== STASHES ==========
 
 function renderStashes() {
@@ -929,6 +1030,7 @@ function renderSubTabContent() {
     case 'changes': renderChanges(tempDiv); break;
     case 'history': renderHistory(tempDiv); break;
     case 'pullrequests': renderPullRequests(tempDiv); break;
+    case 'issues': renderIssues(tempDiv); break;
   }
 
   content.innerHTML = bannerHtml + tempDiv.innerHTML;
@@ -938,6 +1040,7 @@ function renderSubTabContent() {
     case 'changes': bindChangesEvents(content); break;
     case 'history': bindHistoryEvents(content); break;
     case 'pullrequests': bindPullRequestEvents(content); break;
+    case 'issues': bindIssuesEvents(content); break;
   }
 
   // Bind merge banner buttons
@@ -1393,6 +1496,12 @@ function buildHistoryToolbar(commits) {
     html += '</select></div>';
   }
 
+  // File filter
+  html += '<div class="git-filter-group">';
+  html += `<svg class="git-filter-icon" viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>`;
+  html += `<input type="text" class="git-history-file-filter" id="git-history-file-filter" placeholder="${t('gitTab.filterByFile')}" value="${escapeAttr(historyFileFilter)}">`;
+  html += '</div>';
+
   // Commit count indicator
   html += `<span class="git-history-count">${commits.length} commits</span>`;
 
@@ -1510,6 +1619,38 @@ function bindHistoryEvents(container) {
     };
   }
 
+  // File filter
+  const fileFilter = container.querySelector('#git-history-file-filter');
+  if (fileFilter) {
+    let filterTimeout;
+    fileFilter.oninput = () => {
+      clearTimeout(filterTimeout);
+      filterTimeout = setTimeout(async () => {
+        historyFileFilter = fileFilter.value.trim();
+        historyPage = 0;
+        historyHasMore = true;
+        if (historyFileFilter) {
+          const fileHistResult = await api.git.fileHistory({
+            projectPath: selectedProject.path,
+            filePath: historyFileFilter,
+            limit: 50
+          });
+          historyData = fileHistResult?.commits || [];
+        } else {
+          historyData = await api.git.commitHistory({
+            projectPath: selectedProject.path,
+            skip: 0,
+            limit: 50,
+            branch: historyBranchFilter,
+            allBranches: historyAllBranches
+          });
+        }
+        if (historyData.length < 50) historyHasMore = false;
+        renderSubTabContent();
+      }, 500);
+    };
+  }
+
   // Infinite scroll with IntersectionObserver
   setupHistoryInfiniteScroll();
 }
@@ -1606,7 +1747,7 @@ function renderPullRequests(container) {
     for (const pr of prsData.pullRequests) {
       const stateClass = pr.state === 'merged' ? 'merged' : pr.state === 'open' ? 'open' : 'closed';
       const stateLabel = pr.draft ? t('gitTab.draftPR') : t(`gitTab.${stateClass}PR`);
-      html += `<div class="git-pr-item ${stateClass}" data-url="${escapeAttr(pr.url)}">
+      html += `<div class="git-pr-item ${stateClass}" data-url="${escapeAttr(pr.url)}" data-number="${pr.number}">
         <div class="git-pr-item-main">
           <span class="git-pr-state ${stateClass}">${stateLabel}</span>
           <span class="git-pr-number">#${pr.number}</span>
@@ -1617,25 +1758,56 @@ function renderPullRequests(container) {
           <span class="git-pr-updated">${new Date(pr.updatedAt).toLocaleDateString()}</span>
           ${pr.labels?.length > 0 ? pr.labels.map(l => { const c = sanitizeColor('#' + l.color) || '#888'; return `<span class="git-pr-label" style="background:${c}20;color:${c};border-color:${c}40">${escapeHtml(l.name)}</span>`; }).join('') : ''}
         </div>
+        <div class="git-pr-item-actions">
+          ${pr.state === 'open' && !pr.draft ? `<button class="git-pr-merge-btn" data-number="${pr.number}" title="${t('gitTab.mergePR')}">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M17 20.41L18.41 19 15 15.59 13.59 17 17 20.41zM7.5 8H11v5.59L5.59 19 7 20.41l6-6V8h3.5L12 3.5 7.5 8z"/></svg>
+            ${t('gitTab.mergePR')}
+          </button>` : ''}
+          <button class="git-pr-open-btn" title="${t('gitTab.openInBrowser')}">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M19 19H5V5h7V3H5a2 2 0 00-2 2v14a2 2 0 002 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg>
+          </button>
+        </div>
       </div>`;
     }
   } else {
     html += `<div class="git-empty-state"><p>${t('gitTab.noPullRequests')}</p></div>`;
   }
+
+  // Load more button
+  if (prsData?.pullRequests?.length >= 5) {
+    html += `<button class="git-load-more-btn" id="git-pr-load-more">${t('gitTab.loadMore')}</button>`;
+  }
+
   html += '</div></div>';
 
   container.innerHTML = html;
 }
 
 function bindPullRequestEvents(container) {
-  // Delegated click handler for PR actions
   container.onclick = (e) => {
     if (e.target.closest('#git-pr-create-btn')) {
       handleCreatePR();
       return;
     }
+    if (e.target.closest('.git-pr-merge-btn')) {
+      const number = e.target.closest('.git-pr-merge-btn').dataset.number;
+      handleMergePR(parseInt(number));
+      return;
+    }
+    if (e.target.closest('.git-pr-open-btn')) {
+      const item = e.target.closest('.git-pr-item');
+      if (item?.dataset.url) api.dialog.openExternal(item.dataset.url);
+      return;
+    }
+    if (e.target.closest('#git-pr-load-more')) {
+      handleLoadMorePRs();
+      return;
+    }
+    // Clicking the PR row (not a button) opens in browser
     const item = e.target.closest('.git-pr-item');
-    if (item && item.dataset.url) api.dialog.openExternal(item.dataset.url);
+    if (item && item.dataset.url && !e.target.closest('button')) {
+      api.dialog.openExternal(item.dataset.url);
+    }
   };
 }
 
@@ -1739,7 +1911,10 @@ async function handleViewDiff(filePath, staged) {
 }
 
 async function handleCommitDetail(hash) {
-  const detail = await api.git.commitDetail({ projectPath: selectedProject.path, commitHash: hash });
+  const [detail, fileDiffs] = await Promise.all([
+    api.git.commitDetail({ projectPath: selectedProject.path, commitHash: hash }),
+    api.git.commitFileDiffs({ projectPath: selectedProject.path, commitHash: hash })
+  ]);
 
   const modalOverlay = document.getElementById('modal-overlay');
   const modalTitle = document.getElementById('modal-title');
@@ -1748,7 +1923,58 @@ async function handleCommitDetail(hash) {
 
   if (modalTitle) modalTitle.textContent = `${t('ui.commit')} ${hash.substring(0, 7)}`;
   if (modalBody) {
-    modalBody.innerHTML = `<div class="git-diff-view"><pre class="git-diff-content">${escapeHtml(detail)}</pre></div>`;
+    // Build per-file diff section
+    let filesHtml = '';
+    if (fileDiffs?.success && fileDiffs.files?.length > 0) {
+      filesHtml = `<div class="git-commit-files-header">${t('gitTab.changedFiles')} (${fileDiffs.files.length})</div>`;
+      filesHtml += '<div class="git-commit-files-list">';
+      for (const f of fileDiffs.files) {
+        filesHtml += `<div class="git-commit-file-item" data-file="${escapeAttr(f.path)}" data-hash="${escapeAttr(hash)}">
+          <span class="git-commit-file-name">${escapeHtml(f.path)}</span>
+          <span class="git-commit-file-stats">
+            ${f.additions > 0 ? `<span class="diff-stat-add">+${f.additions}</span>` : ''}
+            ${f.deletions > 0 ? `<span class="diff-stat-del">-${f.deletions}</span>` : ''}
+          </span>
+          <svg class="git-commit-file-expand" viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M7 10l5 5 5-5z"/></svg>
+        </div>
+        <div class="git-commit-file-diff" id="git-file-diff-${escapeAttr(f.path.replace(/[^a-zA-Z0-9]/g, '_'))}" style="display:none"></div>`;
+      }
+      filesHtml += '</div>';
+    }
+
+    modalBody.innerHTML = `${filesHtml}<div class="git-diff-view"><pre class="git-diff-content">${escapeHtml(detail)}</pre></div>`;
+
+    // Bind per-file expand
+    modalBody.querySelectorAll('.git-commit-file-item').forEach(item => {
+      item.onclick = async () => {
+        const filePath = item.dataset.file;
+        const commitHash = item.dataset.hash;
+        const diffContainer = item.nextElementSibling;
+        if (!diffContainer) return;
+
+        if (diffContainer.style.display === 'none') {
+          diffContainer.style.display = 'block';
+          item.querySelector('.git-commit-file-expand')?.classList.add('expanded');
+          if (!diffContainer.dataset.loaded) {
+            diffContainer.innerHTML = '<div class="spinner-small" style="margin:8px auto"></div>';
+            const diff = await api.git.commitFileDiff({ projectPath: selectedProject.path, commitHash, filePath });
+            if (diff?.success && diff.diff) {
+              const lines = diff.diff.split('\n').map(line => {
+                const cls = line.startsWith('+') ? 'diff-add' : line.startsWith('-') ? 'diff-del' : line.startsWith('@@') ? 'diff-hunk' : '';
+                return `<div class="diff-line ${cls}">${escapeHtml(line)}</div>`;
+              }).join('');
+              diffContainer.innerHTML = `<pre class="git-diff-content">${lines}</pre>`;
+            } else {
+              diffContainer.innerHTML = `<p style="color:var(--text-secondary);padding:8px">${t('gitTab.noDiffAvailable')}</p>`;
+            }
+            diffContainer.dataset.loaded = 'true';
+          }
+        } else {
+          diffContainer.style.display = 'none';
+          item.querySelector('.git-commit-file-expand')?.classList.remove('expanded');
+        }
+      };
+    });
   }
   if (modalFooter) modalFooter.style.display = 'none';
   if (modalOverlay) modalOverlay.classList.add('active');
@@ -1848,11 +2074,18 @@ async function handlePush() {
 async function handleFetch() {
   await withLock(async () => {
     showToast(t('gitTab.fetchingMessage'), 'info');
-    // Fetch is done via infoFull with skipFetch=false
-    const info = await api.git.infoFull(selectedProject.path);
-    aheadBehind = info?.aheadBehind || aheadBehind;
-    renderQuickActions();
-    showToast(t('gitTab.fetchComplete'), 'success');
+    const result = await api.git.fetch({ projectPath: selectedProject.path });
+    if (result?.success) {
+      // Refresh ahead/behind after fetch
+      const info = await api.git.infoFull(selectedProject.path);
+      aheadBehind = info?.aheadBehind || aheadBehind;
+      branchesData = info?.branches || branchesData;
+      renderQuickActions();
+      renderBranches();
+      showToast(t('gitTab.fetchComplete'), 'success');
+    } else {
+      showToast(result?.error || t('common.errorOccurred'), 'error');
+    }
   });
 }
 
@@ -2041,13 +2274,337 @@ async function handleCreatePR() {
       showToast(t('gitTab.prCreated', { number: result.pr.number }), 'success');
       if (result.pr.url) api.dialog.openExternal(result.pr.url);
       // Refresh PRs
-      prsData = await api.github.pullRequests(remoteUrl);
-      const content = document.getElementById('git-sub-content');
-      if (content && currentSubTab === 'pullrequests') renderPullRequests(content);
+      prPage = 1;
+      prsData = await api.github.pullRequests({ remoteUrl });
+      renderSubTabContent();
     } else {
       showToast(result.error, 'error');
     }
   });
+}
+
+// ========== ISSUES SUB-TAB ==========
+
+function renderIssues(container) {
+  if (!remoteUrl) {
+    container.innerHTML = `<div class="git-empty-state"><p>${t('git.noRemote')}</p></div>`;
+    return;
+  }
+
+  let html = '<div class="git-issues-container">';
+
+  // Create issue form
+  html += `<div class="git-pr-form">
+    <h3>${t('gitTab.createIssue')}</h3>
+    <div class="git-pr-field">
+      <label>${t('gitTab.issueTitle')}</label>
+      <input type="text" id="git-issue-title" class="git-pr-input" placeholder="${t('gitTab.issueTitlePlaceholder')}">
+    </div>
+    <div class="git-pr-field">
+      <label>${t('gitTab.issueBody')}</label>
+      <textarea id="git-issue-body" class="git-pr-textarea" rows="3" placeholder="${t('gitTab.issueBodyPlaceholder')}"></textarea>
+    </div>
+    <button class="git-pr-create-btn" id="git-issue-create-btn">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+      ${t('gitTab.createIssue')}
+    </button>
+  </div>`;
+
+  // State filter
+  html += `<div class="git-issues-filter">
+    <select class="git-history-select" id="git-issues-state-filter">
+      <option value="open" ${issuesState === 'open' ? 'selected' : ''}>${t('gitTab.openIssues')}</option>
+      <option value="closed" ${issuesState === 'closed' ? 'selected' : ''}>${t('gitTab.closedIssues')}</option>
+      <option value="all" ${issuesState === 'all' ? 'selected' : ''}>${t('gitTab.allIssues')}</option>
+    </select>
+  </div>`;
+
+  // Issues list
+  html += '<div class="git-issues-list">';
+  if (issuesData?.issues?.length > 0) {
+    for (const issue of issuesData.issues) {
+      const stateClass = issue.state === 'open' ? 'open' : 'closed';
+      html += `<div class="git-issue-item ${stateClass}" data-url="${escapeAttr(issue.url)}" data-number="${issue.number}">
+        <div class="git-issue-item-main">
+          <span class="git-issue-state ${stateClass}">
+            ${issue.state === 'open'
+              ? '<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/></svg>'
+              : '<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>'
+            }
+          </span>
+          <span class="git-issue-number">#${issue.number}</span>
+          <span class="git-issue-title-text">${escapeHtml(issue.title)}</span>
+          ${issue.comments > 0 ? `<span class="git-issue-comments"><svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> ${issue.comments}</span>` : ''}
+        </div>
+        <div class="git-issue-item-meta">
+          <span class="git-issue-author">${escapeHtml(issue.author || '')}</span>
+          <span class="git-issue-date">${new Date(issue.updatedAt).toLocaleDateString()}</span>
+          ${issue.labels?.length > 0 ? issue.labels.map(l => { const c = sanitizeColor('#' + l.color) || '#888'; return `<span class="git-pr-label" style="background:${c}20;color:${c};border-color:${c}40">${escapeHtml(l.name)}</span>`; }).join('') : ''}
+        </div>
+        <div class="git-issue-item-actions">
+          ${issue.state === 'open' ? `<button class="git-issue-close-btn" data-number="${issue.number}" title="${t('gitTab.closeIssue')}">${t('gitTab.closeIssue')}</button>` : ''}
+        </div>
+      </div>`;
+    }
+  } else {
+    html += `<div class="git-empty-state"><p>${t('gitTab.noIssues')}</p></div>`;
+  }
+
+  // Load more
+  if (issuesData?.issues?.length >= 10) {
+    html += `<button class="git-load-more-btn" id="git-issues-load-more">${t('gitTab.loadMore')}</button>`;
+  }
+
+  html += '</div></div>';
+  container.innerHTML = html;
+}
+
+function bindIssuesEvents(container) {
+  container.onclick = (e) => {
+    if (e.target.closest('#git-issue-create-btn')) {
+      handleCreateIssue();
+      return;
+    }
+    if (e.target.closest('.git-issue-close-btn')) {
+      const number = parseInt(e.target.closest('.git-issue-close-btn').dataset.number);
+      handleCloseIssue(number);
+      return;
+    }
+    if (e.target.closest('#git-issues-load-more')) {
+      handleLoadMoreIssues();
+      return;
+    }
+    const item = e.target.closest('.git-issue-item');
+    if (item && item.dataset.url && !e.target.closest('button')) {
+      api.dialog.openExternal(item.dataset.url);
+    }
+  };
+
+  // State filter
+  const stateFilter = container.querySelector('#git-issues-state-filter');
+  if (stateFilter) {
+    stateFilter.onchange = async () => {
+      issuesState = stateFilter.value;
+      issuesPage = 1;
+      issuesData = await api.github.issues({ remoteUrl, state: issuesState });
+      renderSubTabContent();
+    };
+  }
+}
+
+// ========== NEW GIT HANDLERS ==========
+
+async function handleRebase(branch) {
+  const confirmed = await showConfirm({
+    title: t('gitTab.rebaseTitle'),
+    message: t('gitTab.rebaseConfirmMessage', { source: branch, target: currentBranch })
+  });
+  if (!confirmed) return;
+  await withLock(async () => {
+    const result = await api.git.rebase({ projectPath: selectedProject.path, branch });
+    if (result.success) {
+      showToast(t('gitTab.rebaseSuccess'), 'success');
+    } else {
+      showToast(result.error, 'error');
+    }
+    await loadAllData(selectedProject);
+    renderGitTab();
+  });
+}
+
+async function handleRenameBranch(branch) {
+  const newName = prompt(t('gitTab.renameBranchPrompt', { name: branch }));
+  if (!newName || !newName.trim() || newName.trim() === branch) return;
+  await withLock(async () => {
+    const result = await api.git.renameBranch({ projectPath: selectedProject.path, oldName: branch, newName: newName.trim() });
+    if (result.success) {
+      showToast(t('gitTab.branchRenamed', { oldName: branch, newName: newName.trim() }), 'success');
+      await loadAllData(selectedProject);
+      renderGitTab();
+    } else {
+      showToast(result.error, 'error');
+    }
+  });
+}
+
+async function handleDeleteRemoteBranch(branch) {
+  const confirmed = await showConfirm({
+    title: t('gitTab.deleteRemoteBranch'),
+    message: t('gitTab.confirmDeleteRemoteBranch', { name: branch }),
+    confirmLabel: t('common.delete'),
+    danger: true
+  });
+  if (!confirmed) return;
+  await withLock(async () => {
+    const result = await api.git.deleteRemoteBranch({ projectPath: selectedProject.path, branch });
+    if (result.success) {
+      showToast(t('gitTab.remoteBranchDeleted', { name: branch }), 'success');
+      await refreshBranches();
+      renderBranches();
+    } else {
+      showToast(result.error, 'error');
+    }
+  });
+}
+
+async function handleMergePR(pullNumber) {
+  const confirmed = await showConfirm({
+    title: t('gitTab.mergePR'),
+    message: t('gitTab.confirmMergePR', { number: pullNumber })
+  });
+  if (!confirmed) return;
+  await withLock(async () => {
+    const result = await api.github.mergePR({ remoteUrl, pullNumber, mergeMethod: 'merge' });
+    if (result.success) {
+      showToast(t('gitTab.prMerged', { number: pullNumber }), 'success');
+      prPage = 1;
+      prsData = await api.github.pullRequests({ remoteUrl });
+      renderSubTabContent();
+    } else {
+      showToast(result.error, 'error');
+    }
+  });
+}
+
+async function handleLoadMorePRs() {
+  prPage++;
+  const more = await api.github.pullRequests({ remoteUrl, page: prPage });
+  if (more?.pullRequests?.length > 0) {
+    prsData.pullRequests = [...(prsData.pullRequests || []), ...more.pullRequests];
+    renderSubTabContent();
+  }
+}
+
+async function handleCreateIssue() {
+  const title = document.getElementById('git-issue-title')?.value?.trim();
+  const body = document.getElementById('git-issue-body')?.value?.trim() || '';
+
+  if (!title) {
+    showToast(t('gitTab.issueTitleRequired'), 'error');
+    return;
+  }
+
+  await withLock(async () => {
+    const result = await api.github.createIssue({ remoteUrl, title, body });
+    if (result.success) {
+      showToast(t('gitTab.issueCreated', { number: result.issue.number }), 'success');
+      if (result.issue.url) api.dialog.openExternal(result.issue.url);
+      issuesPage = 1;
+      issuesData = await api.github.issues({ remoteUrl, state: issuesState });
+      renderSubTabContent();
+    } else {
+      showToast(result.error, 'error');
+    }
+  });
+}
+
+async function handleCloseIssue(issueNumber) {
+  const confirmed = await showConfirm({
+    title: t('gitTab.closeIssue'),
+    message: t('gitTab.confirmCloseIssue', { number: issueNumber })
+  });
+  if (!confirmed) return;
+  await withLock(async () => {
+    const result = await api.github.closeIssue({ remoteUrl, issueNumber });
+    if (result.success) {
+      showToast(t('gitTab.issueClosed', { number: issueNumber }), 'success');
+      issuesData = await api.github.issues({ remoteUrl, state: issuesState });
+      renderSubTabContent();
+    } else {
+      showToast(result.error, 'error');
+    }
+  });
+}
+
+async function handleLoadMoreIssues() {
+  issuesPage++;
+  const more = await api.github.issues({ remoteUrl, page: issuesPage, state: issuesState });
+  if (more?.issues?.length > 0) {
+    issuesData.issues = [...(issuesData.issues || []), ...more.issues];
+    renderSubTabContent();
+  }
+}
+
+async function handleCreateTag() {
+  const name = prompt(t('gitTab.tagNamePrompt'));
+  if (!name || !name.trim()) return;
+  const message = prompt(t('gitTab.tagMessagePrompt'));
+
+  await withLock(async () => {
+    const result = await api.git.tagCreate({ projectPath: selectedProject.path, name: name.trim(), message: message || '' });
+    if (result.success) {
+      showToast(t('gitTab.tagCreated', { name: name.trim() }), 'success');
+      const tagsRes = await api.git.tagList({ projectPath: selectedProject.path });
+      if (tagsRes?.success) tagsData = tagsRes.tags || [];
+      renderTags();
+    } else {
+      showToast(result.error, 'error');
+    }
+  });
+}
+
+async function handleDeleteTag(tagName) {
+  const confirmed = await showConfirm({
+    title: t('gitTab.deleteTag'),
+    message: t('gitTab.confirmDeleteTag', { name: tagName }),
+    confirmLabel: t('common.delete'),
+    danger: true
+  });
+  if (!confirmed) return;
+  await withLock(async () => {
+    const result = await api.git.tagDelete({ projectPath: selectedProject.path, name: tagName });
+    if (result.success) {
+      showToast(t('gitTab.tagDeleted', { name: tagName }), 'success');
+      const tagsRes = await api.git.tagList({ projectPath: selectedProject.path });
+      if (tagsRes?.success) tagsData = tagsRes.tags || [];
+      renderTags();
+    } else {
+      showToast(result.error, 'error');
+    }
+  });
+}
+
+async function handlePushTag(tagName) {
+  await withLock(async () => {
+    const result = await api.git.tagPush({ projectPath: selectedProject.path, name: tagName });
+    if (result.success) {
+      showToast(t('gitTab.tagPushed', { name: tagName }), 'success');
+    } else {
+      showToast(result.error, 'error');
+    }
+  });
+}
+
+async function handleBlame(filePath) {
+  const lines = await api.git.blame({ projectPath: selectedProject.path, filePath });
+
+  const modalOverlay = document.getElementById('modal-overlay');
+  const modalTitle = document.getElementById('modal-title');
+  const modalBody = document.getElementById('modal-body');
+  const modalFooter = document.getElementById('modal-footer');
+
+  if (modalTitle) modalTitle.textContent = `${t('gitTab.blame')}: ${filePath}`;
+  if (modalBody) {
+    if (!lines?.success || !lines.lines?.length) {
+      modalBody.innerHTML = `<p style="color:var(--text-secondary);padding:16px">${t('gitTab.noBlameData')}</p>`;
+    } else {
+      let html = '<div class="git-blame-view"><table class="git-blame-table">';
+      for (const line of lines.lines) {
+        const date = line.timestamp ? new Date(line.timestamp * 1000).toLocaleDateString() : '';
+        html += `<tr class="git-blame-line">
+          <td class="git-blame-hash">${escapeHtml(line.hash.substring(0, 7))}</td>
+          <td class="git-blame-author">${escapeHtml(line.author)}</td>
+          <td class="git-blame-date">${date}</td>
+          <td class="git-blame-linenum">${line.line}</td>
+          <td class="git-blame-content"><pre>${escapeHtml(line.content)}</pre></td>
+        </tr>`;
+      }
+      html += '</table></div>';
+      modalBody.innerHTML = html;
+    }
+  }
+  if (modalFooter) modalFooter.style.display = 'none';
+  if (modalOverlay) modalOverlay.classList.add('active');
 }
 
 // ========== TOAST HELPER ==========

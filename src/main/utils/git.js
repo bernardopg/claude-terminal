@@ -1307,6 +1307,157 @@ function killAllGitProcesses() {
   _activeProcesses.clear();
 }
 
+// ── Delete remote branch ──
+
+async function deleteRemoteBranch(projectPath, branch, remote = 'origin') {
+  return execGit(projectPath, `push ${remote} --delete ${branch}`, 30000);
+}
+
+// ── Dedicated fetch ──
+
+async function gitFetch(projectPath, remote = 'origin') {
+  return execGit(projectPath, `fetch ${remote} --prune`, 30000);
+}
+
+// ── Branch rename ──
+
+async function renameBranch(projectPath, oldName, newName) {
+  return execGit(projectPath, `branch -m ${oldName} ${newName}`);
+}
+
+// ── Rebase ──
+
+async function gitRebase(projectPath, branch) {
+  return execGit(projectPath, `rebase ${branch}`, 60000);
+}
+
+async function gitRebaseAbort(projectPath) {
+  return execGit(projectPath, 'rebase --abort');
+}
+
+async function gitRebaseContinue(projectPath) {
+  return execGit(projectPath, 'rebase --continue');
+}
+
+// ── File history ──
+
+async function getFileHistory(projectPath, filePath, options = {}) {
+  const { skip = 0, limit = 30 } = options;
+  const output = await execGit(projectPath, `log --skip=${skip} -n ${limit} --pretty=format:"%H|%an|%aI|%s" -- "${filePath}"`, 15000);
+  if (!output) return [];
+  return output.split('\n').filter(Boolean).map(line => {
+    const parts = line.replace(/^"|"$/g, '').split('|');
+    return { hash: parts[0], author: parts[1], date: parts[2], message: parts.slice(3).join('|') };
+  });
+}
+
+// ── Commit file-by-file diffs ──
+
+async function getCommitFileDiffs(projectPath, commitHash) {
+  // Get list of changed files with stats
+  const statsOutput = await execGit(projectPath, `diff-tree --no-commit-id -r --numstat ${commitHash}`, 15000);
+  const files = [];
+  if (statsOutput) {
+    for (const line of statsOutput.split('\n').filter(Boolean)) {
+      const match = line.match(/^(\d+|-)\s+(\d+|-)\s+(.+)$/);
+      if (match) {
+        files.push({
+          additions: match[1] === '-' ? 0 : parseInt(match[1]) || 0,
+          deletions: match[2] === '-' ? 0 : parseInt(match[2]) || 0,
+          path: match[3]
+        });
+      }
+    }
+  }
+  return files;
+}
+
+async function getCommitFileDiff(projectPath, commitHash, filePath) {
+  const output = await execGit(projectPath, `diff ${commitHash}~1 ${commitHash} -- "${filePath}"`, 15000);
+  return output || '';
+}
+
+// ── Git blame ──
+
+async function gitBlame(projectPath, filePath) {
+  const output = await execGit(projectPath, `blame --porcelain "${filePath}"`, 30000);
+  if (!output) return [];
+  const lines = [];
+  let current = null;
+  const commits = {};
+  for (const line of output.split('\n')) {
+    const headerMatch = line.match(/^([a-f0-9]{40})\s+(\d+)\s+(\d+)/);
+    if (headerMatch) {
+      current = { hash: headerMatch[1], origLine: parseInt(headerMatch[2]), finalLine: parseInt(headerMatch[3]) };
+      if (!commits[current.hash]) commits[current.hash] = {};
+      continue;
+    }
+    if (current && line.startsWith('author ')) commits[current.hash].author = line.slice(7);
+    if (current && line.startsWith('author-time ')) commits[current.hash].timestamp = parseInt(line.slice(12));
+    if (current && line.startsWith('summary ')) commits[current.hash].summary = line.slice(8);
+    if (current && line.startsWith('\t')) {
+      lines.push({
+        line: current.finalLine,
+        hash: current.hash,
+        author: commits[current.hash]?.author || '',
+        timestamp: commits[current.hash]?.timestamp || 0,
+        summary: commits[current.hash]?.summary || '',
+        content: line.slice(1)
+      });
+      current = null;
+    }
+  }
+  return lines;
+}
+
+// ── Tags ──
+
+async function getTags(projectPath) {
+  const output = await execGit(projectPath, 'tag -l --sort=-creatordate --format=%(refname:short)|%(creatordate:iso-strict)|%(subject)');
+  if (!output) return [];
+  return output.split('\n').filter(Boolean).map(line => {
+    const [name, date, ...msgParts] = line.split('|');
+    return { name, date, message: msgParts.join('|') };
+  });
+}
+
+async function createTag(projectPath, name, message, commitHash) {
+  if (message) {
+    return execGit(projectPath, `tag -a "${name}" -m "${message}"${commitHash ? ' ' + commitHash : ''}`);
+  }
+  return execGit(projectPath, `tag "${name}"${commitHash ? ' ' + commitHash : ''}`);
+}
+
+async function deleteTag(projectPath, name) {
+  return execGit(projectPath, `tag -d "${name}"`);
+}
+
+async function pushTag(projectPath, name, remote = 'origin') {
+  return execGit(projectPath, `push ${remote} "${name}"`, 30000);
+}
+
+async function pushAllTags(projectPath, remote = 'origin') {
+  return execGit(projectPath, `push ${remote} --tags`, 30000);
+}
+
+// ── Remotes ──
+
+async function getRemotes(projectPath) {
+  const output = await execGit(projectPath, 'remote -v');
+  if (!output) return [];
+  const map = new Map();
+  for (const line of output.split('\n').filter(Boolean)) {
+    const match = line.match(/^(\S+)\s+(\S+)\s+\((\w+)\)$/);
+    if (match) {
+      if (!map.has(match[1])) map.set(match[1], { name: match[1], fetchUrl: '', pushUrl: '' });
+      const remote = map.get(match[1]);
+      if (match[3] === 'fetch') remote.fetchUrl = match[2];
+      if (match[3] === 'push') remote.pushUrl = match[2];
+    }
+  }
+  return Array.from(map.values());
+}
+
 module.exports = {
   parseGitStatus,
   parseDiffNumstat,
@@ -1352,5 +1503,22 @@ module.exports = {
   pruneWorktrees,
   detectWorktree,
   diffWorktreeBranches,
-  diffWorktreeBranchesWithStats
+  diffWorktreeBranchesWithStats,
+  // New operations
+  deleteRemoteBranch,
+  gitFetch,
+  renameBranch,
+  gitRebase,
+  gitRebaseAbort,
+  gitRebaseContinue,
+  getFileHistory,
+  getCommitFileDiffs,
+  getCommitFileDiff,
+  gitBlame,
+  getTags,
+  createTag,
+  deleteTag,
+  pushTag,
+  pushAllTags,
+  getRemotes
 };
