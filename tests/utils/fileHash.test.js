@@ -13,7 +13,7 @@ describe('hashFile', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   test('returns deterministic SHA256 hex hash for known content', () => {
@@ -85,7 +85,7 @@ describe('hashFiles', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   test('returns a Map with hashes for all existing files', async () => {
