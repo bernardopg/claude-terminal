@@ -1262,6 +1262,11 @@
     "folderCreatedGitInitError": "Carpeta creada pero git init falló: {error}",
     "duplicatePath": "Ya existe un proyecto en esta ruta: {name}",
     "registrationError": "Error al registrar el proyecto: {error}",
+    "sourceScaffold": "Plantilla",
+    "scaffolding": "Creando proyecto...",
+    "scaffoldError": "Error en scaffold: {error}",
+    "selectTemplate": "Seleccionar plantilla",
+    "detectedFramework": "{framework} detectado",
     "untitledConversation": "Conversación sin título",
     "categories": {
       "general": "General",

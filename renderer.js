@@ -3462,6 +3462,10 @@ document.getElementById('btn-new-project').onclick = () => {
               <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13"><path d="M19 12v7H5v-7H3v7c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2zm-6 .67l2.59-2.58L17 11.5l-5 5-5-5 1.41-1.41L11 12.67V3h2v9.67z"/></svg>
               <span>${t('newProject.sourceClone')}</span>
             </button>
+            <button type="button" class="wizard-source-btn wizard-source-scaffold" data-source="scaffold" style="display: none;">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13"><path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/></svg>
+              <span>${t('newProject.sourceScaffold')}</span>
+            </button>
           </div>
         </div>
 
@@ -3471,6 +3475,7 @@ document.getElementById('btn-new-project').onclick = () => {
             <input type="text" class="wizard-input" id="inp-repo-url" placeholder="https://github.com/user/repo.git">
             <div class="github-status-hint" id="github-status-hint"></div>
           </div>
+          ${(() => { try { return registry.get('webapp').getTemplateGridHtml ? registry.get('webapp').getTemplateGridHtml(t) : ''; } catch(_) { return ''; } })()}
           <div class="wizard-field">
             <label class="wizard-label">${t('newProject.projectName')}</label>
             <input type="text" class="wizard-input" id="inp-name" placeholder="${t('newProject.projectNamePlaceholder')}" required>
@@ -3483,6 +3488,7 @@ document.getElementById('btn-new-project').onclick = () => {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
               </button>
             </div>
+            <div class="detection-hint" id="detection-hint"></div>
           </div>
           <div class="wizard-field create-git-config" style="display: none;">
             <label class="wizard-checkbox">
@@ -3516,6 +3522,7 @@ document.getElementById('btn-new-project').onclick = () => {
 
   let selectedType = 'standalone';
   let selectedSource = 'folder';
+  let selectedTemplate = null;
   let githubConnected = false;
 
   // Wizard navigation
@@ -3538,6 +3545,16 @@ document.getElementById('btn-new-project').onclick = () => {
       // Update progress bar color
       const fill = document.getElementById('wizard-progress-fill');
       if (fill) fill.style.background = color;
+      // Show/hide scaffold source button based on type
+      const scaffoldBtn = document.querySelector('.wizard-source-scaffold');
+      if (scaffoldBtn) {
+        scaffoldBtn.style.display = selectedType === 'webapp' ? '' : 'none';
+        // Reset to folder if was on scaffold and type changed
+        if (selectedSource === 'scaffold' && selectedType !== 'webapp') {
+          const folderBtn = document.querySelector('.wizard-source-btn[data-source="folder"]');
+          if (folderBtn) folderBtn.click();
+        }
+      }
       // Show/hide type-specific config fields
       projectTypes.forEach(handler => {
         if (handler.onWizardTypeSelected) {
@@ -3588,7 +3605,7 @@ document.getElementById('btn-new-project').onclick = () => {
     }
   }
 
-  // Source selector (folder vs clone)
+  // Source selector (folder vs clone vs scaffold)
   document.querySelectorAll('.wizard-source-btn').forEach(opt => {
     opt.onclick = () => {
       document.querySelectorAll('.wizard-source-btn').forEach(o => o.classList.remove('selected'));
@@ -3596,19 +3613,36 @@ document.getElementById('btn-new-project').onclick = () => {
       selectedSource = opt.dataset.source;
       const isClone = selectedSource === 'clone';
       const isCreate = selectedSource === 'create';
+      const isScaffold = selectedSource === 'scaffold';
       document.querySelector('.clone-config').style.display = isClone ? 'block' : 'none';
       document.querySelector('.create-git-config').style.display = isCreate ? 'block' : 'none';
+      const scaffoldEl = document.querySelector('.scaffold-templates');
+      if (scaffoldEl) scaffoldEl.style.display = isScaffold ? 'block' : 'none';
+      // Clear detection hint when switching sources
+      const detectionHint = document.getElementById('detection-hint');
+      if (detectionHint) detectionHint.innerHTML = '';
       if (isClone) {
         document.getElementById('label-path').textContent = t('newProject.destFolder');
         document.getElementById('inp-path').placeholder = t('newProject.destFolderPlaceholder');
         updateGitHubHint();
-      } else if (isCreate) {
+      } else if (isCreate || isScaffold) {
         document.getElementById('label-path').textContent = t('newProject.parentFolder');
         document.getElementById('inp-path').placeholder = t('newProject.parentFolderPlaceholder');
       } else {
         document.getElementById('label-path').textContent = t('newProject.projectPath');
         document.getElementById('inp-path').placeholder = t('newProject.projectFolderPlaceholder');
       }
+      // Reset template selection when switching away from scaffold
+      if (!isScaffold) selectedTemplate = null;
+    };
+  });
+
+  // Scaffold template selection
+  document.querySelectorAll('.scaffold-card').forEach(card => {
+    card.onclick = () => {
+      document.querySelectorAll('.scaffold-card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+      selectedTemplate = card.dataset.template;
     };
   });
 
@@ -3628,6 +3662,29 @@ document.getElementById('btn-new-project').onclick = () => {
       document.getElementById('inp-path').value = folder;
       if (!document.getElementById('inp-name').value && selectedSource === 'folder') {
         document.getElementById('inp-name').value = path.basename(folder);
+      }
+      // Auto-detect framework for webapp type on folder source
+      if (selectedSource === 'folder' && selectedType === 'webapp') {
+        const detectionHint = document.getElementById('detection-hint');
+        if (detectionHint) {
+          try {
+            const pkgPath = path.join(folder, 'package.json');
+            if (fs.existsSync(pkgPath)) {
+              const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+              const webappType = registry.get('webapp');
+              const detected = webappType.detectFramework ? webappType.detectFramework(pkg) : null;
+              if (detected) {
+                detectionHint.innerHTML = `<span class="detection-badge"><span>${detected.icon}</span> ${t('newProject.detectedFramework', { framework: detected.name + (detected.version ? ' ' + detected.version : '') })}</span>`;
+              } else {
+                detectionHint.innerHTML = '';
+              }
+            } else {
+              detectionHint.innerHTML = '';
+            }
+          } catch (_) {
+            detectionHint.innerHTML = '';
+          }
+        }
       }
     }
   };
@@ -3725,6 +3782,47 @@ document.getElementById('btn-new-project').onclick = () => {
         // Clean up partial clone directory (BUG 3)
         try { if (fs.existsSync(projPath)) fs.rmSync(projPath, { recursive: true, force: true }); } catch (_) {}
         cloneStatus.innerHTML = `<div class="clone-error">${err.message}</div>`;
+        submitBtn.disabled = false;
+        submitBtn.textContent = t('newProject.create');
+        return;
+      }
+    }
+
+    // If scaffolding, run the scaffold command
+    if (selectedSource === 'scaffold' && selectedTemplate) {
+      projPath = path.join(projPath, name);
+      submitBtn.innerHTML = `<span class="btn-spinner"></span> ${t('newProject.scaffolding')}`;
+
+      try {
+        if (fs.existsSync(projPath)) {
+          showToast(t('newProject.folderAlreadyExists'), 'error');
+          submitBtn.disabled = false;
+          submitBtn.textContent = t('newProject.create');
+          return;
+        }
+        const webappType = registry.get('webapp');
+        const templates = webappType.getScaffoldTemplates ? webappType.getScaffoldTemplates() : [];
+        const tpl = templates.find(t => t.id === selectedTemplate);
+        if (!tpl) {
+          showToast('Unknown template', 'error');
+          submitBtn.disabled = false;
+          submitBtn.textContent = t('newProject.create');
+          return;
+        }
+        const { execSync } = window.electron_nodeModules.child_process;
+        execSync(tpl.cmd(name), {
+          cwd: path.dirname(projPath),
+          stdio: 'ignore',
+          timeout: 120000,
+          env: { ...process.env, npm_config_yes: 'true' }
+        });
+        createdDir = projPath;
+        // Force type to webapp for scaffold
+        selectedType = 'webapp';
+      } catch (err) {
+        // Clean up partial scaffold directory
+        try { if (fs.existsSync(projPath)) fs.rmSync(projPath, { recursive: true, force: true }); } catch (_) {}
+        showToast(t('newProject.scaffoldError', { error: err.message }), 'error');
         submitBtn.disabled = false;
         submitBtn.textContent = t('newProject.create');
         return;

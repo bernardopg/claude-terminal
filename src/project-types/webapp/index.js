@@ -107,6 +107,18 @@ module.exports = createType({
     return require('./renderer/WebAppWizard').getWizardConfig(form);
   },
 
+  getTemplateGridHtml: (t) => {
+    return require('./renderer/WebAppWizard').getTemplateGridHtml(t);
+  },
+
+  getScaffoldTemplates: () => {
+    return require('./renderer/WebAppWizard').SCAFFOLD_TEMPLATES;
+  },
+
+  detectFramework: (pkg) => {
+    return require('./renderer/WebAppWizard').detectFramework(pkg);
+  },
+
   // Suppression
   onProjectDelete: (project, idx) => {
     try {

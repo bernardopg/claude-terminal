@@ -1265,6 +1265,11 @@
     "folderCreatedGitInitError": "Folder created but git init failed: {error}",
     "duplicatePath": "A project already exists at this path: {name}",
     "registrationError": "Failed to register project: {error}",
+    "sourceScaffold": "Template",
+    "scaffolding": "Creating project...",
+    "scaffoldError": "Scaffold failed: {error}",
+    "selectTemplate": "Select a template",
+    "detectedFramework": "{framework} detected",
     "untitledConversation": "Untitled conversation",
     "categories": {
       "general": "General",
