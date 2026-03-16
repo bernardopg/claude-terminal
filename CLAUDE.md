@@ -47,7 +47,7 @@ Electron Renderer Process (Browser)
 ├── src/renderer/ui/panels/          # UI panels (10 panels)
 ├── src/renderer/features/           # Keyboard shortcuts, quick picker, drag-drop
 ├── src/renderer/events/             # Claude event bus + hook/scraping providers
-├── src/renderer/i18n/               # EN/FR internationalization (~800 keys each)
+├── src/renderer/i18n/               # EN/FR/ES internationalization (~2400 keys each)
 └── src/renderer/utils/              # DOM, color, format, paths, icons, syntax highlighting
 
 Project Types (Plugin System)
@@ -220,11 +220,11 @@ Base class `State.js`: Observable with `subscribe()`, batched notifications via 
 
 ### Internationalization (`src/renderer/i18n/`)
 
-- **Languages:** French (default), English
-- **Keys:** ~800 per locale file
+- **Languages:** French (default), English, Spanish
+- **Keys:** ~2400 per locale file
 - **System:** Dot-notation keys with `{variable}` interpolation
 - **Detection:** Auto-detect from `navigator.language`, fallback to `fr`
-- **Files:** `locales/en.json`, `locales/fr.json`
+- **Files:** `locales/en.json`, `locales/fr.json`, `locales/es.json`
 - **Usage:** `t('projects.openFolder')`, `t('key', { count: 5 })`
 - **HTML:** `data-i18n` attributes for static text
 
