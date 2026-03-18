@@ -273,10 +273,95 @@ This is a **FiveM project** (cfx.re framework — GTA V multiplayer server). Cla
 - Use \`fivem_ensure\` after modifying a resource to restart it — never do a full server restart for a single resource change
 `.trim();
 
+const DISCORD_APPEND = `
+## Discord Bot Project Context
+
+This is a **Discord bot project**. Claude Terminal provides dedicated tools and visual rendering for Discord bots.
+
+### Discord-Specific MCP Tools
+- \`discord_bot_status\` — Get bot status (running/stopped, bot name, guild count)
+- \`discord_list_commands\` — List all slash commands and prefix commands detected in the bot
+
+### Visual Discord Rendering — MANDATORY
+
+Claude Terminal renders Discord embeds, components, and messages as **faithful visual previews** (matching Discord's dark theme). You MUST use these special code blocks instead of plain JSON or JavaScript when showing Discord examples:
+
+**\`\`\`discord-embed\`\`\`** — Rendered Discord embed (shows color bar, fields grid, images, footer)
+
+Accepts JSON embed object OR discord.js EmbedBuilder code:
+\`\`\`discord-embed
+{
+  "title": "Welcome to the server!",
+  "description": "Thanks for joining. Read the rules in #rules.",
+  "color": 5814783,
+  "fields": [
+    { "name": "Members", "value": "1,234", "inline": true },
+    { "name": "Online", "value": "456", "inline": true }
+  ],
+  "footer": { "text": "Joined at" },
+  "timestamp": true
+}
+\`\`\`
+
+Or with builder code:
+\`\`\`discord-embed
+const embed = new EmbedBuilder()
+  .setTitle("Welcome!")
+  .setDescription("Thanks for joining.")
+  .setColor(0x5865F2);
+\`\`\`
+
+**\`\`\`discord-component\`\`\`** — Rendered Discord buttons, select menus, action rows
+\`\`\`discord-component
+[
+  {
+    "type": 1,
+    "components": [
+      { "type": 2, "style": 1, "label": "Accept Rules", "custom_id": "accept" },
+      { "type": 2, "style": 4, "label": "Leave", "custom_id": "leave" },
+      { "type": 2, "style": 5, "label": "Discord Docs", "url": "https://discord.dev" }
+    ]
+  }
+]
+\`\`\`
+
+**\`\`\`discord-message\`\`\`** — Full Discord message with avatar, username, embeds, components
+\`\`\`discord-message
+{
+  "username": "ModBot",
+  "avatar": "https://cdn.discordapp.com/embed/avatars/0.png",
+  "bot": true,
+  "content": "Welcome <@123456>! Check out <#rules>.",
+  "embeds": [{ "title": "Server Info", "color": 5814783 }],
+  "components": [{ "type": 1, "components": [{ "type": 2, "style": 1, "label": "Verify" }] }]
+}
+\`\`\`
+
+### RULES for Discord blocks
+1. **Showing embed examples** → ALWAYS use \`\`\`discord-embed\`\`\`. NEVER use plain \`\`\`json\`\`\` or \`\`\`javascript\`\`\` for embed data.
+2. **Showing button/select examples** → ALWAYS use \`\`\`discord-component\`\`\`. NEVER plain JSON.
+3. **Showing full message mockups** → Use \`\`\`discord-message\`\`\` for complete messages.
+4. **Showing multiple embeds** → Use \`\`\`tabs\`\`\` with each tab containing a \`\`\`discord-embed\`\`\` block, OR show them sequentially.
+5. When the user asks for code to **create** embeds/components, show BOTH the visual preview (\`\`\`discord-embed\`\`\`) AND the implementation code (\`\`\`tabs\`\`\` with JS/Python).
+
+### Component type IDs reference
+- 1 = ActionRow, 2 = Button, 3 = StringSelectMenu, 4 = TextInput, 5 = UserSelectMenu, 6 = RoleSelectMenu, 7 = MentionableSelectMenu, 8 = ChannelSelectMenu
+
+### Button style IDs reference
+- 1 = Primary (blurple), 2 = Secondary (grey), 3 = Success (green), 4 = Danger (red), 5 = Link (grey with icon)
+
+### Best Practices
+- Always validate inputs server-side — never trust client data
+- Use intents properly to avoid missing events
+- Cache Discord API data when possible to reduce rate limiting
+- Prefer slash commands over prefix commands for better UX
+- Use \`discord.js\` v14+ builders (EmbedBuilder, ActionRowBuilder, ButtonBuilder)
+`.trim();
+
 /**
  * Returns the built-in system prompt for a given project type.
  * Always includes the global Claude Terminal context.
- * @param {string} projectType - e.g. 'fivem', 'webapp', 'general'
+ * @param {string} projectType - e.g. 'fivem', 'webapp', 'discord', 'general'
  * @returns {{ type: 'preset', preset: 'claude_code', append: string }}
  */
 function getBuiltinSystemPrompt(projectType) {
@@ -288,6 +373,10 @@ function getBuiltinSystemPrompt(projectType) {
 
   if (projectType === 'fivem') {
     append += '\n\n' + FIVEM_APPEND;
+  }
+
+  if (projectType === 'discord') {
+    append += '\n\n' + DISCORD_APPEND;
   }
 
   return { type: 'preset', preset: 'claude_code', append };
