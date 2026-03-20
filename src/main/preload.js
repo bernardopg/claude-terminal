@@ -564,6 +564,10 @@ contextBridge.exposeInMainWorld('electron_api', {
     onSettingsUpdated: createListener('sync:settings-updated'),
     onProjectsUpdated: createListener('sync:projects-updated'),
     onMcpUpdated: createListener('sync:mcp-updated'),
+    onKeybindingsUpdated: createListener('sync:keybindings-updated'),
+    onMemoryUpdated: createListener('sync:memory-updated'),
+    onHooksConfigUpdated: createListener('sync:hooksConfig-updated'),
+    onPluginsUpdated: createListener('sync:plugins-updated'),
   },
 
   // ==================== USAGE ====================

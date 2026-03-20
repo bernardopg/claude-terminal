@@ -695,6 +695,10 @@ class MemoryEditor extends BasePanel {
       try {
         this.api.fs.writeFileSync(filePath, newContent, 'utf8');
         this._state.content = newContent;
+        // Push global CLAUDE.md changes to cloud sync
+        if (this._state.currentSource === 'global' && window.electron_api?.sync?.pushEntity) {
+          window.electron_api.sync.pushEntity('memory');
+        }
       } catch (e) {
         if (this._showToast) this._showToast({ type: 'error', title: t('memory.errorSaving', { message: e.message }) });
         return;

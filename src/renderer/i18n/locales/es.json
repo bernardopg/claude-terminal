@@ -1745,6 +1745,10 @@
     "settingsUpdated": "Ajustes actualizados desde la nube",
     "projectsUpdated": "Proyectos actualizados desde la nube",
     "mcpUpdated": "Configs MCP actualizadas desde la nube",
+    "keybindingsUpdated": "Atajos de teclado actualizados desde la nube",
+    "memoryUpdated": "CLAUDE.md actualizado desde la nube",
+    "hooksConfigUpdated": "Config de hooks actualizada desde la nube",
+    "pluginsUpdated": "Lista de plugins actualizada desde la nube",
     "fullSyncBtn": "Sincronización completa"
   },
   "database": {

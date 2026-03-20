@@ -1781,6 +1781,10 @@
     "settingsUpdated": "Settings updated from cloud",
     "projectsUpdated": "Projects updated from cloud",
     "mcpUpdated": "MCP configs updated from cloud",
+    "keybindingsUpdated": "Keybindings updated from cloud",
+    "memoryUpdated": "CLAUDE.md updated from cloud",
+    "hooksConfigUpdated": "Hooks config updated from cloud",
+    "pluginsUpdated": "Plugins list updated from cloud",
     "fullSyncBtn": "Full Sync"
   },
   "database": {

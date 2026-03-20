@@ -162,6 +162,15 @@ function formatEntityLabel(entityType, entityId) {
   if (entityType === 'mcpConfigs') {
     return `MCP: ${entityId}`;
   }
+  if (entityType === 'keybindings') {
+    return t('sync.keybindingsUpdated').split(' ')[0] || 'Keybindings';
+  }
+  if (entityType === 'memory') {
+    return 'CLAUDE.md';
+  }
+  if (entityType === 'hooksConfig') {
+    return 'Hooks config';
+  }
   return `${entityType}${entityId ? '.' + entityId : ''}`;
 }
 

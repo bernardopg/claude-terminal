@@ -344,6 +344,59 @@ function _registerSyncListeners(api) {
       return result;
     };
   }
+
+  // ── Keybindings sync ──
+  // No direct service to monkey-patch; keybindings are edited via file.
+  // Listen for cloud updates:
+  if (api.sync.onKeybindingsUpdated) {
+    api.sync.onKeybindingsUpdated(() => {
+      Toast.show(t('sync.keybindingsUpdated'), 'info', 3000);
+    });
+  }
+
+  // ── Memory (CLAUDE.md) sync ──
+  // MemoryEditor saves via fs.writeFileSync → we patch the save method
+  if (api.sync.onMemoryUpdated) {
+    api.sync.onMemoryUpdated(() => {
+      Toast.show(t('sync.memoryUpdated'), 'info', 3000);
+    });
+  }
+
+  // ── Hooks config sync ──
+  // Hooks are installed/removed via api.hooks.install()/remove()
+  if (api.sync.onHooksConfigUpdated) {
+    api.sync.onHooksConfigUpdated(() => {
+      Toast.show(t('sync.hooksConfigUpdated'), 'info', 3000);
+    });
+  }
+
+  // Wire hooks install/remove → push to cloud
+  const hooksApi = window.electron_api?.hooks;
+  if (hooksApi) {
+    const _origInstall = hooksApi.install;
+    if (_origInstall) {
+      hooksApi.install = async function (...args) {
+        const result = await _origInstall.apply(this, args);
+        api.sync.pushEntity('hooksConfig');
+        return result;
+      };
+    }
+    const _origRemove = hooksApi.remove;
+    if (_origRemove) {
+      hooksApi.remove = async function (...args) {
+        const result = await _origRemove.apply(this, args);
+        api.sync.pushEntity('hooksConfig');
+        return result;
+      };
+    }
+  }
+
+  // ── Installed plugins sync ──
+  if (api.sync.onPluginsUpdated) {
+    api.sync.onPluginsUpdated(() => {
+      Toast.show(t('sync.pluginsUpdated'), 'info', 3000);
+    });
+  }
 }
 
 // Telemetry consent modal is handled in renderer.js (main entry point)

@@ -2,7 +2,8 @@
  * SyncEngine
  * Entity-based bidirectional sync between local app state and cloud relay.
  *
- * Entities: settings, projects, timeTracking, conversations, skills, agents, mcpConfigs
+ * Entities: settings, projects, timeTracking, conversations, skills, agents, mcpConfigs,
+ *           keybindings, memory, hooksConfig, timeTrackingArchives, installedPlugins
  * Strategy: last-write-wins per entity, with user prompt on true conflicts.
  *
  * Conflict = both local and cloud changed since last sync.
@@ -23,6 +24,13 @@ const TIMETRACKING_FILE = path.join(DATA_DIR, 'timetracking.json');
 const SKILLS_DIR = path.join(CLAUDE_DIR, 'skills');
 const AGENTS_DIR = path.join(CLAUDE_DIR, 'agents');
 const MCP_CONFIG_FILE = path.join(os.homedir(), '.claude.json');
+const KEYBINDINGS_FILE = path.join(CLAUDE_DIR, 'keybindings.json');
+const MEMORY_FILE = path.join(CLAUDE_DIR, 'MEMORY.md');
+const CLAUDE_SETTINGS_FILE = path.join(CLAUDE_DIR, 'settings.json');
+const PLUGINS_DIR = path.join(CLAUDE_DIR, 'plugins');
+const INSTALLED_PLUGINS_FILE = path.join(PLUGINS_DIR, 'installed_plugins.json');
+const ARCHIVES_DIR = path.join(DATA_DIR, 'archives');
+const TIMETRACKING_DIR = path.join(DATA_DIR, 'timetracking');
 
 const SYNC_DEBOUNCE_MS = 2000;
 const CONVERSATION_SYNC_DEBOUNCE_MS = 30000;
@@ -68,6 +76,31 @@ const ENTITY_TYPES = {
     localPath: () => MCP_CONFIG_FILE,
     excludeKeys: [],
     autoResolve: false,
+  },
+  keybindings: {
+    granularity: 'whole-file',
+    localPath: () => KEYBINDINGS_FILE,
+    autoResolve: false, // conflicts possible
+  },
+  memory: {
+    granularity: 'whole-file',
+    localPath: () => MEMORY_FILE,
+    autoResolve: false, // user decides local vs cloud
+  },
+  hooksConfig: {
+    granularity: 'whole-file',
+    localPath: () => CLAUDE_SETTINGS_FILE,
+    autoResolve: false, // hooks are critical, user decides
+  },
+  timeTrackingArchives: {
+    granularity: 'per-file',
+    localPath: () => TIMETRACKING_DIR,
+    autoResolve: true, // additive merge, no conflicts
+  },
+  installedPlugins: {
+    granularity: 'whole-file',
+    localPath: () => INSTALLED_PLUGINS_FILE,
+    autoResolve: true, // merge plugin lists
   },
 };
 
@@ -198,6 +231,24 @@ class SyncEngine {
       const mcpConflicts = await this._syncMcpConfigs(cloudState.mcpConfigs || {});
       conflicts.push(...mcpConflicts);
 
+      // Sync keybindings (whole-file)
+      const kbConflicts = await this._syncWholeFile('keybindings', KEYBINDINGS_FILE, cloudState.keybindings || null);
+      conflicts.push(...kbConflicts);
+
+      // Sync memory (whole-file, text)
+      const memConflicts = await this._syncWholeFile('memory', MEMORY_FILE, cloudState.memory || null, true);
+      conflicts.push(...memConflicts);
+
+      // Sync hooks config (whole-file)
+      const hooksConflicts = await this._syncWholeFile('hooksConfig', CLAUDE_SETTINGS_FILE, cloudState.hooksConfig || null);
+      conflicts.push(...hooksConflicts);
+
+      // Sync time tracking archives (per-file, additive)
+      await this._syncTimeTrackingArchives(cloudState.timeTrackingArchives || {});
+
+      // Sync installed plugins (whole-file, merge)
+      await this._syncInstalledPlugins(cloudState.installedPlugins || null);
+
       // Handle conflicts
       if (conflicts.length > 0 && this._onConflict) {
         const resolutions = await this._onConflict(conflicts);
@@ -220,7 +271,7 @@ class SyncEngine {
   /**
    * Notify the engine that a local entity changed.
    * Debounced push to cloud.
-   * @param {'settings'|'projects'|'timeTracking'|'conversations'|'skills'|'agents'|'mcpConfigs'} entityType
+   * @param {'settings'|'projects'|'timeTracking'|'conversations'|'skills'|'agents'|'mcpConfigs'|'keybindings'|'memory'|'hooksConfig'|'timeTrackingArchives'|'installedPlugins'} entityType
    * @param {string} [entityId] - specific key/id that changed (optional)
    */
   notifyLocalChange(entityType, entityId) {
@@ -699,6 +750,260 @@ class SyncEngine {
     }
   }
 
+  // ── Whole-file sync (keybindings, memory, hooksConfig) ──
+
+  /**
+   * Sync a single whole-file entity.
+   * @param {string} entityType
+   * @param {string} filePath
+   * @param {object|null} cloudData - { value, hash, updatedAt }
+   * @param {boolean} [isText=false] - if true, read/write as raw text instead of JSON
+   * @returns {Array} conflicts
+   */
+  async _syncWholeFile(entityType, filePath, cloudData, isText = false) {
+    const conflicts = [];
+    const entityKey = entityType;
+    const manifestEntry = this.manifest.entities[entityKey];
+
+    // Read local
+    const localValue = this._readWholeFile(filePath, isText);
+    const cloudValue = cloudData?.value ?? null;
+    const cloudTimestamp = cloudData?.updatedAt || 0;
+
+    const localHash = this._hash(typeof localValue === 'string' ? localValue : JSON.stringify(localValue));
+    const cloudHash = cloudData?.hash || this._hash(typeof cloudValue === 'string' ? cloudValue : JSON.stringify(cloudValue));
+
+    // Both null/missing — nothing to sync
+    if (localValue === null && cloudValue === null) return conflicts;
+
+    // Same content
+    if (localHash === cloudHash) {
+      this.manifest.entities[entityKey] = { localHash, cloudHash, lastSyncAt: Date.now() };
+      return conflicts;
+    }
+
+    const localChanged = !manifestEntry?.localHash || localHash !== manifestEntry.localHash;
+    const cloudChanged = !manifestEntry?.cloudHash || cloudHash !== manifestEntry.cloudHash;
+
+    if (localChanged && cloudChanged) {
+      // True conflict
+      conflicts.push({
+        entityType,
+        entityId: null,
+        localValue: isText ? (localValue || '').slice(0, 200) : localValue,
+        cloudValue: isText ? (cloudValue || '').slice(0, 200) : cloudValue,
+        cloudTimestamp,
+        localTimestamp: manifestEntry?.lastSyncAt || 0,
+      });
+    } else if (cloudChanged && cloudValue !== null) {
+      // Cloud wins → apply locally
+      this._writeWholeFile(filePath, cloudValue, isText);
+      this.manifest.entities[entityKey] = { localHash: cloudHash, cloudHash, lastSyncAt: Date.now() };
+      this._sendToRenderer(`sync:${entityType}-updated`);
+    } else if (localChanged) {
+      // Local wins → push to cloud
+      await this._pushEntity(entityType);
+    }
+
+    return conflicts;
+  }
+
+  _readWholeFile(filePath, isText = false) {
+    try {
+      if (!fs.existsSync(filePath)) return null;
+      const content = fs.readFileSync(filePath, 'utf8');
+      return isText ? content : JSON.parse(content);
+    } catch {
+      return null;
+    }
+  }
+
+  _writeWholeFile(filePath, data, isText = false) {
+    try {
+      const dir = path.dirname(filePath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const content = isText ? data : JSON.stringify(data, null, 2);
+      const tmpFile = filePath + '.tmp';
+      fs.writeFileSync(tmpFile, content, 'utf8');
+      fs.renameSync(tmpFile, filePath);
+    } catch (err) {
+      console.error(`[SyncEngine] Failed to write ${filePath}:`, err.message);
+    }
+  }
+
+  // ── Time tracking archives sync (per-file, additive) ──
+
+  /**
+   * Sync time tracking archives.
+   * Archives are stored as YYYY/month.json or YYYY/MM/archive-data.json.
+   * Strategy: additive merge per archive file (like timeTracking).
+   */
+  async _syncTimeTrackingArchives(cloudArchives) {
+    // cloudArchives: { "2025/01": { data, hash, updatedAt }, ... }
+    const localArchives = this._readArchiveEntities();
+
+    // Cloud → local
+    for (const [archiveKey, cloudEntry] of Object.entries(cloudArchives)) {
+      const entityKey = `timeTrackingArchives.${archiveKey}`;
+      const localData = localArchives[archiveKey];
+      const cloudHash = cloudEntry.hash || this._hash(JSON.stringify(cloudEntry.data));
+
+      if (!localData) {
+        // Cloud has it, we don't → write locally
+        this._writeArchiveFile(archiveKey, cloudEntry.data);
+        this.manifest.entities[entityKey] = { localHash: cloudHash, cloudHash, lastSyncAt: Date.now() };
+        continue;
+      }
+
+      const localHash = this._hash(JSON.stringify(localData));
+      if (localHash === cloudHash) {
+        this.manifest.entities[entityKey] = { localHash, cloudHash, lastSyncAt: Date.now() };
+        continue;
+      }
+
+      // Both exist, different → merge additively (combine sessions, dedup)
+      const merged = this._mergeTimeTracking(localData, cloudEntry.data);
+      this._writeArchiveFile(archiveKey, merged);
+      const mergedHash = this._hash(JSON.stringify(merged));
+      this.manifest.entities[entityKey] = { localHash: mergedHash, cloudHash: mergedHash, lastSyncAt: Date.now() };
+      await this._pushEntity('timeTrackingArchives', archiveKey);
+    }
+
+    // Local → cloud: push archives cloud doesn't have
+    for (const [archiveKey] of Object.entries(localArchives)) {
+      if (!cloudArchives[archiveKey]) {
+        await this._pushEntity('timeTrackingArchives', archiveKey);
+      }
+    }
+  }
+
+  /**
+   * Read all archive files from both old and new format.
+   * @returns {Object} { "2025/01": data, "2025/february": data, ... }
+   */
+  _readArchiveEntities() {
+    const archives = {};
+
+    // New format: ~/.claude-terminal/timetracking/YYYY/month.json
+    if (fs.existsSync(TIMETRACKING_DIR)) {
+      try {
+        for (const yearDir of fs.readdirSync(TIMETRACKING_DIR)) {
+          const yearPath = path.join(TIMETRACKING_DIR, yearDir);
+          if (!fs.statSync(yearPath).isDirectory()) continue;
+          for (const file of fs.readdirSync(yearPath)) {
+            if (!file.endsWith('.json')) continue;
+            try {
+              const data = JSON.parse(fs.readFileSync(path.join(yearPath, file), 'utf8'));
+              archives[`${yearDir}/${file.replace('.json', '')}`] = data;
+            } catch {}
+          }
+        }
+      } catch {}
+    }
+
+    // Legacy format: ~/.claude-terminal/archives/YYYY/MM/archive-data.json
+    if (fs.existsSync(ARCHIVES_DIR)) {
+      try {
+        for (const yearDir of fs.readdirSync(ARCHIVES_DIR)) {
+          const yearPath = path.join(ARCHIVES_DIR, yearDir);
+          if (!fs.statSync(yearPath).isDirectory()) continue;
+          for (const monthDir of fs.readdirSync(yearPath)) {
+            const archiveFile = path.join(yearPath, monthDir, 'archive-data.json');
+            if (!fs.existsSync(archiveFile)) continue;
+            try {
+              const data = JSON.parse(fs.readFileSync(archiveFile, 'utf8'));
+              archives[`legacy/${yearDir}/${monthDir}`] = data;
+            } catch {}
+          }
+        }
+      } catch {}
+    }
+
+    return archives;
+  }
+
+  _writeArchiveFile(archiveKey, data) {
+    try {
+      let filePath;
+      if (archiveKey.startsWith('legacy/')) {
+        // Legacy: archives/YYYY/MM/archive-data.json
+        const parts = archiveKey.replace('legacy/', '').split('/');
+        filePath = path.join(ARCHIVES_DIR, parts[0], parts[1], 'archive-data.json');
+      } else {
+        // New: timetracking/YYYY/month.json
+        const parts = archiveKey.split('/');
+        filePath = path.join(TIMETRACKING_DIR, parts[0], `${parts[1]}.json`);
+      }
+      const dir = path.dirname(filePath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const tmpFile = filePath + '.tmp';
+      fs.writeFileSync(tmpFile, JSON.stringify(data, null, 2), 'utf8');
+      fs.renameSync(tmpFile, filePath);
+    } catch (err) {
+      console.warn(`[SyncEngine] Failed to write archive ${archiveKey}:`, err.message);
+    }
+  }
+
+  // ── Installed plugins sync (merge plugin lists) ──
+
+  async _syncInstalledPlugins(cloudData) {
+    // cloudData: { value: { plugins: [...] }, hash, updatedAt }
+    const localPlugins = this._readWholeFile(INSTALLED_PLUGINS_FILE);
+    const cloudPlugins = cloudData?.value ?? null;
+    const entityKey = 'installedPlugins';
+
+    if (!localPlugins && !cloudPlugins) return;
+
+    if (!localPlugins && cloudPlugins) {
+      // Cloud has plugins, we don't → write locally
+      this._writeWholeFile(INSTALLED_PLUGINS_FILE, cloudPlugins);
+      const h = this._hash(JSON.stringify(cloudPlugins));
+      this.manifest.entities[entityKey] = { localHash: h, cloudHash: h, lastSyncAt: Date.now() };
+      this._sendToRenderer('sync:plugins-updated');
+      return;
+    }
+
+    if (localPlugins && !cloudPlugins) {
+      // We have plugins, cloud doesn't → push
+      await this._pushEntity('installedPlugins');
+      return;
+    }
+
+    // Both exist → merge plugin arrays (union by name)
+    const merged = this._mergePluginLists(localPlugins, cloudPlugins);
+    this._writeWholeFile(INSTALLED_PLUGINS_FILE, merged);
+    const mergedHash = this._hash(JSON.stringify(merged));
+    this.manifest.entities[entityKey] = { localHash: mergedHash, cloudHash: mergedHash, lastSyncAt: Date.now() };
+    await this._pushEntity('installedPlugins');
+    this._sendToRenderer('sync:plugins-updated');
+  }
+
+  /**
+   * Merge two installed_plugins.json structures.
+   * Union by plugin name, take the most recent version if both have it.
+   */
+  _mergePluginLists(local, cloud) {
+    // installed_plugins.json is typically { plugins: [...] } or an array
+    const localList = Array.isArray(local) ? local : (local?.plugins || []);
+    const cloudList = Array.isArray(cloud) ? cloud : (cloud?.plugins || []);
+
+    const merged = new Map();
+    for (const p of localList) {
+      const key = p.name || p.id || JSON.stringify(p);
+      merged.set(key, p);
+    }
+    for (const p of cloudList) {
+      const key = p.name || p.id || JSON.stringify(p);
+      if (!merged.has(key)) {
+        merged.set(key, p);
+      }
+      // If both have it, keep local (already there)
+    }
+
+    const result = Array.from(merged.values());
+    return Array.isArray(local) ? result : { ...(local || {}), plugins: result };
+  }
+
   // ── MCP Configs sync (per-key, like settings) ──
 
   async _syncMcpConfigs(cloudMcpConfigs) {
@@ -820,6 +1125,15 @@ class SyncEngine {
       config.mcpServers[entityId] = cloudValue;
       this._writeMcpConfig(config);
       this._sendToRenderer('sync:mcp-updated', { key: entityId });
+    } else if (entityType === 'keybindings') {
+      this._writeWholeFile(KEYBINDINGS_FILE, cloudValue);
+      this._sendToRenderer('sync:keybindings-updated');
+    } else if (entityType === 'memory') {
+      this._writeWholeFile(MEMORY_FILE, cloudValue, true);
+      this._sendToRenderer('sync:memory-updated');
+    } else if (entityType === 'hooksConfig') {
+      this._writeWholeFile(CLAUDE_SETTINGS_FILE, cloudValue);
+      this._sendToRenderer('sync:hooksConfig-updated');
     }
   }
 
@@ -947,6 +1261,25 @@ class SyncEngine {
     if (entityType === 'mcpConfigs') {
       const config = this._readMcpConfig();
       return entityId ? (config.mcpServers || {})[entityId] : config.mcpServers;
+    }
+    if (entityType === 'keybindings') {
+      return this._readWholeFile(KEYBINDINGS_FILE);
+    }
+    if (entityType === 'memory') {
+      return this._readWholeFile(MEMORY_FILE, true);
+    }
+    if (entityType === 'hooksConfig') {
+      return this._readWholeFile(CLAUDE_SETTINGS_FILE);
+    }
+    if (entityType === 'timeTrackingArchives') {
+      if (entityId) {
+        const archives = this._readArchiveEntities();
+        return archives[entityId] || null;
+      }
+      return this._readArchiveEntities();
+    }
+    if (entityType === 'installedPlugins') {
+      return this._readWholeFile(INSTALLED_PLUGINS_FILE);
     }
     return null;
   }
