@@ -1780,6 +1780,7 @@
     "entityPushed": "{entity} synced to cloud",
     "settingsUpdated": "Settings updated from cloud",
     "projectsUpdated": "Projects updated from cloud",
+    "mcpUpdated": "MCP configs updated from cloud",
     "fullSyncBtn": "Full Sync"
   },
   "database": {

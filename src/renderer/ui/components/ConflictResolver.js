@@ -157,7 +157,10 @@ function formatEntityLabel(entityType, entityId) {
     return entityId.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase());
   }
   if (entityType === 'projects') {
-    return entityId; // project ID or name
+    return entityId;
+  }
+  if (entityType === 'mcpConfigs') {
+    return `MCP: ${entityId}`;
   }
   return `${entityType}${entityId ? '.' + entityId : ''}`;
 }

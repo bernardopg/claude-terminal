@@ -302,6 +302,48 @@ function _registerSyncListeners(api) {
       Toast.show(t('sync.projectsUpdated'), 'info', 3000);
     });
   }
+
+  // Listen for MCP configs updated from cloud
+  if (api.sync.onMcpUpdated) {
+    api.sync.onMcpUpdated(() => {
+      Toast.show(t('sync.mcpUpdated'), 'info', 3000);
+    });
+  }
+
+  // Wire MCP config saves → push to cloud
+  // McpService.saveMcps writes to ~/.claude.json
+  const _origMcpSave = services.McpService?.saveMcps;
+  if (_origMcpSave && typeof _origMcpSave === 'function') {
+    services.McpService.saveMcps = async function (...args) {
+      const result = await _origMcpSave.apply(this, args);
+      api.sync.pushEntity('mcpConfigs');
+      return result;
+    };
+  }
+
+  // Wire skill/agent install/uninstall → push to cloud
+  // Skills and agents are loaded from ~/.claude/skills/ and ~/.claude/agents/
+  // Push after reload events from SkillService/AgentService
+  const SkillService = services.SkillService;
+  const AgentService = services.AgentService;
+
+  if (SkillService?.loadSkills) {
+    const _origLoadSkills = SkillService.loadSkills.bind(SkillService);
+    SkillService.loadSkills = async function (...args) {
+      const result = await _origLoadSkills(...args);
+      api.sync.pushEntity('skills');
+      return result;
+    };
+  }
+
+  if (AgentService?.loadAgents) {
+    const _origLoadAgents = AgentService.loadAgents.bind(AgentService);
+    AgentService.loadAgents = async function (...args) {
+      const result = await _origLoadAgents(...args);
+      api.sync.pushEntity('agents');
+      return result;
+    };
+  }
 }
 
 // Telemetry consent modal is handled in renderer.js (main entry point)

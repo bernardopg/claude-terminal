@@ -16,12 +16,17 @@ const os = require('os');
 const { settingsFile, projectsFile } = require('../utils/paths');
 const { getMachineId } = require('../utils/machineId');
 
+const CLAUDE_DIR = path.join(os.homedir(), '.claude');
 const DATA_DIR = path.join(os.homedir(), '.claude-terminal');
 const MANIFEST_FILE = path.join(DATA_DIR, 'sync-manifest.json');
 const TIMETRACKING_FILE = path.join(DATA_DIR, 'timetracking.json');
+const SKILLS_DIR = path.join(CLAUDE_DIR, 'skills');
+const AGENTS_DIR = path.join(CLAUDE_DIR, 'agents');
+const MCP_CONFIG_FILE = path.join(os.homedir(), '.claude.json');
 
 const SYNC_DEBOUNCE_MS = 2000;
 const CONVERSATION_SYNC_DEBOUNCE_MS = 30000;
+const FILE_SYNC_DEBOUNCE_MS = 5000;
 
 // ── Entity definitions ──
 
@@ -45,8 +50,24 @@ const ENTITY_TYPES = {
   },
   conversations: {
     granularity: 'append-only',
-    localPath: () => path.join(os.homedir(), '.claude'),
+    localPath: () => CLAUDE_DIR,
     autoResolve: true,
+  },
+  skills: {
+    granularity: 'per-directory',
+    localPath: () => SKILLS_DIR,
+    autoResolve: true, // last-write-wins per skill (no conflict modal)
+  },
+  agents: {
+    granularity: 'per-directory',
+    localPath: () => AGENTS_DIR,
+    autoResolve: true,
+  },
+  mcpConfigs: {
+    granularity: 'per-key',
+    localPath: () => MCP_CONFIG_FILE,
+    excludeKeys: [],
+    autoResolve: false,
   },
 };
 
@@ -167,6 +188,16 @@ class SyncEngine {
       // Sync conversations (append-only, no conflicts)
       await this._syncConversations(cloudState.conversations || {});
 
+      // Sync skills (per-directory, auto-resolve last-write-wins)
+      await this._syncDirectoryEntities('skills', SKILLS_DIR, cloudState.skills || {});
+
+      // Sync agents (per-directory, auto-resolve last-write-wins)
+      await this._syncDirectoryEntities('agents', AGENTS_DIR, cloudState.agents || {});
+
+      // Sync MCP configs (per-key)
+      const mcpConflicts = await this._syncMcpConfigs(cloudState.mcpConfigs || {});
+      conflicts.push(...mcpConflicts);
+
       // Handle conflicts
       if (conflicts.length > 0 && this._onConflict) {
         const resolutions = await this._onConflict(conflicts);
@@ -189,15 +220,15 @@ class SyncEngine {
   /**
    * Notify the engine that a local entity changed.
    * Debounced push to cloud.
-   * @param {'settings'|'projects'|'timeTracking'|'conversations'} entityType
+   * @param {'settings'|'projects'|'timeTracking'|'conversations'|'skills'|'agents'|'mcpConfigs'} entityType
    * @param {string} [entityId] - specific key/id that changed (optional)
    */
   notifyLocalChange(entityType, entityId) {
     if (!this.active) return;
 
     const debounceKey = entityId ? `${entityType}.${entityId}` : entityType;
-    const debounceMs = entityType === 'conversations'
-      ? CONVERSATION_SYNC_DEBOUNCE_MS
+    const debounceMs = entityType === 'conversations' ? CONVERSATION_SYNC_DEBOUNCE_MS
+      : (entityType === 'skills' || entityType === 'agents') ? FILE_SYNC_DEBOUNCE_MS
       : SYNC_DEBOUNCE_MS;
 
     // Clear existing timer
@@ -539,6 +570,201 @@ class SyncEngine {
     }
   }
 
+  // ── Skills & Agents sync (per-directory, auto-resolve) ──
+
+  /**
+   * Sync a directory-based entity type (skills or agents).
+   * Each subdirectory is one entity. Files inside are serialized as {files: {path: content}}.
+   * Strategy: last-write-wins (auto-resolve, no conflict modal).
+   * @param {'skills'|'agents'} entityType
+   * @param {string} localDir
+   * @param {Object} cloudEntities - { "entity-name": { files: {}, hash, updatedAt } }
+   */
+  async _syncDirectoryEntities(entityType, localDir, cloudEntities) {
+    if (!fs.existsSync(localDir)) {
+      fs.mkdirSync(localDir, { recursive: true });
+    }
+
+    // Read local entities
+    const localEntities = this._readDirectoryEntities(localDir);
+
+    // Cloud → local: add or update items we don't have or that are newer
+    for (const [name, cloudEntry] of Object.entries(cloudEntities)) {
+      const entityKey = `${entityType}.${name}`;
+      const manifestEntry = this.manifest.entities[entityKey];
+      const localEntity = localEntities[name];
+      const cloudHash = cloudEntry.hash || this._hash(JSON.stringify(cloudEntry.files));
+
+      if (!localEntity) {
+        // Cloud has it, we don't → write locally
+        this._writeDirectoryEntity(localDir, name, cloudEntry.files);
+        this.manifest.entities[entityKey] = { localHash: cloudHash, cloudHash, lastSyncAt: Date.now() };
+        continue;
+      }
+
+      const localHash = this._hash(JSON.stringify(localEntity));
+
+      if (localHash === cloudHash) {
+        this.manifest.entities[entityKey] = { localHash, cloudHash, lastSyncAt: Date.now() };
+        continue;
+      }
+
+      // Both exist, different → last-write-wins by timestamp
+      const cloudTime = cloudEntry.updatedAt || 0;
+      const localTime = manifestEntry?.lastSyncAt || 0;
+
+      if (cloudTime > localTime) {
+        // Cloud is newer → overwrite local
+        this._writeDirectoryEntity(localDir, name, cloudEntry.files);
+        this.manifest.entities[entityKey] = { localHash: cloudHash, cloudHash, lastSyncAt: Date.now() };
+      } else {
+        // Local is newer → push to cloud
+        await this._pushEntity(entityType, name);
+      }
+    }
+
+    // Local → cloud: push items cloud doesn't have
+    for (const [name, localFiles] of Object.entries(localEntities)) {
+      if (!cloudEntities[name]) {
+        await this._pushEntity(entityType, name);
+      }
+    }
+  }
+
+  /**
+   * Read all subdirectories in a dir as entities.
+   * @returns {Object} { "entity-name": { "file.md": "content", ... } }
+   */
+  _readDirectoryEntities(dir) {
+    const entities = {};
+    try {
+      const items = fs.readdirSync(dir);
+      for (const item of items) {
+        const itemPath = path.join(dir, item);
+        try {
+          const stat = fs.statSync(itemPath);
+          if (stat.isDirectory()) {
+            entities[item] = this._readDirFiles(itemPath);
+          } else if (item.endsWith('.md')) {
+            // Top-level .md files (like standalone skills/agents)
+            entities[item] = { [item]: fs.readFileSync(itemPath, 'utf8') };
+          }
+        } catch {}
+      }
+    } catch {}
+    return entities;
+  }
+
+  /**
+   * Read all files in a directory recursively (shallow, max 2 levels).
+   * @returns {Object} { "SKILL.md": "content", "sub/file.js": "content" }
+   */
+  _readDirFiles(dir, prefix = '') {
+    const files = {};
+    try {
+      const items = fs.readdirSync(dir);
+      for (const item of items) {
+        const fullPath = path.join(dir, item);
+        const relPath = prefix ? `${prefix}/${item}` : item;
+        try {
+          const stat = fs.statSync(fullPath);
+          if (stat.isDirectory()) {
+            Object.assign(files, this._readDirFiles(fullPath, relPath));
+          } else if (stat.size < 512 * 1024) { // Skip files > 512KB
+            files[relPath] = fs.readFileSync(fullPath, 'utf8');
+          }
+        } catch {}
+      }
+    } catch {}
+    return files;
+  }
+
+  /**
+   * Write an entity's files to a subdirectory.
+   */
+  _writeDirectoryEntity(baseDir, name, files) {
+    const entityDir = path.join(baseDir, name);
+    try {
+      if (!fs.existsSync(entityDir)) {
+        fs.mkdirSync(entityDir, { recursive: true });
+      }
+      for (const [relPath, content] of Object.entries(files || {})) {
+        const fullPath = path.join(entityDir, relPath);
+        const dir = path.dirname(fullPath);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(fullPath, content, 'utf8');
+      }
+    } catch (err) {
+      console.warn(`[SyncEngine] Failed to write ${name} to ${baseDir}:`, err.message);
+    }
+  }
+
+  // ── MCP Configs sync (per-key, like settings) ──
+
+  async _syncMcpConfigs(cloudMcpConfigs) {
+    const conflicts = [];
+    const localConfig = this._readMcpConfig();
+    const localServers = localConfig.mcpServers || {};
+
+    for (const key of Object.keys({ ...localServers, ...cloudMcpConfigs })) {
+      const entityKey = `mcpConfigs.${key}`;
+      const manifestEntry = this.manifest.entities[entityKey];
+      const localVal = localServers[key];
+      const cloudVal = cloudMcpConfigs[key]?.value;
+      const cloudTimestamp = cloudMcpConfigs[key]?.updatedAt || 0;
+
+      const localHash = this._hash(JSON.stringify(localVal));
+      const cloudHash = this._hash(JSON.stringify(cloudVal));
+
+      if (localHash === cloudHash) {
+        this.manifest.entities[entityKey] = { localHash, cloudHash, lastSyncAt: Date.now() };
+        continue;
+      }
+
+      const lastSyncHash = manifestEntry?.localHash;
+      const localChanged = !lastSyncHash || localHash !== lastSyncHash;
+      const cloudChanged = !manifestEntry?.cloudHash || cloudHash !== manifestEntry.cloudHash;
+
+      if (localChanged && cloudChanged) {
+        conflicts.push({
+          entityType: 'mcpConfigs',
+          entityId: key,
+          localValue: localVal,
+          cloudValue: cloudVal,
+          cloudTimestamp,
+          localTimestamp: manifestEntry?.lastSyncAt || 0,
+        });
+      } else if (cloudChanged && cloudVal !== undefined) {
+        localServers[key] = cloudVal;
+        this.manifest.entities[entityKey] = { localHash: cloudHash, cloudHash, lastSyncAt: Date.now() };
+      } else if (localChanged) {
+        await this._pushEntity('mcpConfigs', key);
+      }
+    }
+
+    this._writeMcpConfig({ ...localConfig, mcpServers: localServers });
+    return conflicts;
+  }
+
+  _readMcpConfig() {
+    try {
+      if (fs.existsSync(MCP_CONFIG_FILE)) {
+        return JSON.parse(fs.readFileSync(MCP_CONFIG_FILE, 'utf8'));
+      }
+    } catch {}
+    return { mcpServers: {} };
+  }
+
+  _writeMcpConfig(config) {
+    try {
+      const tmpFile = MCP_CONFIG_FILE + '.tmp';
+      fs.writeFileSync(tmpFile, JSON.stringify(config, null, 2), 'utf8');
+      fs.renameSync(tmpFile, MCP_CONFIG_FILE);
+    } catch (err) {
+      console.error('[SyncEngine] Failed to write MCP config:', err.message);
+    }
+  }
+
   // ── Conflict resolution ──
 
   async _applyResolutions(resolutions) {
@@ -588,6 +814,12 @@ class SyncEngine {
       }
       this._writeLocalProjects(data);
       this._sendToRenderer('sync:projects-updated');
+    } else if (entityType === 'mcpConfigs' && entityId) {
+      const config = this._readMcpConfig();
+      if (!config.mcpServers) config.mcpServers = {};
+      config.mcpServers[entityId] = cloudValue;
+      this._writeMcpConfig(config);
+      this._sendToRenderer('sync:mcp-updated', { key: entityId });
     }
   }
 
@@ -697,6 +929,24 @@ class SyncEngine {
     }
     if (entityType === 'timeTracking') {
       return this._readLocalFile(TIMETRACKING_FILE);
+    }
+    if (entityType === 'skills') {
+      if (entityId) {
+        const entityDir = path.join(SKILLS_DIR, entityId);
+        return fs.existsSync(entityDir) ? this._readDirFiles(entityDir) : null;
+      }
+      return this._readDirectoryEntities(SKILLS_DIR);
+    }
+    if (entityType === 'agents') {
+      if (entityId) {
+        const entityDir = path.join(AGENTS_DIR, entityId);
+        return fs.existsSync(entityDir) ? this._readDirFiles(entityDir) : null;
+      }
+      return this._readDirectoryEntities(AGENTS_DIR);
+    }
+    if (entityType === 'mcpConfigs') {
+      const config = this._readMcpConfig();
+      return entityId ? (config.mcpServers || {})[entityId] : config.mcpServers;
     }
     return null;
   }
