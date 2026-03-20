@@ -1,34 +1,13 @@
 /**
  * McpPanel
  * MCP servers local management + MCP registry browsing/install
- * Extracted from renderer.js
+ * Extracted from renderer.js — migrated to OOP (BasePanel)
  */
 
+const { BasePanel } = require('../../core/BasePanel');
 const { escapeHtml } = require('../../utils');
 const { t } = require('../../i18n');
-
-let ctx = null;
-
-let mcpState = {
-  mcps: [],
-  mcpProcesses: {},
-  selectedMcp: null,
-  mcpLogsCollapsed: false,
-  activeSubTab: 'local',
-  activeCategory: 'all',
-  registryInitialized: false,
-  registry: {
-    servers: [],
-    nextCursor: null,
-    isLoadingMore: false,
-    searchResults: [],
-    searchQuery: '',
-    searchCache: new Map(),
-    lastSectionTitle: ''
-  }
-};
-
-let mcpRegistrySearchTimeout = null;
+const { projectsState } = require('../../state');
 
 // ========== CATEGORY DETECTION ==========
 
@@ -47,11 +26,6 @@ function getMcpServerCategory(server) {
     if (pattern.test(text)) return cat;
   }
   return 'other';
-}
-
-function filterServersByCategory(servers) {
-  if (mcpState.activeCategory === 'all') return servers;
-  return servers.filter(s => getMcpServerCategory(s) === mcpState.activeCategory);
 }
 
 // ========== AVATAR COLORS ==========
@@ -76,196 +50,14 @@ function getServerAvatarStyle(name) {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
-function init(context) {
-  ctx = context;
-}
-
-async function loadMcps() {
-  if (!mcpState.registryInitialized) {
-    mcpState.registryInitialized = true;
-    setupMcpSubTabs();
+function getMcpServerType(server) {
+  if (server.packages && server.packages.length > 0) {
+    return server.packages[0].registryType || 'npm';
   }
-
-  if (mcpState.activeSubTab === 'local') {
-    await loadLocalMcps();
-  } else {
-    await loadMcpRegistryContent();
+  if (server.remotes && server.remotes.length > 0) {
+    return 'http';
   }
-}
-
-function setupMcpSubTabs() {
-  document.querySelectorAll('.mcp-sub-tab').forEach(btn => {
-    btn.onclick = async () => {
-      document.querySelectorAll('.mcp-sub-tab').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      mcpState.activeSubTab = btn.dataset.subtab;
-
-      const searchContainer = document.getElementById('mcp-registry-search');
-
-      if (btn.dataset.subtab === 'local') {
-        searchContainer.style.display = 'none';
-      } else {
-        searchContainer.style.display = 'flex';
-      }
-
-      await loadMcps();
-    };
-  });
-
-  const input = document.getElementById('mcp-registry-search-input');
-  if (input) {
-    input.addEventListener('input', () => {
-      clearTimeout(mcpRegistrySearchTimeout);
-      const query = input.value.trim();
-      mcpState.registry.searchQuery = query;
-
-      // Reset category filter on new search
-      if (query.length > 0) mcpState.activeCategory = 'all';
-
-      mcpRegistrySearchTimeout = setTimeout(() => {
-        if (query.length >= 2) {
-          searchMcpRegistry(query);
-        } else if (query.length === 0) {
-          loadMcpRegistryBrowse();
-        }
-      }, 300);
-    });
-  }
-}
-
-async function loadLocalMcps() {
-  mcpState.mcps = [];
-
-  try {
-    if (ctx.fs.existsSync(ctx.claudeConfigFile)) {
-      const config = JSON.parse(await ctx.fs.promises.readFile(ctx.claudeConfigFile, 'utf8'));
-      if (config.mcpServers) {
-        Object.entries(config.mcpServers).forEach(([name, mcpConfig]) => {
-          mcpState.mcps.push({
-            id: `global-${name}`,
-            name,
-            command: mcpConfig.command || '',
-            args: mcpConfig.args || [],
-            env: mcpConfig.env || {},
-            source: 'global',
-            sourceLabel: 'Global'
-          });
-        });
-      }
-    }
-  } catch (e) { console.error('Error loading MCPs from ~/.claude.json:', e); }
-
-  try {
-    if (ctx.fs.existsSync(ctx.claudeSettingsFile)) {
-      const settings = JSON.parse(await ctx.fs.promises.readFile(ctx.claudeSettingsFile, 'utf8'));
-      if (settings.mcpServers) {
-        Object.entries(settings.mcpServers).forEach(([name, config]) => {
-          if (!mcpState.mcps.find(m => m.name === name)) {
-            mcpState.mcps.push({
-              id: `global-${name}`,
-              name,
-              command: config.command || '',
-              args: config.args || [],
-              env: config.env || {},
-              source: 'global',
-              sourceLabel: 'Global'
-            });
-          }
-        });
-      }
-    }
-  } catch (e) { console.error('Error loading MCPs from ~/.claude/settings.json:', e); }
-
-  const projects = ctx.projectsState.get().projects;
-  for (const project of projects) {
-    try {
-      const projectMcpFile = ctx.path.join(project.path, '.claude', 'settings.local.json');
-      if (ctx.fs.existsSync(projectMcpFile)) {
-        const projectSettings = JSON.parse(await ctx.fs.promises.readFile(projectMcpFile, 'utf8'));
-        if (projectSettings.mcpServers) {
-          Object.entries(projectSettings.mcpServers).forEach(([name, config]) => {
-            const existingGlobal = mcpState.mcps.find(m => m.name === name && m.source === 'global');
-            if (!existingGlobal) {
-              mcpState.mcps.push({
-                id: `project-${project.id}-${name}`,
-                name,
-                command: config.command || '',
-                args: config.args || [],
-                env: config.env || {},
-                source: 'project',
-                sourceLabel: project.name,
-                projectId: project.id
-              });
-            }
-          });
-        }
-      }
-    } catch (e) { /* ignore project-specific errors */ }
-  }
-
-  mcpState.mcps.forEach(mcp => {
-    if (!mcpState.mcpProcesses[mcp.id]) {
-      mcpState.mcpProcesses[mcp.id] = { status: 'stopped', logs: [] };
-    }
-  });
-
-  renderMcps();
-}
-
-function renderMcps() {
-  const list = document.getElementById('mcp-list');
-  if (mcpState.mcps.length === 0) {
-    list.innerHTML = `<div class="empty-list"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 16l-4-4V8.82C14.16 8.4 15 7.3 15 6c0-1.66-1.34-3-3-3S9 4.34 9 6c0 1.3.84 2.4 2 2.82V12l-4 4H3v5h5v-3.05l4-4.2 4 4.2V21h5v-5h-4z"/></svg><h3>${t('mcpLocal.noServers')}</h3><p>${t('mcpLocal.configureHint')}</p></div>`;
-    return;
-  }
-
-  const globalMcps = mcpState.mcps.filter(m => m.source === 'global');
-  const projectMcps = mcpState.mcps.filter(m => m.source === 'project');
-
-  let html = '';
-
-  if (globalMcps.length > 0) {
-    html += `<div class="mcp-section"><div class="mcp-section-title">${t('mcpLocal.global')}</div>`;
-    html += globalMcps.map(mcp => renderMcpCard(mcp)).join('');
-    html += `</div>`;
-  }
-
-  if (projectMcps.length > 0) {
-    const byProject = {};
-    projectMcps.forEach(mcp => {
-      if (!byProject[mcp.sourceLabel]) byProject[mcp.sourceLabel] = [];
-      byProject[mcp.sourceLabel].push(mcp);
-    });
-
-    Object.entries(byProject).forEach(([projectName, mcps]) => {
-      html += `<div class="mcp-section"><div class="mcp-section-title">${escapeHtml(projectName)}</div>`;
-      html += mcps.map(mcp => renderMcpCard(mcp)).join('');
-      html += `</div>`;
-    });
-  }
-
-  list.innerHTML = html;
-  bindMcpCardHandlers();
-}
-
-function renderMcpCard(mcp) {
-  const initial = (mcp.name || '?').charAt(0).toUpperCase();
-  const cmdFull = `${mcp.command}${mcp.args?.length ? ' ' + mcp.args.join(' ') : ''}`;
-
-  return `<div class="mcp-card-wrapper">
-    <div class="mcp-card" data-id="${mcp.id}">
-      <div class="mcp-card-avatar">${escapeHtml(initial)}</div>
-      <div class="mcp-card-body">
-        <div class="mcp-card-name">
-          ${escapeHtml(mcp.name)}
-          <span class="mcp-source-badge">${escapeHtml(mcp.sourceLabel || 'Global')}</span>
-        </div>
-        <div class="mcp-card-cmd" title="${escapeHtml(cmdFull)}">${escapeHtml(cmdFull)}</div>
-      </div>
-      <div class="mcp-card-chevron">▸</div>
-    </div>
-    <div class="mcp-tools-panel" data-id="${mcp.id}"></div>
-  </div>`;
+  return null;
 }
 
 function findMcpSourceFile(mcp) {
@@ -295,177 +87,395 @@ function extractTools(source) {
   return tools;
 }
 
-async function loadMcpTools(mcp) {
-  const filePath = findMcpSourceFile(mcp);
-  if (!filePath) return null;
-  try {
-    const tools = [];
+// ========== McpPanel CLASS ==========
 
-    const mainSource = await ctx.fs.promises.readFile(filePath, 'utf8');
-    tools.push(...extractTools(mainSource));
-
-    const toolsDir = ctx.path.join(ctx.path.dirname(filePath), 'tools');
-    if (ctx.fs.existsSync(toolsDir)) {
-      const files = ctx.fs.readdirSync(toolsDir).filter(f => f.endsWith('.js'));
-      for (const file of files) {
-        try {
-          const src = await ctx.fs.promises.readFile(ctx.path.join(toolsDir, file), 'utf8');
-          tools.push(...extractTools(src));
-        } catch { /* ignore */ }
+class McpPanel extends BasePanel {
+  constructor(el, options = {}) {
+    super(el, options);
+    this._state = {
+      mcps: [],
+      mcpProcesses: {},
+      selectedMcp: null,
+      mcpLogsCollapsed: false,
+      activeSubTab: 'local',
+      activeCategory: 'all',
+      registryInitialized: false,
+      registry: {
+        servers: [],
+        nextCursor: null,
+        isLoadingMore: false,
+        searchResults: [],
+        searchQuery: '',
+        searchCache: new Map(),
+        lastSectionTitle: ''
       }
+    };
+    this._registrySearchTimeout = null;
+    this._showToast = options.showToast;
+    this._showModal = options.showModal;
+    this._closeModal = options.closeModal;
+    this._claudeConfigFile = options.claudeConfigFile;
+    this._claudeSettingsFile = options.claudeSettingsFile;
+  }
+
+  async loadMcps() {
+    if (!this._state.registryInitialized) {
+      this._state.registryInitialized = true;
+      this._setupMcpSubTabs();
     }
 
-    // Deduplicate by name
-    const seen = new Set();
-    return tools.filter(t => seen.has(t.name) ? false : seen.add(t.name));
-  } catch {
-    return null;
+    if (this._state.activeSubTab === 'local') {
+      await this._loadLocalMcps();
+    } else {
+      await this._loadMcpRegistryContent();
+    }
   }
-}
 
-function renderMcpTools(panel, tools) {
-  if (!tools) {
-    panel.innerHTML = `<div class="mcp-tools-unavailable">${t('mcp.toolsUnavailable')}</div>`;
-    return;
+  // ── Private: Sub-tabs ──
+
+  _setupMcpSubTabs() {
+    document.querySelectorAll('.mcp-sub-tab').forEach(btn => {
+      btn.onclick = async () => {
+        document.querySelectorAll('.mcp-sub-tab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this._state.activeSubTab = btn.dataset.subtab;
+
+        const searchContainer = document.getElementById('mcp-registry-search');
+
+        if (btn.dataset.subtab === 'local') {
+          searchContainer.style.display = 'none';
+        } else {
+          searchContainer.style.display = 'flex';
+        }
+
+        await this.loadMcps();
+      };
+    });
+
+    const input = document.getElementById('mcp-registry-search-input');
+    if (input) {
+      input.addEventListener('input', () => {
+        clearTimeout(this._registrySearchTimeout);
+        const query = input.value.trim();
+        this._state.registry.searchQuery = query;
+
+        // Reset category filter on new search
+        if (query.length > 0) this._state.activeCategory = 'all';
+
+        this._registrySearchTimeout = setTimeout(() => {
+          if (query.length >= 2) {
+            this._searchMcpRegistry(query);
+          } else if (query.length === 0) {
+            this._loadMcpRegistryBrowse();
+          }
+        }, 300);
+      });
+    }
   }
-  if (tools.length === 0) {
-    panel.innerHTML = `<div class="mcp-tools-unavailable">${t('mcp.noTools')}</div>`;
-    return;
+
+  // ── Private: Local MCPs ──
+
+  async _loadLocalMcps() {
+    this._state.mcps = [];
+
+    try {
+      if (this.api.fs.existsSync(this._claudeConfigFile)) {
+        const config = JSON.parse(await this.api.fs.promises.readFile(this._claudeConfigFile, 'utf8'));
+        if (config.mcpServers) {
+          Object.entries(config.mcpServers).forEach(([name, mcpConfig]) => {
+            this._state.mcps.push({
+              id: `global-${name}`,
+              name,
+              command: mcpConfig.command || '',
+              args: mcpConfig.args || [],
+              env: mcpConfig.env || {},
+              source: 'global',
+              sourceLabel: 'Global'
+            });
+          });
+        }
+      }
+    } catch (e) { console.error('Error loading MCPs from ~/.claude.json:', e); }
+
+    try {
+      if (this.api.fs.existsSync(this._claudeSettingsFile)) {
+        const settings = JSON.parse(await this.api.fs.promises.readFile(this._claudeSettingsFile, 'utf8'));
+        if (settings.mcpServers) {
+          Object.entries(settings.mcpServers).forEach(([name, config]) => {
+            if (!this._state.mcps.find(m => m.name === name)) {
+              this._state.mcps.push({
+                id: `global-${name}`,
+                name,
+                command: config.command || '',
+                args: config.args || [],
+                env: config.env || {},
+                source: 'global',
+                sourceLabel: 'Global'
+              });
+            }
+          });
+        }
+      }
+    } catch (e) { console.error('Error loading MCPs from ~/.claude/settings.json:', e); }
+
+    const projects = projectsState.get().projects;
+    for (const project of projects) {
+      try {
+        const projectMcpFile = this.api.path.join(project.path, '.claude', 'settings.local.json');
+        if (this.api.fs.existsSync(projectMcpFile)) {
+          const projectSettings = JSON.parse(await this.api.fs.promises.readFile(projectMcpFile, 'utf8'));
+          if (projectSettings.mcpServers) {
+            Object.entries(projectSettings.mcpServers).forEach(([name, config]) => {
+              const existingGlobal = this._state.mcps.find(m => m.name === name && m.source === 'global');
+              if (!existingGlobal) {
+                this._state.mcps.push({
+                  id: `project-${project.id}-${name}`,
+                  name,
+                  command: config.command || '',
+                  args: config.args || [],
+                  env: config.env || {},
+                  source: 'project',
+                  sourceLabel: project.name,
+                  projectId: project.id
+                });
+              }
+            });
+          }
+        }
+      } catch (e) { /* ignore project-specific errors */ }
+    }
+
+    this._state.mcps.forEach(mcp => {
+      if (!this._state.mcpProcesses[mcp.id]) {
+        this._state.mcpProcesses[mcp.id] = { status: 'stopped', logs: [] };
+      }
+    });
+
+    this._renderMcps();
   }
-  const rows = tools.map(tool => `
+
+  _renderMcps() {
+    const list = document.getElementById('mcp-list');
+    if (this._state.mcps.length === 0) {
+      list.innerHTML = `<div class="empty-list"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 16l-4-4V8.82C14.16 8.4 15 7.3 15 6c0-1.66-1.34-3-3-3S9 4.34 9 6c0 1.3.84 2.4 2 2.82V12l-4 4H3v5h5v-3.05l4-4.2 4 4.2V21h5v-5h-4z"/></svg><h3>${t('mcpLocal.noServers')}</h3><p>${t('mcpLocal.configureHint')}</p></div>`;
+      return;
+    }
+
+    const globalMcps = this._state.mcps.filter(m => m.source === 'global');
+    const projectMcps = this._state.mcps.filter(m => m.source === 'project');
+
+    let html = '';
+
+    if (globalMcps.length > 0) {
+      html += `<div class="mcp-section"><div class="mcp-section-title">${t('mcpLocal.global')}</div>`;
+      html += globalMcps.map(mcp => this._renderMcpCard(mcp)).join('');
+      html += `</div>`;
+    }
+
+    if (projectMcps.length > 0) {
+      const byProject = {};
+      projectMcps.forEach(mcp => {
+        if (!byProject[mcp.sourceLabel]) byProject[mcp.sourceLabel] = [];
+        byProject[mcp.sourceLabel].push(mcp);
+      });
+
+      Object.entries(byProject).forEach(([projectName, mcps]) => {
+        html += `<div class="mcp-section"><div class="mcp-section-title">${escapeHtml(projectName)}</div>`;
+        html += mcps.map(mcp => this._renderMcpCard(mcp)).join('');
+        html += `</div>`;
+      });
+    }
+
+    list.innerHTML = html;
+    this._bindMcpCardHandlers();
+  }
+
+  _renderMcpCard(mcp) {
+    const initial = (mcp.name || '?').charAt(0).toUpperCase();
+    const cmdFull = `${mcp.command}${mcp.args?.length ? ' ' + mcp.args.join(' ') : ''}`;
+
+    return `<div class="mcp-card-wrapper">
+    <div class="mcp-card" data-id="${mcp.id}">
+      <div class="mcp-card-avatar">${escapeHtml(initial)}</div>
+      <div class="mcp-card-body">
+        <div class="mcp-card-name">
+          ${escapeHtml(mcp.name)}
+          <span class="mcp-source-badge">${escapeHtml(mcp.sourceLabel || 'Global')}</span>
+        </div>
+        <div class="mcp-card-cmd" title="${escapeHtml(cmdFull)}">${escapeHtml(cmdFull)}</div>
+      </div>
+      <div class="mcp-card-chevron">▸</div>
+    </div>
+    <div class="mcp-tools-panel" data-id="${mcp.id}"></div>
+  </div>`;
+  }
+
+  async _loadMcpTools(mcp) {
+    const filePath = findMcpSourceFile(mcp);
+    if (!filePath) return null;
+    try {
+      const tools = [];
+
+      const mainSource = await this.api.fs.promises.readFile(filePath, 'utf8');
+      tools.push(...extractTools(mainSource));
+
+      const toolsDir = this.api.path.join(this.api.path.dirname(filePath), 'tools');
+      if (this.api.fs.existsSync(toolsDir)) {
+        const files = this.api.fs.readdirSync(toolsDir).filter(f => f.endsWith('.js'));
+        for (const file of files) {
+          try {
+            const src = await this.api.fs.promises.readFile(this.api.path.join(toolsDir, file), 'utf8');
+            tools.push(...extractTools(src));
+          } catch { /* ignore */ }
+        }
+      }
+
+      // Deduplicate by name
+      const seen = new Set();
+      return tools.filter(t => seen.has(t.name) ? false : seen.add(t.name));
+    } catch {
+      return null;
+    }
+  }
+
+  _renderMcpTools(panel, tools) {
+    if (!tools) {
+      panel.innerHTML = `<div class="mcp-tools-unavailable">${t('mcp.toolsUnavailable')}</div>`;
+      return;
+    }
+    if (tools.length === 0) {
+      panel.innerHTML = `<div class="mcp-tools-unavailable">${t('mcp.noTools')}</div>`;
+      return;
+    }
+    const rows = tools.map(tool => `
     <div class="mcp-tool-row">
       <span class="mcp-tool-row-name">${escapeHtml(tool.name)}</span>
       ${tool.description ? `<span class="mcp-tool-row-desc">${escapeHtml(tool.description)}</span>` : ''}
     </div>`).join('');
-  panel.innerHTML = `<div class="mcp-tools-table">${rows}</div>`;
-}
+    panel.innerHTML = `<div class="mcp-tools-table">${rows}</div>`;
+  }
 
-function bindMcpCardHandlers() {
-  document.querySelectorAll('.mcp-card').forEach(card => {
-    card.addEventListener('click', async () => {
-      const id = card.dataset.id;
-      const panel = document.querySelector(`.mcp-tools-panel[data-id="${id}"]`);
-      const chevron = card.querySelector('.mcp-card-chevron');
-      if (!panel) return;
+  _bindMcpCardHandlers() {
+    document.querySelectorAll('.mcp-card').forEach(card => {
+      card.addEventListener('click', async () => {
+        const id = card.dataset.id;
+        const panel = document.querySelector(`.mcp-tools-panel[data-id="${id}"]`);
+        const chevron = card.querySelector('.mcp-card-chevron');
+        if (!panel) return;
 
-      const isOpen = panel.classList.contains('open');
-      panel.classList.toggle('open', !isOpen);
-      if (chevron) chevron.textContent = isOpen ? '▸' : '▾';
+        const isOpen = panel.classList.contains('open');
+        panel.classList.toggle('open', !isOpen);
+        if (chevron) chevron.textContent = isOpen ? '▸' : '▾';
 
-      if (!isOpen && !panel.dataset.loaded) {
-        panel.dataset.loaded = 'true';
-        panel.innerHTML = `<div class="mcp-tools-loading"><div class="spinner-sm"></div></div>`;
-        const mcp = mcpState.mcps.find(m => m.id === id);
-        const tools = await loadMcpTools(mcp);
-        renderMcpTools(panel, tools);
-      }
+        if (!isOpen && !panel.dataset.loaded) {
+          panel.dataset.loaded = 'true';
+          panel.innerHTML = `<div class="mcp-tools-loading"><div class="spinner-sm"></div></div>`;
+          const mcp = this._state.mcps.find(m => m.id === id);
+          const tools = await this._loadMcpTools(mcp);
+          this._renderMcpTools(panel, tools);
+        }
+      });
     });
-  });
-}
-
-// ========== MCP REGISTRY ==========
-
-function isMcpInstalled(serverName) {
-  return mcpState.mcps.some(m => m.name === serverName);
-}
-
-function getMcpServerType(server) {
-  if (server.packages && server.packages.length > 0) {
-    return server.packages[0].registryType || 'npm';
   }
-  if (server.remotes && server.remotes.length > 0) {
-    return 'http';
-  }
-  return null;
-}
 
-function getMcpServerIcon(server) {
-  if (server.icons && server.icons.length > 0) {
-    const fallback = escapeHtml((server.title || server.name || '?').charAt(0).toUpperCase());
-    return `<img src="${escapeHtml(server.icons[0])}" data-fallback="${fallback}" class="mcp-icon-img">`;
+  // ========== MCP REGISTRY ==========
+
+  _isMcpInstalled(serverName) {
+    return this._state.mcps.some(m => m.name === serverName);
   }
-  if (server.repository && server.repository.url) {
-    const ghMatch = server.repository.url.match(/github\.com\/([^/]+)/);
-    if (ghMatch) {
+
+  _getMcpServerIcon(server) {
+    if (server.icons && server.icons.length > 0) {
       const fallback = escapeHtml((server.title || server.name || '?').charAt(0).toUpperCase());
-      return `<img src="https://github.com/${ghMatch[1]}.png?size=64" data-fallback="${fallback}" class="mcp-icon-img">`;
+      return `<img src="${escapeHtml(server.icons[0])}" data-fallback="${fallback}" class="mcp-icon-img">`;
     }
+    if (server.repository && server.repository.url) {
+      const ghMatch = server.repository.url.match(/github\.com\/([^/]+)/);
+      if (ghMatch) {
+        const fallback = escapeHtml((server.title || server.name || '?').charAt(0).toUpperCase());
+        return `<img src="https://github.com/${ghMatch[1]}.png?size=64" data-fallback="${fallback}" class="mcp-icon-img">`;
+      }
+    }
+    return escapeHtml((server.title || server.name || '?').charAt(0).toUpperCase());
   }
-  return escapeHtml((server.title || server.name || '?').charAt(0).toUpperCase());
-}
 
-// ========== CATEGORY FILTERS ==========
+  _filterServersByCategory(servers) {
+    if (this._state.activeCategory === 'all') return servers;
+    return servers.filter(s => getMcpServerCategory(s) === this._state.activeCategory);
+  }
 
-function renderCategoryFilters(servers) {
-  const categories = ['all', 'database', 'files', 'web', 'integration', 'devtools', 'ai'];
-  const counts = { all: servers.length };
+  // ========== CATEGORY FILTERS ==========
 
-  servers.forEach(s => {
-    const cat = getMcpServerCategory(s);
-    counts[cat] = (counts[cat] || 0) + 1;
-  });
+  _renderCategoryFilters(servers) {
+    const categories = ['all', 'database', 'files', 'web', 'integration', 'devtools', 'ai'];
+    const counts = { all: servers.length };
 
-  // Only show categories that have at least 1 match
-  const visibleCats = categories.filter(c => c === 'all' || (counts[c] || 0) > 0);
+    servers.forEach(s => {
+      const cat = getMcpServerCategory(s);
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
 
-  return `<div class="mcp-category-filters">
+    // Only show categories that have at least 1 match
+    const visibleCats = categories.filter(c => c === 'all' || (counts[c] || 0) > 0);
+
+    return `<div class="mcp-category-filters">
     ${visibleCats.map(cat => {
       const count = counts[cat] || 0;
-      const active = mcpState.activeCategory === cat ? 'active' : '';
+      const active = this._state.activeCategory === cat ? 'active' : '';
       const label = t(`mcpRegistry.category.${cat}`);
       const countHtml = cat !== 'all' ? ` <span class="mcp-filter-count">${count}</span>` : '';
       return `<button class="mcp-filter-pill ${active}" data-category="${cat}">${label}${countHtml}</button>`;
     }).join('')}
   </div>`;
-}
-
-function bindCategoryFilterHandlers(servers, sectionTitle) {
-  document.querySelectorAll('.mcp-filter-pill').forEach(btn => {
-    btn.onclick = () => {
-      mcpState.activeCategory = btn.dataset.category;
-      renderMcpRegistryCards(servers, sectionTitle);
-    };
-  });
-}
-
-// ========== REGISTRY CARD RENDERING ==========
-
-function renderRegistryCard(server) {
-  const serverName = server.name || '';
-  const displayName = server.title || serverName;
-  const installed = isMcpInstalled(serverName);
-  const serverType = getMcpServerType(server);
-  const description = server.description || t('mcpRegistry.noDescription');
-  const avatarStyle = getServerAvatarStyle(serverName);
-
-  // Package name for subtitle
-  let pkgName = '';
-  if (server.packages && server.packages.length > 0) {
-    pkgName = server.packages[0].name || server.packages[0].package_name || '';
-  } else if (server.remotes && server.remotes.length > 0) {
-    pkgName = server.remotes[0].url || '';
   }
 
-  // Icon: prefer server icon, then GitHub org avatar, then colored letter
-  let iconHtml;
-  if (server.icons && server.icons.length > 0) {
-    const fallback = escapeHtml(displayName.charAt(0).toUpperCase());
-    iconHtml = `<img src="${escapeHtml(server.icons[0])}" data-fallback="${fallback}" class="mcp-icon-img">`;
-  } else if (server.repository && server.repository.url) {
-    const ghMatch = server.repository.url.match(/github\.com\/([^/]+)/);
-    if (ghMatch) {
+  _bindCategoryFilterHandlers(servers, sectionTitle) {
+    document.querySelectorAll('.mcp-filter-pill').forEach(btn => {
+      btn.onclick = () => {
+        this._state.activeCategory = btn.dataset.category;
+        this._renderMcpRegistryCards(servers, sectionTitle);
+      };
+    });
+  }
+
+  // ========== REGISTRY CARD RENDERING ==========
+
+  _renderRegistryCard(server) {
+    const serverName = server.name || '';
+    const displayName = server.title || serverName;
+    const installed = this._isMcpInstalled(serverName);
+    const serverType = getMcpServerType(server);
+    const description = server.description || t('mcpRegistry.noDescription');
+    const avatarStyle = getServerAvatarStyle(serverName);
+
+    // Package name for subtitle
+    let pkgName = '';
+    if (server.packages && server.packages.length > 0) {
+      pkgName = server.packages[0].name || server.packages[0].package_name || '';
+    } else if (server.remotes && server.remotes.length > 0) {
+      pkgName = server.remotes[0].url || '';
+    }
+
+    // Icon: prefer server icon, then GitHub org avatar, then colored letter
+    let iconHtml;
+    if (server.icons && server.icons.length > 0) {
       const fallback = escapeHtml(displayName.charAt(0).toUpperCase());
-      iconHtml = `<img src="https://github.com/${ghMatch[1]}.png?size=64" data-fallback="${fallback}" class="mcp-icon-img">`;
+      iconHtml = `<img src="${escapeHtml(server.icons[0])}" data-fallback="${fallback}" class="mcp-icon-img">`;
+    } else if (server.repository && server.repository.url) {
+      const ghMatch = server.repository.url.match(/github\.com\/([^/]+)/);
+      if (ghMatch) {
+        const fallback = escapeHtml(displayName.charAt(0).toUpperCase());
+        iconHtml = `<img src="https://github.com/${ghMatch[1]}.png?size=64" data-fallback="${fallback}" class="mcp-icon-img">`;
+      } else {
+        iconHtml = escapeHtml(displayName.charAt(0).toUpperCase());
+      }
     } else {
       iconHtml = escapeHtml(displayName.charAt(0).toUpperCase());
     }
-  } else {
-    iconHtml = escapeHtml(displayName.charAt(0).toUpperCase());
-  }
 
-  const cardClass = installed ? 'mcp-registry-card installed' : 'mcp-registry-card';
+    const cardClass = installed ? 'mcp-registry-card installed' : 'mcp-registry-card';
 
-  return `
+    return `
   <div class="${cardClass}" data-server-name="${escapeHtml(serverName)}">
     <div class="mcp-registry-card-header">
       <div class="mcp-registry-icon" style="background:${avatarStyle.bg};color:${avatarStyle.color}">${iconHtml}</div>
@@ -486,229 +496,229 @@ function renderRegistryCard(server) {
       }
     </div>
   </div>`;
-}
-
-async function loadMcpRegistryContent() {
-  if (mcpState.registry.searchQuery) {
-    await searchMcpRegistry(mcpState.registry.searchQuery);
-  } else {
-    await loadMcpRegistryBrowse();
-  }
-}
-
-async function searchMcpRegistry(query) {
-  const list = document.getElementById('mcp-list');
-
-  const cachedResults = mcpState.registry.searchCache.get(query);
-  if (cachedResults) {
-    mcpState.registry.searchResults = cachedResults;
-    await renderMcpRegistryCards(cachedResults, t('mcpRegistry.searchResults'));
-    return;
   }
 
-  list.innerHTML = `<div class="marketplace-loading"><div class="spinner"></div>${t('common.loading')}</div>`;
-
-  try {
-    const result = await ctx.api.mcpRegistry.search(query, 30);
-    if (!result.success) throw new Error(result.error);
-
-    const newServers = result.servers || [];
-    mcpState.registry.searchCache.set(query, newServers);
-    mcpState.registry.searchResults = newServers;
-    // Always render — clears spinner even when result is empty
-    await renderMcpRegistryCards(newServers, t('mcpRegistry.searchResults'));
-  } catch (e) {
-    list.innerHTML = `<div class="marketplace-empty"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg><h3>${t('common.error')}</h3><p>${escapeHtml(e.message)}</p></div>`;
-  }
-}
-
-async function loadMcpRegistryBrowse() {
-  const list = document.getElementById('mcp-list');
-
-  // If we already have servers cached, render them immediately while refreshing in background
-  if (mcpState.registry.servers.length > 0) {
-    await renderMcpRegistryCards(mcpState.registry.servers, t('mcpRegistry.available'));
-    return;
-  }
-
-  list.innerHTML = `<div class="marketplace-loading"><div class="spinner"></div>${t('common.loading')}</div>`;
-
-  try {
-    const result = await ctx.api.mcpRegistry.browse(50);
-    if (!result.success) throw new Error(result.error);
-
-    const newServers = result.servers || [];
-    mcpState.registry.servers = newServers;
-    mcpState.registry.nextCursor = result.nextCursor || null;
-    // Always render — even if empty, this clears the spinner
-    await renderMcpRegistryCards(newServers, t('mcpRegistry.available'));
-  } catch (e) {
-    list.innerHTML = `<div class="marketplace-empty"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg><h3>${t('common.error')}</h3><p>${escapeHtml(e.message)}</p></div>`;
-  }
-}
-
-async function loadMoreMcpRegistryServers() {
-  if (!mcpState.registry.nextCursor || mcpState.registry.isLoadingMore) return;
-  mcpState.registry.isLoadingMore = true;
-
-  const btn = document.getElementById('mcp-registry-load-more');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = t('common.loading');
-  }
-
-  try {
-    const result = await ctx.api.mcpRegistry.browse(50, mcpState.registry.nextCursor);
-    if (!result.success) throw new Error(result.error);
-
-    const moreServers = result.servers || [];
-    mcpState.registry.servers = [...mcpState.registry.servers, ...moreServers];
-    mcpState.registry.nextCursor = result.nextCursor || null;
-    await renderMcpRegistryCards(mcpState.registry.servers, t('mcpRegistry.available'));
-  } catch (e) {
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = t('mcpRegistry.loadMore');
+  async _loadMcpRegistryContent() {
+    if (this._state.registry.searchQuery) {
+      await this._searchMcpRegistry(this._state.registry.searchQuery);
+    } else {
+      await this._loadMcpRegistryBrowse();
     }
-  } finally {
-    mcpState.registry.isLoadingMore = false;
   }
-}
 
-async function renderMcpRegistryCards(servers, sectionTitle) {
-  const list = document.getElementById('mcp-list');
+  async _searchMcpRegistry(query) {
+    const list = document.getElementById('mcp-list');
 
-  await loadLocalMcpsQuiet();
+    const cachedResults = this._state.registry.searchCache.get(query);
+    if (cachedResults) {
+      this._state.registry.searchResults = cachedResults;
+      await this._renderMcpRegistryCards(cachedResults, t('mcpRegistry.searchResults'));
+      return;
+    }
 
-  if (!servers || servers.length === 0) {
-    list.innerHTML = `<div class="marketplace-empty">
+    list.innerHTML = `<div class="marketplace-loading"><div class="spinner"></div>${t('common.loading')}</div>`;
+
+    try {
+      const result = await this.api.mcpRegistry.search(query, 30);
+      if (!result.success) throw new Error(result.error);
+
+      const newServers = result.servers || [];
+      this._state.registry.searchCache.set(query, newServers);
+      this._state.registry.searchResults = newServers;
+      // Always render — clears spinner even when result is empty
+      await this._renderMcpRegistryCards(newServers, t('mcpRegistry.searchResults'));
+    } catch (e) {
+      list.innerHTML = `<div class="marketplace-empty"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg><h3>${t('common.error')}</h3><p>${escapeHtml(e.message)}</p></div>`;
+    }
+  }
+
+  async _loadMcpRegistryBrowse() {
+    const list = document.getElementById('mcp-list');
+
+    // If we already have servers cached, render them immediately while refreshing in background
+    if (this._state.registry.servers.length > 0) {
+      await this._renderMcpRegistryCards(this._state.registry.servers, t('mcpRegistry.available'));
+      return;
+    }
+
+    list.innerHTML = `<div class="marketplace-loading"><div class="spinner"></div>${t('common.loading')}</div>`;
+
+    try {
+      const result = await this.api.mcpRegistry.browse(50);
+      if (!result.success) throw new Error(result.error);
+
+      const newServers = result.servers || [];
+      this._state.registry.servers = newServers;
+      this._state.registry.nextCursor = result.nextCursor || null;
+      // Always render — even if empty, this clears the spinner
+      await this._renderMcpRegistryCards(newServers, t('mcpRegistry.available'));
+    } catch (e) {
+      list.innerHTML = `<div class="marketplace-empty"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg><h3>${t('common.error')}</h3><p>${escapeHtml(e.message)}</p></div>`;
+    }
+  }
+
+  async _loadMoreMcpRegistryServers() {
+    if (!this._state.registry.nextCursor || this._state.registry.isLoadingMore) return;
+    this._state.registry.isLoadingMore = true;
+
+    const btn = document.getElementById('mcp-registry-load-more');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = t('common.loading');
+    }
+
+    try {
+      const result = await this.api.mcpRegistry.browse(50, this._state.registry.nextCursor);
+      if (!result.success) throw new Error(result.error);
+
+      const moreServers = result.servers || [];
+      this._state.registry.servers = [...this._state.registry.servers, ...moreServers];
+      this._state.registry.nextCursor = result.nextCursor || null;
+      await this._renderMcpRegistryCards(this._state.registry.servers, t('mcpRegistry.available'));
+    } catch (e) {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = t('mcpRegistry.loadMore');
+      }
+    } finally {
+      this._state.registry.isLoadingMore = false;
+    }
+  }
+
+  async _renderMcpRegistryCards(servers, sectionTitle) {
+    const list = document.getElementById('mcp-list');
+
+    await this._loadLocalMcpsQuiet();
+
+    if (!servers || servers.length === 0) {
+      list.innerHTML = `<div class="marketplace-empty">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
       <h3>${t('mcpRegistry.noResults')}</h3>
       <p>${t('mcpRegistry.searchHint')}</p>
     </div>`;
-    return;
-  }
+      return;
+    }
 
-  // Store for re-use by category filters
-  mcpState.registry.lastSectionTitle = sectionTitle;
+    // Store for re-use by category filters
+    this._state.registry.lastSectionTitle = sectionTitle;
 
-  const filtered = filterServersByCategory(servers);
-  const catFilters = renderCategoryFilters(servers);
+    const filtered = this._filterServersByCategory(servers);
+    const catFilters = this._renderCategoryFilters(servers);
 
-  if (filtered.length === 0) {
-    list.innerHTML = catFilters + `<div class="marketplace-empty">
+    if (filtered.length === 0) {
+      list.innerHTML = catFilters + `<div class="marketplace-empty">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
       <h3>${t('mcpRegistry.noResults')}</h3>
     </div>`;
-    bindCategoryFilterHandlers(servers, sectionTitle);
-    return;
-  }
+      this._bindCategoryFilterHandlers(servers, sectionTitle);
+      return;
+    }
 
-  let html = catFilters;
-  html += `<div class="list-section">
+    let html = catFilters;
+    html += `<div class="list-section">
     <div class="list-section-title">${escapeHtml(sectionTitle)} <span class="list-section-count">${filtered.length}</span></div>
     <div class="list-section-grid">`;
 
-  html += filtered.map(server => renderRegistryCard(server)).join('');
+    html += filtered.map(server => this._renderRegistryCard(server)).join('');
 
-  html += `</div></div>`;
+    html += `</div></div>`;
 
-  // Show "Load more" button only for browse mode (not search) when there is a next page
-  const isSearchMode = !!mcpState.registry.searchQuery;
-  if (!isSearchMode && mcpState.registry.nextCursor) {
-    html += `<div class="mcp-registry-load-more-wrapper">
+    // Show "Load more" button only for browse mode (not search) when there is a next page
+    const isSearchMode = !!this._state.registry.searchQuery;
+    if (!isSearchMode && this._state.registry.nextCursor) {
+      html += `<div class="mcp-registry-load-more-wrapper">
       <button class="btn-secondary" id="mcp-registry-load-more">${t('mcpRegistry.loadMore')}</button>
     </div>`;
+    }
+
+    list.innerHTML = html;
+
+    // Bind "Load more" handler
+    const loadMoreBtn = document.getElementById('mcp-registry-load-more');
+    if (loadMoreBtn) {
+      loadMoreBtn.addEventListener('click', () => this._loadMoreMcpRegistryServers());
+    }
+
+    this._bindMcpRegistryCardHandlers();
+    this._bindCategoryFilterHandlers(servers, sectionTitle);
   }
 
-  list.innerHTML = html;
+  _bindMcpRegistryCardHandlers() {
+    const list = document.getElementById('mcp-list');
 
-  // Bind "Load more" handler
-  const loadMoreBtn = document.getElementById('mcp-registry-load-more');
-  if (loadMoreBtn) {
-    loadMoreBtn.addEventListener('click', () => loadMoreMcpRegistryServers());
-  }
-
-  bindMcpRegistryCardHandlers();
-  bindCategoryFilterHandlers(servers, sectionTitle);
-}
-
-function bindMcpRegistryCardHandlers() {
-  const list = document.getElementById('mcp-list');
-
-  // Handle icon image load errors
-  list.querySelectorAll('.mcp-icon-img').forEach(img => {
-    img.addEventListener('error', () => {
-      if (img.parentElement) img.parentElement.textContent = img.dataset.fallback || '?';
+    // Handle icon image load errors
+    list.querySelectorAll('.mcp-icon-img').forEach(img => {
+      img.addEventListener('error', () => {
+        if (img.parentElement) img.parentElement.textContent = img.dataset.fallback || '?';
+      });
     });
-  });
 
-  list.querySelectorAll('.mcp-registry-card').forEach(card => {
-    const serverName = card.dataset.serverName;
+    list.querySelectorAll('.mcp-registry-card').forEach(card => {
+      const serverName = card.dataset.serverName;
 
-    // Card click = open details modal
-    card.addEventListener('click', (e) => {
-      if (!e.target.closest('button')) {
-        showMcpRegistryDetail(serverName);
+      // Card click = open details modal
+      card.addEventListener('click', (e) => {
+        if (!e.target.closest('button')) {
+          this._showMcpRegistryDetail(serverName);
+        }
+      });
+
+      const installBtn = card.querySelector('.btn-mcp-install');
+      if (installBtn) {
+        installBtn.onclick = async (e) => {
+          e.stopPropagation();
+          installBtn.disabled = true;
+          installBtn.innerHTML = `<span class="btn-install-spinner"></span>${t('mcpRegistry.installing')}`;
+          try {
+            await this._installMcpFromRegistry(serverName);
+            await this._loadMcpRegistryContent();
+          } catch (err) {
+            installBtn.disabled = false;
+            installBtn.innerHTML = t('mcpRegistry.install');
+            if (this._showToast) {
+              this._showToast({ type: 'error', title: `${t('mcpRegistry.installError')}: ${err.message}` });
+            }
+          }
+        };
       }
     });
+  }
 
-    const installBtn = card.querySelector('.btn-mcp-install');
-    if (installBtn) {
-      installBtn.onclick = async (e) => {
-        e.stopPropagation();
-        installBtn.disabled = true;
-        installBtn.innerHTML = `<span class="btn-install-spinner"></span>${t('mcpRegistry.installing')}`;
-        try {
-          await installMcpFromRegistry(serverName);
-          await loadMcpRegistryContent();
-        } catch (err) {
-          installBtn.disabled = false;
-          installBtn.innerHTML = t('mcpRegistry.install');
-          if (ctx.showToast) {
-            ctx.showToast({ type: 'error', title: `${t('mcpRegistry.installError')}: ${err.message}` });
-          }
-        }
-      };
-    }
-  });
-}
+  async _showMcpRegistryDetail(serverName) {
+    const installed = this._isMcpInstalled(serverName);
 
-async function showMcpRegistryDetail(serverName) {
-  const installed = isMcpInstalled(serverName);
+    let content = `<div class="marketplace-loading"><div class="spinner"></div>${t('common.loading')}</div>`;
+    this._showModal(t('mcpRegistry.details'), content);
 
-  let content = `<div class="marketplace-loading"><div class="spinner"></div>${t('common.loading')}</div>`;
-  ctx.showModal(t('mcpRegistry.details'), content);
+    try {
+      const result = await this.api.mcpRegistry.detail(serverName);
+      if (!result.success) throw new Error(result.error);
+      const server = result.server;
 
-  try {
-    const result = await ctx.api.mcpRegistry.detail(serverName);
-    if (!result.success) throw new Error(result.error);
-    const server = result.server;
+      const displayName = server.title || server.name || serverName;
+      const description = server.description || t('mcpRegistry.noDescription');
+      const serverType = getMcpServerType(server);
+      const icon = this._getMcpServerIcon(server);
+      const version = server.version_detail?.version || server.version || '';
+      const avatarStyle = getServerAvatarStyle(serverName);
 
-    const displayName = server.title || server.name || serverName;
-    const description = server.description || t('mcpRegistry.noDescription');
-    const serverType = getMcpServerType(server);
-    const icon = getMcpServerIcon(server);
-    const version = server.version_detail?.version || server.version || '';
-    const avatarStyle = getServerAvatarStyle(serverName);
+      let metaHtml = '';
+      if (version) {
+        metaHtml += `<div class="mcp-detail-meta-row"><span class="mcp-detail-meta-label">${t('mcpRegistry.version')}</span><span class="mcp-detail-meta-value">${escapeHtml(version)}</span></div>`;
+      }
+      if (serverType) {
+        metaHtml += `<div class="mcp-detail-meta-row"><span class="mcp-detail-meta-label">${t('mcpRegistry.serverType')}</span><span class="mcp-detail-meta-value"><span class="mcp-registry-badge ${serverType}">${serverType}</span></span></div>`;
+      }
+      if (server.packages && server.packages.length > 0) {
+        const pkg = server.packages[0];
+        const pkgName = pkg.name || pkg.package_name || '';
+        metaHtml += `<div class="mcp-detail-meta-row"><span class="mcp-detail-meta-label">${t('mcpRegistry.packages')}</span><span class="mcp-detail-meta-value">${escapeHtml(pkgName)}</span></div>`;
+      }
+      if (server.repository && server.repository.url) {
+        metaHtml += `<div class="mcp-detail-meta-row"><span class="mcp-detail-meta-label">${t('mcpRegistry.repository')}</span><span class="mcp-detail-meta-value"><a href="#" class="mcp-repo-link" data-url="${escapeHtml(server.repository.url)}" style="color: var(--accent);">${escapeHtml(server.repository.url)}</a></span></div>`;
+      }
 
-    let metaHtml = '';
-    if (version) {
-      metaHtml += `<div class="mcp-detail-meta-row"><span class="mcp-detail-meta-label">${t('mcpRegistry.version')}</span><span class="mcp-detail-meta-value">${escapeHtml(version)}</span></div>`;
-    }
-    if (serverType) {
-      metaHtml += `<div class="mcp-detail-meta-row"><span class="mcp-detail-meta-label">${t('mcpRegistry.serverType')}</span><span class="mcp-detail-meta-value"><span class="mcp-registry-badge ${serverType}">${serverType}</span></span></div>`;
-    }
-    if (server.packages && server.packages.length > 0) {
-      const pkg = server.packages[0];
-      const pkgName = pkg.name || pkg.package_name || '';
-      metaHtml += `<div class="mcp-detail-meta-row"><span class="mcp-detail-meta-label">${t('mcpRegistry.packages')}</span><span class="mcp-detail-meta-value">${escapeHtml(pkgName)}</span></div>`;
-    }
-    if (server.repository && server.repository.url) {
-      metaHtml += `<div class="mcp-detail-meta-row"><span class="mcp-detail-meta-label">${t('mcpRegistry.repository')}</span><span class="mcp-detail-meta-value"><a href="#" class="mcp-repo-link" data-url="${escapeHtml(server.repository.url)}" style="color: var(--accent);">${escapeHtml(server.repository.url)}</a></span></div>`;
-    }
-
-    const detailContent = `
+      const detailContent = `
       <div class="mcp-detail-header">
         <div class="mcp-detail-icon" style="background:${avatarStyle.bg};color:${avatarStyle.color}">${icon}</div>
         <div class="mcp-detail-info">
@@ -726,308 +736,330 @@ async function showMcpRegistryDetail(serverName) {
       </div>
     `;
 
-    document.getElementById('modal-body').innerHTML = detailContent;
+      document.getElementById('modal-body').innerHTML = detailContent;
 
-    const repoLink = document.querySelector('.mcp-repo-link');
-    if (repoLink) {
-      repoLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        const url = repoLink.dataset.url;
-        if (url && (url.startsWith('https://') || url.startsWith('http://'))) {
-          ctx.api.dialog.openExternal(url);
-        }
-      });
+      const repoLink = document.querySelector('.mcp-repo-link');
+      if (repoLink) {
+        repoLink.addEventListener('click', (e) => {
+          e.preventDefault();
+          const url = repoLink.dataset.url;
+          if (url && (url.startsWith('https://') || url.startsWith('http://'))) {
+            this.api.dialog.openExternal(url);
+          }
+        });
+      }
+
+      const installDetailBtn = document.querySelector('.btn-mcp-install-detail');
+      if (installDetailBtn) {
+        installDetailBtn.onclick = async () => {
+          installDetailBtn.disabled = true;
+          installDetailBtn.innerHTML = `<span class="btn-install-spinner"></span>${t('mcpRegistry.installing')}`;
+          try {
+            await this._installMcpFromRegistry(serverName);
+            this._closeModal();
+            await this._loadMcpRegistryContent();
+          } catch (err) {
+            installDetailBtn.disabled = false;
+            installDetailBtn.innerHTML = t('mcpRegistry.install');
+            if (this._showToast) {
+              this._showToast({ type: 'error', title: `${t('mcpRegistry.installError')}: ${err.message}` });
+            }
+          }
+        };
+      }
+    } catch (e) {
+      document.getElementById('modal-body').innerHTML = `<div class="marketplace-empty"><h3>${t('common.error')}</h3><p>${escapeHtml(e.message)}</p></div>`;
+    }
+  }
+
+  // ========== CONNECTION TEST ==========
+
+  async _testMcpConnection(serverName, mcpConfig) {
+    // HTTP servers can't be tested via process start
+    if (mcpConfig.type === 'url' || !mcpConfig.command) {
+      return 'http';
     }
 
-    const installDetailBtn = document.querySelector('.btn-mcp-install-detail');
-    if (installDetailBtn) {
-      installDetailBtn.onclick = async () => {
-        installDetailBtn.disabled = true;
-        installDetailBtn.innerHTML = `<span class="btn-install-spinner"></span>${t('mcpRegistry.installing')}`;
-        try {
-          await installMcpFromRegistry(serverName);
-          ctx.closeModal();
-          await loadMcpRegistryContent();
-        } catch (err) {
-          installDetailBtn.disabled = false;
-          installDetailBtn.innerHTML = t('mcpRegistry.install');
-          if (ctx.showToast) {
-            ctx.showToast({ type: 'error', title: `${t('mcpRegistry.installError')}: ${err.message}` });
+    const testId = `mcp-test-${serverName}-${Date.now()}`;
+
+    return new Promise((resolve) => {
+      let resolved = false;
+
+      const done = (result) => {
+        if (!resolved) {
+          resolved = true;
+          unsubOutput();
+          unsubExit();
+          clearTimeout(timer);
+          // Stop the test process (unless it already exited)
+          if (result !== 'exited' && result !== 'failed') {
+            this.api.mcp.stop({ id: testId }).catch(() => {});
           }
+          resolve(result);
         }
       };
+
+      // 5s timeout - MCP servers can be slow to start (npm install)
+      const timer = setTimeout(() => done('timeout'), 5000);
+
+      const unsubOutput = this.api.mcp.onOutput(({ id }) => {
+        if (id === testId) done('connected');
+      });
+
+      const unsubExit = this.api.mcp.onExit(({ id, code }) => {
+        if (id === testId) done(code === 0 ? 'exited' : 'failed');
+      });
+
+      this.api.mcp.start({
+        id: testId,
+        command: mcpConfig.command,
+        args: mcpConfig.args || [],
+        env: mcpConfig.env || {}
+      }).catch(() => done('failed'));
+    });
+  }
+
+  // ========== INSTALL ==========
+
+  async _installMcpFromRegistry(serverName) {
+    const result = await this.api.mcpRegistry.detail(serverName);
+    if (!result.success) throw new Error(result.error);
+    const server = result.server;
+
+    let mcpConfig = null;
+    let serverType = null;
+    let envVarsSpec = [];
+    let argsSpec = [];
+
+    if (server.packages && server.packages.length > 0) {
+      const pkg = server.packages[0];
+      serverType = pkg.registryType || 'npm';
+      const identifier = pkg.name || pkg.package_name || '';
+
+      if (pkg.environment_variables && pkg.environment_variables.length > 0) {
+        envVarsSpec = pkg.environment_variables;
+      }
+      if (pkg.arguments && pkg.arguments.length > 0) {
+        argsSpec = pkg.arguments;
+      }
+
+      if (serverType === 'npm') {
+        mcpConfig = { command: 'npx', args: ['-y', identifier] };
+      } else if (serverType === 'pypi') {
+        mcpConfig = { command: 'uvx', args: [identifier] };
+      }
+    } else if (server.remotes && server.remotes.length > 0) {
+      const remote = server.remotes[0];
+      serverType = 'http';
+
+      if (remote.environment_variables && remote.environment_variables.length > 0) {
+        envVarsSpec = remote.environment_variables;
+      }
+
+      mcpConfig = { type: 'url', url: remote.url };
     }
-  } catch (e) {
-    document.getElementById('modal-body').innerHTML = `<div class="marketplace-empty"><h3>${t('common.error')}</h3><p>${escapeHtml(e.message)}</p></div>`;
-  }
-}
 
-// ========== CONNECTION TEST ==========
+    if (!mcpConfig) {
+      throw new Error(t('mcpRegistry.cannotInstall'));
+    }
 
-async function testMcpConnection(serverName, mcpConfig) {
-  // HTTP servers can't be tested via process start
-  if (mcpConfig.type === 'url' || !mcpConfig.command) {
-    return 'http';
-  }
+    if (envVarsSpec.length > 0 || argsSpec.length > 0) {
+      const formResult = await this._showMcpEnvForm(server, envVarsSpec, argsSpec);
+      if (!formResult) return;
 
-  const testId = `mcp-test-${serverName}-${Date.now()}`;
-
-  return new Promise((resolve) => {
-    let resolved = false;
-
-    const done = (result) => {
-      if (!resolved) {
-        resolved = true;
-        unsubOutput();
-        unsubExit();
-        clearTimeout(timer);
-        // Stop the test process (unless it already exited)
-        if (result !== 'exited' && result !== 'failed') {
-          ctx.api.mcp.stop({ id: testId }).catch(() => {});
+      if (formResult.env && Object.keys(formResult.env).length > 0) {
+        mcpConfig.env = formResult.env;
+      }
+      if (formResult.args && formResult.args.length > 0) {
+        if (mcpConfig.args) {
+          mcpConfig.args = [...mcpConfig.args, ...formResult.args];
         }
-        resolve(result);
-      }
-    };
-
-    // 5s timeout - MCP servers can be slow to start (npm install)
-    const timer = setTimeout(() => done('timeout'), 5000);
-
-    const unsubOutput = ctx.api.mcp.onOutput(({ id }) => {
-      if (id === testId) done('connected');
-    });
-
-    const unsubExit = ctx.api.mcp.onExit(({ id, code }) => {
-      if (id === testId) done(code === 0 ? 'exited' : 'failed');
-    });
-
-    ctx.api.mcp.start({
-      id: testId,
-      command: mcpConfig.command,
-      args: mcpConfig.args || [],
-      env: mcpConfig.env || {}
-    }).catch(() => done('failed'));
-  });
-}
-
-// ========== INSTALL ==========
-
-async function installMcpFromRegistry(serverName) {
-  const result = await ctx.api.mcpRegistry.detail(serverName);
-  if (!result.success) throw new Error(result.error);
-  const server = result.server;
-
-  let mcpConfig = null;
-  let serverType = null;
-  let envVarsSpec = [];
-  let argsSpec = [];
-
-  if (server.packages && server.packages.length > 0) {
-    const pkg = server.packages[0];
-    serverType = pkg.registryType || 'npm';
-    const identifier = pkg.name || pkg.package_name || '';
-
-    if (pkg.environment_variables && pkg.environment_variables.length > 0) {
-      envVarsSpec = pkg.environment_variables;
-    }
-    if (pkg.arguments && pkg.arguments.length > 0) {
-      argsSpec = pkg.arguments;
-    }
-
-    if (serverType === 'npm') {
-      mcpConfig = { command: 'npx', args: ['-y', identifier] };
-    } else if (serverType === 'pypi') {
-      mcpConfig = { command: 'uvx', args: [identifier] };
-    }
-  } else if (server.remotes && server.remotes.length > 0) {
-    const remote = server.remotes[0];
-    serverType = 'http';
-
-    if (remote.environment_variables && remote.environment_variables.length > 0) {
-      envVarsSpec = remote.environment_variables;
-    }
-
-    mcpConfig = { type: 'url', url: remote.url };
-  }
-
-  if (!mcpConfig) {
-    throw new Error(t('mcpRegistry.cannotInstall'));
-  }
-
-  if (envVarsSpec.length > 0 || argsSpec.length > 0) {
-    const formResult = await showMcpEnvForm(server, envVarsSpec, argsSpec);
-    if (!formResult) return;
-
-    if (formResult.env && Object.keys(formResult.env).length > 0) {
-      mcpConfig.env = formResult.env;
-    }
-    if (formResult.args && formResult.args.length > 0) {
-      if (mcpConfig.args) {
-        mcpConfig.args = [...mcpConfig.args, ...formResult.args];
       }
     }
-  }
 
-  await saveMcpToConfig(serverName, mcpConfig);
-  await loadLocalMcpsQuiet();
+    await this._saveMcpToConfig(serverName, mcpConfig);
+    await this._loadLocalMcpsQuiet();
 
-  const displayName = server.title || serverName;
+    const displayName = server.title || serverName;
 
-  // Show immediate success toast
-  if (ctx.showToast) {
-    ctx.showToast({ type: 'success', title: t('mcpRegistry.installSuccess', { name: displayName }) });
-  }
-
-  // Test connection in background — don't block the install flow
-  const configCopy = { ...mcpConfig };
-  testMcpConnection(serverName, configCopy).then((testResult) => {
-    if (testResult === 'failed') {
-      if (ctx.showToast) {
-        ctx.showToast({ type: 'warning', title: `${displayName}: ${t('mcpRegistry.connectionFailed')}` });
-      }
-    } else if (testResult === 'connected') {
-      if (ctx.showToast) {
-        ctx.showToast({ type: 'success', title: `${displayName}: ${t('mcpRegistry.connectionSuccess')}` });
-      }
+    // Show immediate success toast
+    if (this._showToast) {
+      this._showToast({ type: 'success', title: t('mcpRegistry.installSuccess', { name: displayName }) });
     }
-    // timeout / http / exited: no extra toast needed
-  }).catch(() => { /* silent */ });
-}
 
-function showMcpEnvForm(server, envVarsSpec, argsSpec) {
-  return new Promise((resolve) => {
-    const displayName = server.title || server.name || '';
+    // Test connection in background — don't block the install flow
+    const configCopy = { ...mcpConfig };
+    this._testMcpConnection(serverName, configCopy).then((testResult) => {
+      if (testResult === 'failed') {
+        if (this._showToast) {
+          this._showToast({ type: 'warning', title: `${displayName}: ${t('mcpRegistry.connectionFailed')}` });
+        }
+      } else if (testResult === 'connected') {
+        if (this._showToast) {
+          this._showToast({ type: 'success', title: `${displayName}: ${t('mcpRegistry.connectionSuccess')}` });
+        }
+      }
+      // timeout / http / exited: no extra toast needed
+    }).catch(() => { /* silent */ });
+  }
 
-    let fieldsHtml = '';
+  _showMcpEnvForm(server, envVarsSpec, argsSpec) {
+    return new Promise((resolve) => {
+      const displayName = server.title || server.name || '';
 
-    if (envVarsSpec.length > 0) {
-      fieldsHtml += `<div class="mcp-env-section-title">${t('mcpRegistry.environmentVariables')}</div>`;
-      envVarsSpec.forEach(envVar => {
-        const name = envVar.name || envVar;
-        const desc = envVar.description || '';
-        const required = envVar.required !== false;
-        const isSecret = envVar.isSecret || name.toLowerCase().includes('key') || name.toLowerCase().includes('token') || name.toLowerCase().includes('secret') || name.toLowerCase().includes('password');
-        fieldsHtml += `
+      let fieldsHtml = '';
+
+      if (envVarsSpec.length > 0) {
+        fieldsHtml += `<div class="mcp-env-section-title">${t('mcpRegistry.environmentVariables')}</div>`;
+        envVarsSpec.forEach(envVar => {
+          const name = envVar.name || envVar;
+          const desc = envVar.description || '';
+          const required = envVar.required !== false;
+          const isSecret = envVar.isSecret || name.toLowerCase().includes('key') || name.toLowerCase().includes('token') || name.toLowerCase().includes('secret') || name.toLowerCase().includes('password');
+          fieldsHtml += `
           <div class="mcp-env-field">
             <label>${escapeHtml(name)} ${required ? `<span class="mcp-env-required">${t('mcpRegistry.requiredField')}</span>` : ''}</label>
             <input type="${isSecret ? 'password' : 'text'}" data-env-name="${escapeHtml(name)}" data-required="${required}" placeholder="${escapeHtml(name)}">
             ${desc ? `<div class="mcp-env-hint">${escapeHtml(desc)}</div>` : ''}
           </div>`;
-      });
-    }
+        });
+      }
 
-    if (argsSpec.length > 0) {
-      fieldsHtml += `<div class="mcp-env-section-title">${t('mcpRegistry.arguments')}</div>`;
-      argsSpec.forEach((arg, i) => {
-        const name = arg.name || arg.description || `Arg ${i + 1}`;
-        const desc = arg.description || '';
-        const required = arg.required !== false;
-        fieldsHtml += `
+      if (argsSpec.length > 0) {
+        fieldsHtml += `<div class="mcp-env-section-title">${t('mcpRegistry.arguments')}</div>`;
+        argsSpec.forEach((arg, i) => {
+          const name = arg.name || arg.description || `Arg ${i + 1}`;
+          const desc = arg.description || '';
+          const required = arg.required !== false;
+          fieldsHtml += `
           <div class="mcp-env-field">
             <label>${escapeHtml(name)} ${required ? `<span class="mcp-env-required">${t('mcpRegistry.requiredField')}</span>` : ''}</label>
             <input type="text" data-arg-index="${i}" data-required="${required}" placeholder="${escapeHtml(name)}">
             ${desc ? `<div class="mcp-env-hint">${escapeHtml(desc)}</div>` : ''}
           </div>`;
-      });
-    }
+        });
+      }
 
-    const content = `
+      const content = `
       <div class="mcp-env-form">
         <div class="mcp-env-form-desc">${t('mcpRegistry.envFormDescription')}</div>
         ${fieldsHtml}
       </div>
     `;
 
-    const footer = `
+      const footer = `
       <button class="btn-secondary" id="mcp-env-cancel">${t('modal.cancel')}</button>
       <button class="btn-primary" id="mcp-env-confirm">${t('mcpRegistry.install')}</button>
     `;
 
-    ctx.showModal(t('mcpRegistry.configureServer') + ' - ' + escapeHtml(displayName), content, footer);
+      this._showModal(t('mcpRegistry.configureServer') + ' - ' + escapeHtml(displayName), content, footer);
 
-    document.getElementById('mcp-env-cancel').onclick = () => {
-      ctx.closeModal();
-      resolve(null);
-    };
+      document.getElementById('mcp-env-cancel').onclick = () => {
+        this._closeModal();
+        resolve(null);
+      };
 
-    document.getElementById('mcp-env-confirm').onclick = () => {
-      const env = {};
-      const args = [];
-      let valid = true;
+      document.getElementById('mcp-env-confirm').onclick = () => {
+        const env = {};
+        const args = [];
+        let valid = true;
 
-      document.querySelectorAll('.mcp-env-form input[data-env-name]').forEach(input => {
-        const name = input.dataset.envName;
-        const val = input.value.trim();
-        const required = input.dataset.required === 'true';
-        if (required && !val) {
-          input.style.borderColor = 'var(--danger, #ef4444)';
-          valid = false;
-        } else {
-          input.style.borderColor = '';
-          if (val) env[name] = val;
-        }
-      });
+        document.querySelectorAll('.mcp-env-form input[data-env-name]').forEach(input => {
+          const name = input.dataset.envName;
+          const val = input.value.trim();
+          const required = input.dataset.required === 'true';
+          if (required && !val) {
+            input.style.borderColor = 'var(--danger, #ef4444)';
+            valid = false;
+          } else {
+            input.style.borderColor = '';
+            if (val) env[name] = val;
+          }
+        });
 
-      document.querySelectorAll('.mcp-env-form input[data-arg-index]').forEach(input => {
-        const val = input.value.trim();
-        const required = input.dataset.required === 'true';
-        if (required && !val) {
-          input.style.borderColor = 'var(--danger, #ef4444)';
-          valid = false;
-        } else {
-          input.style.borderColor = '';
-          if (val) args.push(val);
-        }
-      });
+        document.querySelectorAll('.mcp-env-form input[data-arg-index]').forEach(input => {
+          const val = input.value.trim();
+          const required = input.dataset.required === 'true';
+          if (required && !val) {
+            input.style.borderColor = 'var(--danger, #ef4444)';
+            valid = false;
+          } else {
+            input.style.borderColor = '';
+            if (val) args.push(val);
+          }
+        });
 
-      if (!valid) return;
+        if (!valid) return;
 
-      ctx.closeModal();
-      resolve({ env, args });
-    };
-  });
-}
+        this._closeModal();
+        resolve({ env, args });
+      };
+    });
+  }
 
-async function saveMcpToConfig(serverName, mcpConfig) {
-  try {
-    let config = {};
-    if (ctx.fs.existsSync(ctx.claudeConfigFile)) {
-      config = JSON.parse(await ctx.fs.promises.readFile(ctx.claudeConfigFile, 'utf8'));
+  async _saveMcpToConfig(serverName, mcpConfig) {
+    try {
+      let config = {};
+      if (this.api.fs.existsSync(this._claudeConfigFile)) {
+        config = JSON.parse(await this.api.fs.promises.readFile(this._claudeConfigFile, 'utf8'));
+      }
+      if (!config.mcpServers) {
+        config.mcpServers = {};
+      }
+      config.mcpServers[serverName] = mcpConfig;
+      this.api.fs.writeFileSync(this._claudeConfigFile, JSON.stringify(config, null, 2), 'utf8');
+    } catch (e) {
+      console.error('Error saving MCP to config:', e);
+      throw new Error('Failed to save configuration: ' + e.message);
     }
-    if (!config.mcpServers) {
-      config.mcpServers = {};
-    }
-    config.mcpServers[serverName] = mcpConfig;
-    ctx.fs.writeFileSync(ctx.claudeConfigFile, JSON.stringify(config, null, 2), 'utf8');
-  } catch (e) {
-    console.error('Error saving MCP to config:', e);
-    throw new Error('Failed to save configuration: ' + e.message);
+  }
+
+  async _loadLocalMcpsQuiet() {
+    this._state.mcps = [];
+    try {
+      if (this.api.fs.existsSync(this._claudeConfigFile)) {
+        const config = JSON.parse(await this.api.fs.promises.readFile(this._claudeConfigFile, 'utf8'));
+        if (config.mcpServers) {
+          Object.entries(config.mcpServers).forEach(([name, mcpConfig]) => {
+            this._state.mcps.push({ id: `global-${name}`, name, command: mcpConfig.command || '', args: mcpConfig.args || [], env: mcpConfig.env || {}, source: 'global', sourceLabel: 'Global' });
+          });
+        }
+      }
+    } catch { /* ignore */ }
+    try {
+      if (this.api.fs.existsSync(this._claudeSettingsFile)) {
+        const settings = JSON.parse(await this.api.fs.promises.readFile(this._claudeSettingsFile, 'utf8'));
+        if (settings.mcpServers) {
+          Object.entries(settings.mcpServers).forEach(([name, config]) => {
+            if (!this._state.mcps.find(m => m.name === name)) {
+              this._state.mcps.push({ id: `global-${name}`, name, command: config.command || '', args: config.args || [], env: config.env || {}, source: 'global', sourceLabel: 'Global' });
+            }
+          });
+        }
+      }
+    } catch { /* ignore */ }
   }
 }
 
-async function loadLocalMcpsQuiet() {
-  mcpState.mcps = [];
-  try {
-    if (ctx.fs.existsSync(ctx.claudeConfigFile)) {
-      const config = JSON.parse(await ctx.fs.promises.readFile(ctx.claudeConfigFile, 'utf8'));
-      if (config.mcpServers) {
-        Object.entries(config.mcpServers).forEach(([name, mcpConfig]) => {
-          mcpState.mcps.push({ id: `global-${name}`, name, command: mcpConfig.command || '', args: mcpConfig.args || [], env: mcpConfig.env || {}, source: 'global', sourceLabel: 'Global' });
-        });
-      }
-    }
-  } catch { /* ignore */ }
-  try {
-    if (ctx.fs.existsSync(ctx.claudeSettingsFile)) {
-      const settings = JSON.parse(await ctx.fs.promises.readFile(ctx.claudeSettingsFile, 'utf8'));
-      if (settings.mcpServers) {
-        Object.entries(settings.mcpServers).forEach(([name, config]) => {
-          if (!mcpState.mcps.find(m => m.name === name)) {
-            mcpState.mcps.push({ id: `global-${name}`, name, command: config.command || '', args: config.args || [], env: config.env || {}, source: 'global', sourceLabel: 'Global' });
-          }
-        });
-      }
-    }
-  } catch { /* ignore */ }
+// ── Lazy singleton + legacy exports ──
+
+let _instance = null;
+
+function init(context) {
+  const { getApiProvider, getContainer } = require('../../core');
+  _instance = new McpPanel(null, {
+    api: getApiProvider(),
+    container: getContainer(),
+    showToast: context.showToast,
+    showModal: context.showModal,
+    closeModal: context.closeModal,
+    claudeConfigFile: context.claudeConfigFile,
+    claudeSettingsFile: context.claudeSettingsFile
+  });
 }
 
-module.exports = { init, loadMcps };
+module.exports = {
+  McpPanel,
+  init,
+  loadMcps: (...a) => _instance.loadMcps(...a)
+};
