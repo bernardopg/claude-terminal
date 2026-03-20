@@ -3,6 +3,9 @@
  * Entry point for the renderer process modules
  */
 
+// Core infrastructure (OOP base classes, DI container)
+const core = require('./core');
+
 // Utils
 const utils = require('./utils');
 
@@ -41,6 +44,18 @@ async function initialize() {
   // Tag platform on body for CSS targeting (macOS traffic lights, etc.)
   const platform = window.electron_nodeModules?.process?.platform || 'win32';
   document.body.classList.add(`platform-${platform}`);
+
+  // Initialize core OOP infrastructure (ApiProvider + ServiceContainer)
+  const { container } = core.initCore(window.electron_api, window.electron_nodeModules);
+
+  // Register legacy services in the container for future OOP consumers
+  container.register('ProjectService', services.ProjectService);
+  container.register('TerminalService', services.TerminalService);
+  container.register('DashboardService', services.DashboardService);
+  container.register('SettingsService', services.SettingsService);
+  container.register('GitTabService', services.GitTabService);
+  container.register('FivemService', services.FivemService);
+  container.register('TimeTrackingDashboard', services.TimeTrackingDashboard);
 
   // Ensure directories exist
   utils.ensureDirectories();
@@ -226,6 +241,9 @@ function _registerCloudListeners(api) {
 
 // Export everything for use in renderer.js
 module.exports = {
+  // Core infrastructure
+  core,
+
   // Utils
   utils,
   ...utils,
