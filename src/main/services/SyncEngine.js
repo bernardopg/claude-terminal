@@ -440,15 +440,20 @@ class SyncEngine {
       const cloudChanged = !manifestEntry?.cloudHash || cloudHash !== manifestEntry.cloudHash;
 
       if (localChanged && cloudChanged) {
-        // True conflict
-        conflicts.push({
-          entityType: 'settings',
-          entityId: key,
-          localValue: localVal,
-          cloudValue: cloudVal,
-          cloudTimestamp,
-          localTimestamp: manifestEntry?.lastSyncAt || 0,
-        });
+        // Cloud doesn't have this key → push local (not a conflict)
+        if (cloudVal === undefined || !cloudSettings[key]) {
+          await this._pushEntity('settings', key);
+        } else {
+          // True conflict: both sides have different values
+          conflicts.push({
+            entityType: 'settings',
+            entityId: key,
+            localValue: localVal,
+            cloudValue: cloudVal,
+            cloudTimestamp,
+            localTimestamp: manifestEntry?.lastSyncAt || 0,
+          });
+        }
       } else if (cloudChanged) {
         // Cloud wins → apply locally
         localSettings[key] = cloudVal;
@@ -607,11 +612,10 @@ class SyncEngine {
 
   async _syncConversations(cloudConversations) {
     // cloudConversations: { "session-id": { lines: number, lastLine: string, updatedAt } }
-    // We sync conversation metadata only during full sync,
-    // actual content is synced on-demand or incrementally.
     const claudeDir = path.join(os.homedir(), '.claude');
     if (!fs.existsSync(claudeDir)) return;
 
+    // Cloud → local: record cloud conversation metadata
     for (const [sessionId, cloudMeta] of Object.entries(cloudConversations)) {
       const entityKey = `conversations.${sessionId}`;
       this.manifest.entities[entityKey] = {
@@ -621,6 +625,34 @@ class SyncEngine {
         cloudLineCount: cloudMeta.lines || 0,
       };
     }
+
+    // Local → cloud: push local sessions not in cloud (recent ones only)
+    const projectsDir = path.join(claudeDir, 'projects');
+    if (!fs.existsSync(projectsDir)) return;
+
+    try {
+      const projectDirs = fs.readdirSync(projectsDir);
+      for (const projDir of projectDirs) {
+        const projPath = path.join(projectsDir, projDir);
+        try {
+          if (!fs.statSync(projPath).isDirectory()) continue;
+          const files = fs.readdirSync(projPath).filter(f => f.endsWith('.jsonl'));
+          for (const file of files) {
+            const sessionId = file.replace('.jsonl', '');
+            if (cloudConversations[sessionId]) continue; // Already in cloud
+            const entityKey = `conversations.${sessionId}`;
+            if (this.manifest.entities[entityKey]?.cloudLineCount > 0) continue; // Already pushed
+            const filePath = path.join(projPath, file);
+            try {
+              const stat = fs.statSync(filePath);
+              // Only push sessions from last 7 days to avoid flooding
+              if (Date.now() - stat.mtimeMs > 7 * 24 * 60 * 60 * 1000) continue;
+              await this.pushConversation(sessionId, filePath);
+            } catch {}
+          }
+        } catch {}
+      }
+    } catch {}
   }
 
   /**
@@ -872,15 +904,20 @@ class SyncEngine {
     const cloudChanged = !manifestEntry?.cloudHash || cloudHash !== manifestEntry.cloudHash;
 
     if (localChanged && cloudChanged) {
-      // True conflict
-      conflicts.push({
-        entityType,
-        entityId: null,
-        localValue: isText ? (localValue || '').slice(0, 200) : localValue,
-        cloudValue: isText ? (cloudValue || '').slice(0, 200) : cloudValue,
-        cloudTimestamp,
-        localTimestamp: manifestEntry?.lastSyncAt || 0,
-      });
+      // Cloud doesn't have this entity → push local (not a conflict)
+      if (cloudValue === null || cloudData === null) {
+        await this._pushEntity(entityType);
+      } else {
+        // True conflict: both sides have different values
+        conflicts.push({
+          entityType,
+          entityId: null,
+          localValue: isText ? (localValue || '').slice(0, 200) : localValue,
+          cloudValue: isText ? (cloudValue || '').slice(0, 200) : cloudValue,
+          cloudTimestamp,
+          localTimestamp: manifestEntry?.lastSyncAt || 0,
+        });
+      }
     } else if (cloudChanged && cloudValue !== null) {
       // Cloud wins → apply locally
       this._writeWholeFile(filePath, cloudValue, isText);
@@ -1134,14 +1171,19 @@ class SyncEngine {
       const cloudChanged = !manifestEntry?.cloudHash || cloudHash !== manifestEntry.cloudHash;
 
       if (localChanged && cloudChanged) {
-        conflicts.push({
-          entityType: 'mcpConfigs',
-          entityId: key,
-          localValue: localVal,
-          cloudValue: cloudVal,
-          cloudTimestamp,
-          localTimestamp: manifestEntry?.lastSyncAt || 0,
-        });
+        // Cloud doesn't have this key → push local (not a conflict)
+        if (cloudVal === undefined || !cloudMcpConfigs[key]) {
+          await this._pushEntity('mcpConfigs', key);
+        } else {
+          conflicts.push({
+            entityType: 'mcpConfigs',
+            entityId: key,
+            localValue: localVal,
+            cloudValue: cloudVal,
+            cloudTimestamp,
+            localTimestamp: manifestEntry?.lastSyncAt || 0,
+          });
+        }
       } else if (cloudChanged && cloudVal !== undefined) {
         localServers[key] = cloudVal;
         this.manifest.entities[entityKey] = { localHash: cloudHash, cloudHash, lastSyncAt: Date.now() };
