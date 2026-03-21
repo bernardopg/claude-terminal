@@ -300,11 +300,17 @@ class SyncEngine {
         { key: 'installedPlugins', fn: async () => { await this._syncInstalledPlugins(cloudState.installedPlugins || null); } },
       ];
 
+      const errors = [];
       for (const { key, fn } of syncSteps) {
         if (!this.active) break;
         if (toggles[key] === false) continue;
         emitProgress(key);
-        await fn();
+        try {
+          await fn();
+        } catch (stepErr) {
+          console.error(`[SyncEngine] Sync step "${key}" failed:`, stepErr.message);
+          errors.push({ key, message: stepErr.message });
+        }
         this._saveManifest();
       }
 
@@ -317,6 +323,10 @@ class SyncEngine {
       this.manifest.lastFullSync = Date.now();
       this._saveManifest();
       didEmitFinal = true;
+      if (errors.length > 0) {
+        this._emitStatus('full-sync', 'completed', { conflicts: conflicts.length, errors: errors.length });
+        return { ok: true, conflicts: conflicts.length, errors };
+      }
       this._emitStatus('full-sync', 'completed', { conflicts: conflicts.length });
       return { ok: true, conflicts: conflicts.length };
     } catch (err) {
