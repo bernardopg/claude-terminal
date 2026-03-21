@@ -46,7 +46,7 @@ export async function startServer(): Promise<void> {
   await store.getServerData(); // Init server.json if needed
 
   const app = express();
-  app.use(express.json());
+  app.use(express.json({ limit: '10mb' }));
 
   // Health check
   app.get('/health', (_req, res) => {

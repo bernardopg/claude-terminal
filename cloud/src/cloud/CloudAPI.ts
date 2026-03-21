@@ -9,6 +9,7 @@ import { projectManager } from './ProjectManager';
 import { sessionManager } from './SessionManager';
 import { config } from '../config';
 import { RelayServer } from '../relay/RelayServer';
+import { syncManager } from './SyncManager';
 
 // Extend Request with user info
 interface AuthRequest extends Request {
@@ -440,6 +441,72 @@ export function createCloudRouter(relay?: RelayServer): Router {
     try {
       const name = req.params.name as string;
       await projectManager.deleteProject(req.userName!, name);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // ── Entity Sync ──
+
+  router.get('/sync/state', async (req: AuthRequest, res: Response) => {
+    try {
+      const state = await syncManager.getState(req.userName!);
+      res.json(state);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.post('/sync/push', async (req: AuthRequest, res: Response) => {
+    try {
+      const { entityType, entityId, data, hash, timestamp } = req.body;
+      if (!entityType || typeof entityType !== 'string') {
+        res.status(400).json({ error: 'Missing or invalid entityType' });
+        return;
+      }
+      await syncManager.pushEntity(
+        req.userName!,
+        entityType,
+        entityId || null,
+        data,
+        hash || '',
+        typeof timestamp === 'number' ? timestamp : Date.now(),
+      );
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.get('/sync/conversation/:id', async (req: AuthRequest, res: Response) => {
+    try {
+      const id = req.params.id as string;
+      const content = await syncManager.getConversation(req.userName!, id);
+      if (content === null) {
+        res.status(404).json({ error: 'Conversation not found' });
+        return;
+      }
+      res.json({ content });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.patch('/sync/conversation/:id', async (req: AuthRequest, res: Response) => {
+    try {
+      const id = req.params.id as string;
+      const { appendLines, totalLineCount } = req.body;
+      if (!appendLines || typeof appendLines !== 'string') {
+        res.status(400).json({ error: 'Missing or invalid appendLines' });
+        return;
+      }
+      await syncManager.appendConversation(
+        req.userName!,
+        id,
+        appendLines,
+        typeof totalLineCount === 'number' ? totalLineCount : 0,
+      );
       res.json({ ok: true });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
