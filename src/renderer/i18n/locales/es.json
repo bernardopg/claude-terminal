@@ -1749,7 +1749,15 @@
     "memoryUpdated": "CLAUDE.md actualizado desde la nube",
     "hooksConfigUpdated": "Config de hooks actualizada desde la nube",
     "pluginsUpdated": "Lista de plugins actualizada desde la nube",
-    "fullSyncBtn": "Sincronización completa"
+    "skillsUpdated": "Skills actualizados desde la nube",
+    "agentsUpdated": "Agents actualizados desde la nube",
+    "fullSyncBtn": "Sincronización completa",
+    "applying": "Aplicando...",
+    "nullValue": "null",
+    "entityLabelMcp": "MCP: {id}",
+    "entityLabelMemory": "CLAUDE.md",
+    "entityLabelHooksConfig": "Config de hooks",
+    "entityLabelKeybindings": "Atajos de teclado"
   },
   "database": {
     "title": "Base de datos",

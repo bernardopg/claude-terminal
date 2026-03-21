@@ -896,7 +896,7 @@ function setupHandlers(context) {
         btn.addEventListener('click', async () => {
           const projName = btn.dataset.project;
           btn.disabled = true;
-          btn.textContent = '...';
+          btn.textContent = t('sync.applying');
           try {
             const projects = _ctx.projectsState?.get()?.projects || [];
             const localProject = projects.find(p =>

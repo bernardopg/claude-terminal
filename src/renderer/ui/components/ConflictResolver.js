@@ -140,7 +140,7 @@ function buildConflictHtml(conflicts) {
 }
 
 function formatValue(value) {
-  if (value === null || value === undefined) return '<em>null</em>';
+  if (value === null || value === undefined) return `<em>${t('sync.nullValue')}</em>`;
   if (typeof value === 'string') return escapeHtml(value.length > 60 ? value.slice(0, 60) + '...' : value);
   if (typeof value === 'boolean') return value ? 'true' : 'false';
   if (typeof value === 'number') return String(value);
@@ -160,16 +160,16 @@ function formatEntityLabel(entityType, entityId) {
     return entityId;
   }
   if (entityType === 'mcpConfigs') {
-    return `MCP: ${entityId}`;
+    return t('sync.entityLabelMcp', { id: entityId });
   }
   if (entityType === 'keybindings') {
-    return t('sync.keybindingsUpdated').split(' ')[0] || 'Keybindings';
+    return t('sync.entityLabelKeybindings');
   }
   if (entityType === 'memory') {
-    return 'CLAUDE.md';
+    return t('sync.entityLabelMemory');
   }
   if (entityType === 'hooksConfig') {
-    return 'Hooks config';
+    return t('sync.entityLabelHooksConfig');
   }
   return `${entityType}${entityId ? '.' + entityId : ''}`;
 }

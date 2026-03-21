@@ -638,6 +638,7 @@ class SyncEngine {
 
     // Read local entities
     const localEntities = this._readDirectoryEntities(localDir);
+    let cloudApplied = false;
 
     // Cloud → local: add or update items we don't have or that are newer
     for (const [name, cloudEntry] of Object.entries(cloudEntities)) {
@@ -650,6 +651,7 @@ class SyncEngine {
         // Cloud has it, we don't → write locally
         this._writeDirectoryEntity(localDir, name, cloudEntry.files);
         this.manifest.entities[entityKey] = { localHash: cloudHash, cloudHash, lastSyncAt: Date.now() };
+        cloudApplied = true;
         continue;
       }
 
@@ -668,6 +670,7 @@ class SyncEngine {
         // Cloud is newer → overwrite local
         this._writeDirectoryEntity(localDir, name, cloudEntry.files);
         this.manifest.entities[entityKey] = { localHash: cloudHash, cloudHash, lastSyncAt: Date.now() };
+        cloudApplied = true;
       } else {
         // Local is newer → push to cloud
         await this._pushEntity(entityType, name);
@@ -679,6 +682,11 @@ class SyncEngine {
       if (!cloudEntities[name]) {
         await this._pushEntity(entityType, name);
       }
+    }
+
+    // Notify renderer to reload if cloud updated local files
+    if (cloudApplied) {
+      this._sendToRenderer(`sync:${entityType}-updated`);
     }
   }
 

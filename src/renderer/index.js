@@ -329,6 +329,7 @@ function _registerSyncListeners(api) {
 
   if (SkillService?.loadSkills) {
     const _origLoadSkills = SkillService.loadSkills.bind(SkillService);
+    SkillService._origLoadSkills = _origLoadSkills; // keep ref for cloud reload
     SkillService.loadSkills = async function (...args) {
       const result = await _origLoadSkills(...args);
       api.sync.pushEntity('skills');
@@ -338,6 +339,7 @@ function _registerSyncListeners(api) {
 
   if (AgentService?.loadAgents) {
     const _origLoadAgents = AgentService.loadAgents.bind(AgentService);
+    AgentService._origLoadAgents = _origLoadAgents; // keep ref for cloud reload
     AgentService.loadAgents = async function (...args) {
       const result = await _origLoadAgents(...args);
       api.sync.pushEntity('agents');
@@ -397,6 +399,37 @@ function _registerSyncListeners(api) {
       Toast.show(t('sync.pluginsUpdated'), 'info', 3000);
     });
   }
+
+  // ── Skills/Agents updated from cloud → reload lists ──
+  if (api.sync.onSkillsUpdated) {
+    api.sync.onSkillsUpdated(async () => {
+      if (SkillService?.loadSkills) {
+        // Use _origLoadSkills to avoid re-pushing to cloud
+        const _orig = SkillService._origLoadSkills || SkillService.loadSkills;
+        await _orig.call(SkillService);
+      }
+      Toast.show(t('sync.skillsUpdated'), 'info', 3000);
+    });
+  }
+  if (api.sync.onAgentsUpdated) {
+    api.sync.onAgentsUpdated(async () => {
+      if (AgentService?.loadAgents) {
+        const _orig = AgentService._origLoadAgents || AgentService.loadAgents;
+        await _orig.call(AgentService);
+      }
+      Toast.show(t('sync.agentsUpdated'), 'info', 3000);
+    });
+  }
+
+  // ── Time tracking incremental push ──
+  const { dataState: ttDataState } = require('./state/timeTracking.state');
+  let ttPushTimer = null;
+  ttDataState.subscribe(() => {
+    clearTimeout(ttPushTimer);
+    ttPushTimer = setTimeout(() => {
+      api.sync.pushEntity('timeTracking');
+    }, 10000); // 10s debounce — time tracking saves frequently
+  });
 }
 
 // Telemetry consent modal is handled in renderer.js (main entry point)

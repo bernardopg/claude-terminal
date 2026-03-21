@@ -1785,7 +1785,15 @@
     "memoryUpdated": "CLAUDE.md updated from cloud",
     "hooksConfigUpdated": "Hooks config updated from cloud",
     "pluginsUpdated": "Plugins list updated from cloud",
-    "fullSyncBtn": "Full Sync"
+    "skillsUpdated": "Skills updated from cloud",
+    "agentsUpdated": "Agents updated from cloud",
+    "fullSyncBtn": "Full Sync",
+    "applying": "Applying...",
+    "nullValue": "null",
+    "entityLabelMcp": "MCP: {id}",
+    "entityLabelMemory": "CLAUDE.md",
+    "entityLabelHooksConfig": "Hooks config",
+    "entityLabelKeybindings": "Keybindings"
   },
   "database": {
     "title": "Database",
