@@ -18,16 +18,26 @@ function registerSyncHandlers() {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('sync:conflicts', conflicts);
     }
-    // Wait for renderer to resolve (via sync:resolve-conflicts IPC)
+    // Wait for renderer to resolve (via sync:resolve-conflicts IPC), with 60s timeout
     return new Promise((resolve) => {
-      syncEngine._conflictResolver = resolve;
+      const timeout = setTimeout(() => {
+        console.warn('[Sync IPC] Conflict resolution timed out after 60s, using cloud values');
+        syncEngine._conflictResolver = null;
+        _pendingConflicts = [];
+        // Default: accept cloud values for all conflicts
+        resolve(conflicts.map(c => ({ ...c, resolution: 'cloud' })));
+      }, 60000);
+      syncEngine._conflictResolver = (resolutions) => {
+        clearTimeout(timeout);
+        resolve(resolutions);
+      };
     });
   });
 
   // ── Full sync ──
   ipcMain.handle('sync:full', async () => {
-    await syncEngine.fullSync();
-    return { ok: true };
+    const result = await syncEngine.fullSync();
+    return result || { ok: false, reason: 'no_result' };
   });
 
   // ── Push a single entity ──

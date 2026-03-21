@@ -245,15 +245,14 @@ class SyncEngine {
    * Called on initial cloud connect.
    */
   async fullSync() {
-    if (!this.active) return;
+    if (!this.active) return { ok: false, reason: 'not_active' };
     if (this._syncing) {
-      // Already syncing — don't start a duplicate, but notify so UI doesn't get stuck
       console.log('[SyncEngine] Full sync already in progress, skipping');
-      return;
+      return { ok: false, reason: 'already_syncing' };
     }
     if (!this._serverSupportsSync) {
       this._emitStatus('full-sync', 'error', 'Server does not support entity sync (needs update)');
-      return;
+      return { ok: false, reason: 'server_not_supported' };
     }
     this._syncing = true;
     this._emitStatus('full-sync', 'started');
@@ -281,7 +280,7 @@ class SyncEngine {
       if (!cloudState) {
         didEmitFinal = true;
         this._emitStatus('full-sync', 'error', 'Failed to fetch cloud state');
-        return;
+        return { ok: false, reason: 'fetch_failed' };
       }
 
       const conflicts = [];
@@ -319,10 +318,12 @@ class SyncEngine {
       this._saveManifest();
       didEmitFinal = true;
       this._emitStatus('full-sync', 'completed', { conflicts: conflicts.length });
+      return { ok: true, conflicts: conflicts.length };
     } catch (err) {
       console.error('[SyncEngine] Full sync failed:', err.message);
       didEmitFinal = true;
       this._emitStatus('full-sync', 'error', err.message);
+      return { ok: false, reason: 'error', message: err.message };
     } finally {
       this._syncing = false;
       if (!didEmitFinal) {
@@ -1256,16 +1257,13 @@ class SyncEngine {
         try { return JSON.parse(text); } catch { return null; }
       }
 
+      const data = await resp.json();
       this._syncFailures = 0;
-      return await resp.json();
+      return data;
     } catch (err) {
       this._syncFailures++;
-      if (this._syncFailures >= 3) {
-        this._serverSupportsSync = false;
-        console.warn(`[SyncEngine] ${this._syncFailures} consecutive failures. Disabling sync.`);
-      } else {
-        console.warn('[SyncEngine] Failed to fetch cloud state:', err.message);
-      }
+      // Don't permanently disable sync for transient network errors — just log and let next attempt retry
+      console.warn(`[SyncEngine] Failed to fetch cloud state (attempt ${this._syncFailures}):`, err.message);
       return null;
     }
   }
