@@ -140,6 +140,10 @@ class SyncEngine {
     this._syncing = false;
     /** @type {BrowserWindow|null} */
     this._mainWindow = null;
+    /** @type {boolean} server supports /api/sync/* endpoints */
+    this._serverSupportsSync = true;
+    /** @type {number} consecutive failures → exponential backoff */
+    this._syncFailures = 0;
   }
 
   // ── Lifecycle ──
@@ -153,6 +157,8 @@ class SyncEngine {
     this.cloudUrl = cloudUrl.replace(/\/$/, '');
     this.apiKey = apiKey;
     this.active = true;
+    this._serverSupportsSync = true;
+    this._syncFailures = 0;
     this._loadManifest();
     console.log('[SyncEngine] Started');
   }
@@ -194,6 +200,10 @@ class SyncEngine {
    */
   async fullSync() {
     if (this._syncing || !this.active) return;
+    if (!this._serverSupportsSync) {
+      this._emitStatus('full-sync', 'error', 'Server does not support entity sync (needs update)');
+      return;
+    }
     this._syncing = true;
     this._emitStatus('full-sync', 'started');
 
@@ -296,7 +306,7 @@ class SyncEngine {
   // ── Push single entity to cloud ──
 
   async _pushEntity(entityType, entityId) {
-    if (!this.active) return;
+    if (!this.active || !this._serverSupportsSync) return;
 
     try {
       const data = this._readLocalEntity(entityType, entityId);
@@ -1150,10 +1160,38 @@ class SyncEngine {
   async _fetchCloudState() {
     try {
       const resp = await this._fetchCloud('/api/sync/state', { method: 'GET' });
-      if (!resp.ok) return null;
+      if (!resp.ok) {
+        // 404 = server doesn't have sync endpoints
+        if (resp.status === 404) {
+          this._serverSupportsSync = false;
+          console.warn('[SyncEngine] Server does not support entity sync (404). Disabling.');
+        }
+        return null;
+      }
+
+      // Check content-type before parsing
+      const ct = resp.headers?.get('content-type') || '';
+      if (!ct.includes('application/json')) {
+        const text = await resp.text();
+        if (text.startsWith('<!') || text.startsWith('<html')) {
+          this._serverSupportsSync = false;
+          console.warn('[SyncEngine] Server returned HTML instead of JSON. Sync endpoints not available.');
+          return null;
+        }
+        // Try parsing anyway (some servers don't set content-type)
+        try { return JSON.parse(text); } catch { return null; }
+      }
+
+      this._syncFailures = 0;
       return await resp.json();
     } catch (err) {
-      console.error('[SyncEngine] Failed to fetch cloud state:', err.message);
+      this._syncFailures++;
+      if (this._syncFailures >= 3) {
+        this._serverSupportsSync = false;
+        console.warn(`[SyncEngine] ${this._syncFailures} consecutive failures. Disabling sync.`);
+      } else {
+        console.warn('[SyncEngine] Failed to fetch cloud state:', err.message);
+      }
       return null;
     }
   }
