@@ -1677,6 +1677,8 @@
     "autoSyncComplete": "Sincronización automática completada",
     "autoSyncFiles": "{count} archivo(s) sincronizado(s) con la nube",
     "autoSyncError": "Error en la sincronización automática",
+    "syncOptions": "Opciones de sincronización",
+    "userGitIdentity": "Identidad Git",
     "autoSyncToggle": "Sincronización automática",
     "syncSkillsToggle": "Sincronizar skills y agentes",
     "syncSkillsNow": "Sincronizar ahora",

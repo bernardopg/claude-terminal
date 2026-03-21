@@ -108,42 +108,90 @@ function buildHtml(settings) {
           </div>
         </div>
 
-        <!-- Connected State (grid) -->
-        <div class="cp-connected-grid" id="cp-connected-view" style="display:none">
+        <!-- ═══ Connected State ═══ -->
+        <div class="cp-connected" id="cp-connected-view" style="display:none">
 
-          <!-- Left Column -->
-          <div class="cp-column">
+          <!-- Upload Progress (hidden by default) -->
+          <div class="cp-upload-progress" id="cp-upload-progress" style="display:none">
+            <div class="cp-upload-header">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/>
+                <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+              </svg>
+              <span class="cp-upload-title" id="cp-upload-title">${t('cloud.uploadTitle')}</span>
+            </div>
+            <div class="cp-upload-bar-wrap">
+              <div class="cp-upload-bar" id="cp-upload-bar" style="width:0%"></div>
+            </div>
+            <div class="cp-upload-details" id="cp-upload-details"></div>
+          </div>
 
-            <!-- Profile -->
+          <!-- Profile (compact inline) -->
+          <div class="cp-profile-bar">
+            <div class="cp-user-avatar" id="cp-user-avatar">?</div>
+            <div class="cp-user-name" id="cp-user-display-name">\u2014</div>
+            <span class="cp-badge" id="cp-user-claude-badge">\u2014</span>
+          </div>
+
+          <!-- Entity Sync -->
+          <div class="cp-section">
+            <div class="cp-section-header">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+              <span>${t('cloud.syncSectionTitle')}</span>
+              <span class="cp-sync-badge" id="cp-sync-badge" style="display:none">0</span>
+            </div>
+            <div class="cp-section-body">
+              <div class="cp-sync-area" id="cp-sync-area">
+                <div class="cp-sessions-empty" id="cp-sync-empty">${t('cloud.syncNoChanges')}</div>
+                <div id="cp-sync-list" style="display:none"></div>
+              </div>
+            </div>
+            <div class="cp-sync-actions">
+              <button class="cp-btn-full" id="cp-sync-check-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                </svg>
+                ${t('cloud.syncCheckBtn')}
+              </button>
+              <button class="cp-btn-full cp-btn-accent" id="cp-full-sync-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                </svg>
+                ${t('sync.fullSyncBtn')}
+              </button>
+            </div>
+          </div>
+
+          <!-- Sessions + Projects (side by side) -->
+          <div class="cp-duo-grid">
+
+            <!-- Sessions -->
             <div class="cp-section">
               <div class="cp-section-header">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                  <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
                 </svg>
-                <span>${t('cloud.userTitle')}</span>
+                <span>${t('cloud.sessionsTitle')}</span>
+                <span class="cp-sessions-count" id="cp-sessions-count" style="display:none"></span>
+                <div class="cp-header-actions">
+                  <span class="cp-sessions-loading" id="cp-sessions-loading" style="display:none">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                    </svg>
+                  </span>
+                  <button class="cp-btn-icon" id="cp-sessions-refresh" title="${t('cloud.sessionsRefresh')}">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                    </svg>
+                  </button>
+                </div>
               </div>
-              <div class="cp-section-body">
-                <div class="cp-user-row">
-                  <div class="cp-user-avatar" id="cp-user-avatar">?</div>
-                  <div class="cp-user-meta">
-                    <div class="cp-user-name" id="cp-user-display-name">\u2014</div>
-                  </div>
-                  <span class="cp-badge" id="cp-user-claude-badge">\u2014</span>
-                </div>
-                <div class="cp-user-form">
-                  <div class="cp-field">
-                    <label for="cp-user-git-name">${t('cloud.userGitName')}</label>
-                    <input type="text" id="cp-user-git-name" class="cp-input" placeholder="John Doe">
-                  </div>
-                  <div class="cp-field">
-                    <label for="cp-user-git-email">${t('cloud.userGitEmail')}</label>
-                    <input type="text" id="cp-user-git-email" class="cp-input" placeholder="john@example.com">
-                  </div>
-                  <div class="cp-user-actions">
-                    <span class="cp-user-save-status" id="cp-user-save-status"></span>
-                    <button class="cp-btn-sm" id="cp-user-save-btn">${t('cloud.userSave')}</button>
-                  </div>
-                </div>
+              <div class="cp-section-body" style="padding:0">
+                <div id="cp-sessions-list" class="cp-sessions-list"></div>
               </div>
             </div>
 
@@ -173,157 +221,99 @@ function buildHtml(settings) {
               </div>
             </div>
 
-            <!-- Connection Details (collapsed) -->
-            <div class="cp-section">
-              <div class="cp-section-body">
-                <details class="cp-connection-details">
-                  <summary>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-                    ${t('cloud.serverUrl')} &amp; ${t('cloud.apiKey')}
-                  </summary>
-                  <div class="cp-detail-fields">
-                    <div class="cp-field">
-                      <label>${t('cloud.serverUrl')}</label>
-                      <input type="text" id="cp-server-url-connected" class="cp-input" value="${_escapeHtml(settings.cloudServerUrl || '')}" placeholder="${t('cloud.serverUrlPlaceholder')}">
-                    </div>
-                    <div class="cp-field">
-                      <label>${t('cloud.apiKey')}</label>
-                      <div class="cp-key-row">
-                        <input type="password" id="cp-api-key-connected" class="cp-input cp-key-input" value="${_escapeHtml(settings.cloudApiKey || '')}" placeholder="${t('cloud.apiKeyPlaceholder')}">
-                        <button class="cp-key-toggle" id="cp-key-toggle-connected" type="button">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                    <div class="cp-form-footer">
-                      <div class="cp-auto">
-                        <label class="settings-toggle rp-mini-toggle">
-                          <input type="checkbox" id="cp-auto-connect-connected" ${settings.cloudAutoConnect !== false ? 'checked' : ''}>
-                          <span class="settings-toggle-slider"></span>
-                        </label>
-                        <span class="cp-auto-label">${t('cloud.autoConnect')}</span>
-                      </div>
-                      <div class="cp-auto">
-                        <label class="settings-toggle rp-mini-toggle">
-                          <input type="checkbox" id="cp-auto-sync" ${settings.cloudAutoSync !== false ? 'checked' : ''}>
-                          <span class="settings-toggle-slider"></span>
-                        </label>
-                        <span class="cp-auto-label">${t('cloud.autoSyncToggle')}</span>
-                      </div>
-                      <div class="cp-auto">
-                        <label class="settings-toggle rp-mini-toggle">
-                          <input type="checkbox" id="cp-sync-skills" ${settings.cloudSyncSkills ? 'checked' : ''}>
-                          <span class="settings-toggle-slider"></span>
-                        </label>
-                        <span class="cp-auto-label">${t('cloud.syncSkillsToggle')}</span>
-                        <button class="cp-sync-skills-btn" id="cp-sync-skills-now" title="${t('cloud.syncSkillsNow')}">
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
-                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
+          </div>
+
+          <!-- Advanced Settings (collapsed) -->
+          <details class="cp-advanced">
+            <summary class="cp-advanced-toggle">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+              <span>${t('cloud.advancedSettings')}</span>
+            </summary>
+            <div class="cp-advanced-body">
+
+              <!-- Git Identity -->
+              <div class="cp-adv-group">
+                <div class="cp-adv-group-title">${t('cloud.userGitIdentity')}</div>
+                <div class="cp-adv-row">
+                  <div class="cp-field">
+                    <label for="cp-user-git-name">${t('cloud.userGitName')}</label>
+                    <input type="text" id="cp-user-git-name" class="cp-input" placeholder="John Doe">
                   </div>
-                </details>
-              </div>
-            </div>
-
-          <!-- Project cloud key overrides -->
-          <div class="cp-section">
-            <div class="cp-section-header">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-              </svg>
-              <span>${t('cloud.projectKeysTitle')}</span>
-            </div>
-            <div class="cp-project-keys-list" id="cp-project-keys-list">
-              <div class="cp-field-hint">${t('cloud.projectKeysHint')}</div>
-            </div>
-          </div>
-
-          </div>
-
-          <!-- Right Column -->
-          <div class="cp-column">
-
-            <!-- Upload Progress (hidden by default) -->
-            <div class="cp-upload-progress" id="cp-upload-progress" style="display:none">
-              <div class="cp-upload-header">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/>
-                  <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
-                </svg>
-                <span class="cp-upload-title" id="cp-upload-title">${t('cloud.uploadTitle')}</span>
-              </div>
-              <div class="cp-upload-bar-wrap">
-                <div class="cp-upload-bar" id="cp-upload-bar" style="width:0%"></div>
-              </div>
-              <div class="cp-upload-details" id="cp-upload-details"></div>
-            </div>
-
-            <!-- Sessions -->
-            <div class="cp-section">
-              <div class="cp-section-header">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
-                </svg>
-                <span>${t('cloud.sessionsTitle')}</span>
-                <span class="cp-sessions-count" id="cp-sessions-count" style="display:none"></span>
-                <div class="cp-header-actions">
-                  <span class="cp-sessions-loading" id="cp-sessions-loading" style="display:none">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                      <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-                    </svg>
-                  </span>
-                  <button class="cp-btn-icon" id="cp-sessions-refresh" title="${t('cloud.sessionsRefresh')}">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-                    </svg>
-                  </button>
+                  <div class="cp-field">
+                    <label for="cp-user-git-email">${t('cloud.userGitEmail')}</label>
+                    <input type="text" id="cp-user-git-email" class="cp-input" placeholder="john@example.com">
+                  </div>
+                  <div class="cp-user-actions">
+                    <span class="cp-user-save-status" id="cp-user-save-status"></span>
+                    <button class="cp-btn-sm" id="cp-user-save-btn">${t('cloud.userSave')}</button>
+                  </div>
                 </div>
               </div>
-              <div class="cp-section-body" style="padding:0">
-                <div id="cp-sessions-list" class="cp-sessions-list"></div>
-              </div>
-            </div>
 
-            <!-- Sync Changes -->
-            <div class="cp-section">
-              <div class="cp-section-header">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
-                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-                </svg>
-                <span>${t('cloud.syncSectionTitle')}</span>
-                <span class="cp-sync-badge" id="cp-sync-badge" style="display:none">0</span>
-              </div>
-              <div class="cp-section-body">
-                <div class="cp-sync-area" id="cp-sync-area">
-                  <div class="cp-sessions-empty" id="cp-sync-empty">${t('cloud.syncNoChanges')}</div>
-                  <div id="cp-sync-list" style="display:none"></div>
+              <!-- Connection -->
+              <div class="cp-adv-group">
+                <div class="cp-adv-group-title">${t('cloud.serverUrl')} &amp; ${t('cloud.apiKey')}</div>
+                <div class="cp-field">
+                  <label>${t('cloud.serverUrl')}</label>
+                  <input type="text" id="cp-server-url-connected" class="cp-input" value="${_escapeHtml(settings.cloudServerUrl || '')}" placeholder="${t('cloud.serverUrlPlaceholder')}">
+                </div>
+                <div class="cp-field" style="margin-top:10px">
+                  <label>${t('cloud.apiKey')}</label>
+                  <div class="cp-key-row">
+                    <input type="password" id="cp-api-key-connected" class="cp-input cp-key-input" value="${_escapeHtml(settings.cloudApiKey || '')}" placeholder="${t('cloud.apiKeyPlaceholder')}">
+                    <button class="cp-key-toggle" id="cp-key-toggle-connected" type="button">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               </div>
-              <div class="cp-sync-check">
-                <button class="cp-btn-full" id="cp-sync-check-btn">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-                  </svg>
-                  ${t('cloud.syncCheckBtn')}
-                </button>
-                <button class="cp-btn-full cp-btn-accent" id="cp-full-sync-btn" style="margin-top:6px">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
-                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-                  </svg>
-                  ${t('sync.fullSyncBtn')}
-                </button>
-              </div>
-            </div>
 
-          </div>
+              <!-- Toggles -->
+              <div class="cp-adv-group">
+                <div class="cp-adv-group-title">${t('cloud.syncOptions')}</div>
+                <div class="cp-toggle-list">
+                  <div class="cp-auto">
+                    <label class="settings-toggle rp-mini-toggle">
+                      <input type="checkbox" id="cp-auto-connect-connected" ${settings.cloudAutoConnect !== false ? 'checked' : ''}>
+                      <span class="settings-toggle-slider"></span>
+                    </label>
+                    <span class="cp-auto-label">${t('cloud.autoConnect')}</span>
+                  </div>
+                  <div class="cp-auto">
+                    <label class="settings-toggle rp-mini-toggle">
+                      <input type="checkbox" id="cp-auto-sync" ${settings.cloudAutoSync !== false ? 'checked' : ''}>
+                      <span class="settings-toggle-slider"></span>
+                    </label>
+                    <span class="cp-auto-label">${t('cloud.autoSyncToggle')}</span>
+                  </div>
+                  <div class="cp-auto">
+                    <label class="settings-toggle rp-mini-toggle">
+                      <input type="checkbox" id="cp-sync-skills" ${settings.cloudSyncSkills ? 'checked' : ''}>
+                      <span class="settings-toggle-slider"></span>
+                    </label>
+                    <span class="cp-auto-label">${t('cloud.syncSkillsToggle')}</span>
+                    <button class="cp-sync-skills-btn" id="cp-sync-skills-now" title="${t('cloud.syncSkillsNow')}">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Cloud Keys -->
+              <div class="cp-adv-group">
+                <div class="cp-adv-group-title">${t('cloud.projectKeysTitle')}</div>
+                <div class="cp-field-hint" style="margin-bottom:8px">${t('cloud.projectKeysHint')}</div>
+                <div class="cp-project-keys-list" id="cp-project-keys-list"></div>
+              </div>
+
+            </div>
+          </details>
+
         </div>
 
       </div>

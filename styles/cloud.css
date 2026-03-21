@@ -403,26 +403,134 @@
   line-height: 1.4;
 }
 
-/* ── Connected Layout (grid) ── */
-.cp-connected-grid {
+/* ── Connected Layout (single column) ── */
+.cp-connected {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 900px;
+}
+
+/* ── Profile Bar (compact inline) ── */
+.cp-profile-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+}
+
+.cp-profile-bar .cp-user-avatar {
+  width: 28px;
+  height: 28px;
+  font-size: var(--font-xs);
+  border-radius: 8px;
+}
+
+.cp-profile-bar .cp-user-name {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Duo Grid (sessions + projects side by side) ── */
+.cp-duo-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 24px;
-  min-height: 100%;
-  align-content: start;
+  gap: 16px;
 }
 
 @media (max-width: 900px) {
-  .cp-connected-grid {
+  .cp-duo-grid {
     grid-template-columns: 1fr;
   }
 }
 
-.cp-column {
+/* ── Sync Actions (button row) ── */
+.cp-sync-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border-color);
+}
+
+/* ── Advanced Settings (collapsed) ── */
+.cp-advanced {
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--bg-secondary);
+  overflow: hidden;
+}
+
+.cp-advanced-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 18px;
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  transition: color 0.15s;
+}
+
+.cp-advanced-toggle::-webkit-details-marker { display: none; }
+
+.cp-advanced-toggle:hover { color: var(--text-secondary); }
+
+.cp-advanced-toggle svg {
+  transition: transform 0.2s;
+}
+
+.cp-advanced[open] .cp-advanced-toggle svg {
+  transform: rotate(90deg);
+}
+
+.cp-advanced[open] .cp-advanced-toggle {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.cp-advanced-body {
+  padding: 16px 18px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  min-width: 0;
+  gap: 20px;
+}
+
+.cp-adv-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cp-adv-group-title {
+  font-size: var(--font-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cp-adv-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.cp-adv-row .cp-field { flex: 1; }
+
+.cp-adv-row .cp-user-actions {
+  padding-bottom: 1px;
+}
+
+.cp-toggle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 /* ── Section Card ── */
@@ -515,18 +623,11 @@
   color: var(--warning);
 }
 
-.cp-user-form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
 .cp-user-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
-  padding-top: 4px;
 }
 
 .cp-user-save-status {
@@ -851,10 +952,7 @@
   padding-top: 2px;
 }
 
-.cp-sync-check {
-  padding: 14px 18px;
-  border-top: 1px solid var(--border-color);
-}
+/* .cp-sync-check removed — replaced by .cp-sync-actions */
 
 /* ── Sidebar Tab Badge ── */
 .nav-tab-badge {
@@ -870,37 +968,7 @@
   margin-left: 4px;
 }
 
-/* ── Connection Config (collapsed in connected state) ── */
-.cp-connection-details summary {
-  font-size: var(--font-xs);
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: 4px 0;
-  user-select: none;
-  list-style: none;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.cp-connection-details summary::-webkit-details-marker {
-  display: none;
-}
-
-.cp-connection-details summary svg {
-  transition: transform 0.2s;
-}
-
-.cp-connection-details[open] summary svg {
-  transform: rotate(90deg);
-}
-
-.cp-connection-details .cp-detail-fields {
-  margin-top: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
+/* .cp-connection-details removed — replaced by .cp-advanced */
 
 /* ── Conflict Resolution Modal ── */
 .conflict-description {

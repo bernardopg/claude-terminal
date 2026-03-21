@@ -1713,6 +1713,8 @@
     "autoSyncComplete": "Auto-sync complete",
     "autoSyncFiles": "{count} file(s) synced to cloud",
     "autoSyncError": "Auto-sync failed",
+    "syncOptions": "Sync options",
+    "userGitIdentity": "Git identity",
     "autoSyncToggle": "Auto-sync",
     "syncSkillsToggle": "Sync skills & agents",
     "syncSkillsNow": "Sync now",
