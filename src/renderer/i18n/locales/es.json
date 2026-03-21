@@ -1802,7 +1802,9 @@
     "syncOverview": "Resumen de sincronizacion",
     "entitySynced": "Sincronizado",
     "entityNotSynced": "No sincronizado",
-    "secondsAgo": "hace unos segundos"
+    "secondsAgo": "hace unos segundos",
+    "serverNotSupported": "El servidor no soporta sincronización",
+    "fetchFailed": "No se pudo conectar al servidor cloud"
   },
   "database": {
     "title": "Base de datos",
