@@ -917,18 +917,28 @@ function setupHandlers(context) {
       }
 
       const localProjects = _ctx.projectsState?.get()?.projects || [];
+      // Build lookup sets for matching cloud projects to local ones
+      const localCloudKeys = new Set(localProjects.filter(p => p.cloudProjectKey).map(p => p.cloudProjectKey));
       const localNames = new Set(localProjects.map(p => p.name));
       const localBasenames = new Set(localProjects.map(p => p.path?.replace(/\\/g, '/').split('/').pop()).filter(Boolean));
 
+      // Extract display name from cloud key: strip machineId prefix ({hostname}-{8hex}-)
+      function _extractProjectName(cloudKey) {
+        // Cloud key format: {machineId}-{projectName} where machineId = {hostname}-{8hex}
+        const match = cloudKey.match(/^.+-[0-9a-f]{8}-(.+)$/);
+        return match ? match[1] : cloudKey;
+      }
+
       listEl.innerHTML = cloudProjects.map(p => {
-        const isLocal = localNames.has(p.name) || localBasenames.has(p.name);
+        const displayName = _extractProjectName(p.name);
+        const isLocal = localCloudKeys.has(p.name) || localNames.has(displayName) || localBasenames.has(displayName);
         const badge = isLocal
           ? `<span class="cp-cloud-project-local">${t('cloud.cloudProjectLocal')}</span>`
           : `<button class="cp-btn-sm cp-cloud-project-import" data-name="${_escapeHtml(p.name)}">${t('cloud.cloudProjectImport')}</button>`;
         return `<div class="cp-session-item">
           <div class="cp-session-info">
             <div class="cp-session-top">
-              <span class="cp-session-project">${_escapeHtml(p.name)}</span>
+              <span class="cp-session-project">${_escapeHtml(displayName)}</span>
             </div>
           </div>
           ${badge}
