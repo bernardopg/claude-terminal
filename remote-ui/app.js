@@ -1498,12 +1498,17 @@ function _renderItem(itemId, depth, visited = new Set()) {
   }
   const project = state.projects.find(p => p.id === itemId);
   if (project) {
+    const color = escHtml(project.color || '#d97706');
+    const iconDisplay = project.icon ? escHtml(project.icon) : escHtml((project.name || project.id).charAt(0).toUpperCase());
     return `<div class="project-card" data-project-id="${escHtml(project.id)}" style="padding-left:${12 + depth * 20}px">
-      <div class="project-dot" style="background:${escHtml(project.color || '#d97706')}"></div>
+      <div class="project-icon-wrap" style="background:${color}18;color:${color}">
+        ${iconDisplay}
+      </div>
       <div class="project-info">
-        <div class="project-name">${project.icon ? escHtml(project.icon) + ' ' : ''}${escHtml(project.name || project.id)}</div>
+        <div class="project-name">${escHtml(project.name || project.id)}</div>
         <div class="project-path">${escHtml(shortenPath(project.path || ''))}</div>
       </div>
+      <svg class="project-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
     </div>`;
   }
   return '';
@@ -2616,13 +2621,25 @@ function renderDashboard() {
     projectEl.textContent = activeProject?.name || '—';
   }
 
+  const sessionsEl = $('dash-sessions');
+  if (sessionsEl) sessionsEl.textContent = Object.keys(state.sessions).length;
+
   const list = $('projects-status-list');
   if (!list) return;
-  list.innerHTML = state.projects.slice(0, 8).map((p, i) => `
+  const projects = state.projects.slice(0, 8);
+  if (!projects.length) {
+    list.innerHTML = `<div class="dash-empty-hint">${_isFr ? 'Aucun projet' : 'No projects yet'}</div>`;
+    return;
+  }
+  list.innerHTML = projects.map((p, i) => {
+    const color = escHtml(p.color || '#d97706');
+    const icon = p.icon ? escHtml(p.icon) : escHtml((p.name || p.id).charAt(0).toUpperCase());
+    return `
     <div class="project-status-item" style="animation-delay:${i * 0.03}s">
+      <div class="project-status-icon" style="background:${color}18;color:${color}">${icon}</div>
       <span class="project-status-name">${escHtml(p.name || p.id)}</span>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 // ─── Accent Color ─────────────────────────────────────────────────────────────
