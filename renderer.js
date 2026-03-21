@@ -57,6 +57,9 @@ const {
   generateProjectId,
   initializeState,
 
+  // Core
+  core,
+
   // Services
   services: { DashboardService, FivemService, TimeTrackingDashboard, GitTabService },
 
@@ -164,6 +167,10 @@ const { loadSessionData, clearProjectSessions, saveTerminalSessions } = require(
 
 (async () => {
   ensureDirectories();
+
+  // Initialize core OOP infrastructure (ApiProvider + ServiceContainer)
+  core.initCore(window.electron_api, window.electron_nodeModules);
+
   await initializeState(); // Loads settings, projects AND initializes time tracking
 
   // Restore saved panel widths (must be after settings are loaded)
