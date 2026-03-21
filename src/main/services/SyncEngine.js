@@ -1048,12 +1048,30 @@ class SyncEngine {
 
   /**
    * Merge two installed_plugins.json structures.
-   * Union by plugin name, take the most recent version if both have it.
+   * Format v2: { version: 2, plugins: { "name@marketplace": [{ scope, installPath, ... }] } }
+   * Fallback: { plugins: [...] } or plain array (legacy)
    */
   _mergePluginLists(local, cloud) {
-    // installed_plugins.json is typically { plugins: [...] } or an array
-    const localList = Array.isArray(local) ? local : (local?.plugins || []);
-    const cloudList = Array.isArray(cloud) ? cloud : (cloud?.plugins || []);
+    const localPlugins = local?.plugins;
+    const cloudPlugins = cloud?.plugins;
+
+    // v2 format: plugins is an object (Record<string, array>)
+    if (localPlugins && typeof localPlugins === 'object' && !Array.isArray(localPlugins)) {
+      const merged = { ...(local || {}), plugins: { ...localPlugins } };
+      if (cloudPlugins && typeof cloudPlugins === 'object' && !Array.isArray(cloudPlugins)) {
+        for (const [key, value] of Object.entries(cloudPlugins)) {
+          if (!merged.plugins[key]) {
+            merged.plugins[key] = value;
+          }
+          // If both have it, keep local
+        }
+      }
+      return merged;
+    }
+
+    // Legacy array format fallback
+    const localList = Array.isArray(local) ? local : (Array.isArray(localPlugins) ? localPlugins : []);
+    const cloudList = Array.isArray(cloud) ? cloud : (Array.isArray(cloudPlugins) ? cloudPlugins : []);
 
     const merged = new Map();
     for (const p of localList) {
@@ -1065,7 +1083,6 @@ class SyncEngine {
       if (!merged.has(key)) {
         merged.set(key, p);
       }
-      // If both have it, keep local (already there)
     }
 
     const result = Array.from(merged.values());
