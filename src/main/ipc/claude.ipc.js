@@ -676,4 +676,4 @@ function registerClaudeHandlers() {
   });
 }
 
-module.exports = { registerClaudeHandlers };
+module.exports = { registerClaudeHandlers, getClaudeSessions };

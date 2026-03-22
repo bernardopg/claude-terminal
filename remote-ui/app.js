@@ -114,6 +114,7 @@ const state = {
   inProjectHub: false,
   slashCommands: [], // Dynamic slash commands from SDK
   fileList: [], // File list for @file picker [{path, fullPath}]
+  pastSessions: {}, // { [projectId]: Session[] } — historical sessions from disk
   // Headless cloud mode
   cloudSessionMode: false,    // true when running headless via cloud API
   desktopOffline: false,      // true when desktop is offline (relay mode)
@@ -624,6 +625,7 @@ function handleMessage(msg) {
     case 'git:pull':             onGitResult('pull', data); break;
     case 'git:push':             onGitResult('push', data); break;
     case 'mention:file-list':    onFileList(data); break;
+    case 'sessions:past':        onPastSessions(data); break;
     case 'settings:updated':     break; // ack, nothing to do
     case 'pong': break;
     // Relay-specific events
@@ -1267,6 +1269,7 @@ function enterProjectHub(projectId) {
   _gitData = null;
 
   switchView('sessions');
+  requestPastSessions(projectId);
 }
 
 function backToProjects() {
@@ -1345,10 +1348,44 @@ function renderSessionsView() {
       </div>`;
   }).join('');
 
+  // Past sessions from disk
+  const pastList = (state.pastSessions[projectId] || [])
+    .filter(ps => !state.sessions[ps.sessionId]);
+
+  if (pastList.length > 0) {
+    list.innerHTML += `<div class="past-sessions-divider"><span>${_isFr ? 'Sessions pr\u00e9c\u00e9dentes' : 'Past sessions'}</span></div>`;
+    list.innerHTML += pastList.map(s => {
+      const timeAgo = _formatTimeAgo(s.modified);
+      const preview = s.summary || s.firstPrompt || '';
+      return `
+        <div class="session-card session-card-past" data-resume-id="${escHtml(s.sessionId)}" data-project-id="${escHtml(projectId)}">
+          <div class="session-card-left">
+            <svg class="past-session-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
+          </div>
+          <div class="session-card-body">
+            <div class="session-card-top">
+              <span class="session-tab-name">${escHtml((preview || 'Chat').slice(0, 60))}</span>
+              <span class="past-session-time">${escHtml(timeAgo)}</span>
+            </div>
+            <div class="session-card-activity">${s.messageCount || 0} messages</div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
   // Event delegation — attach once, not per render
   if (!list._sessionDelegated) {
     list._sessionDelegated = true;
     list.addEventListener('click', (e) => {
+      // Past session resume
+      const pastCard = e.target.closest('.session-card-past');
+      if (pastCard && pastCard.dataset.resumeId) {
+        resumePastSession(pastCard.dataset.resumeId, pastCard.dataset.projectId);
+        return;
+      }
+      // Active session
       const card = e.target.closest('.session-card');
       if (card && card.dataset.sessionId) openSession(card.dataset.sessionId);
     });
@@ -1363,6 +1400,44 @@ function openSession(sessionId) {
 function createNewSession() {
   state.selectedSessionId = null;
   switchView('chat');
+}
+
+// ─── Past Sessions (Resume) ──────────────────────────────────────────────────
+
+function onPastSessions(data) {
+  if (data.projectId) {
+    state.pastSessions[data.projectId] = data.sessions || [];
+    if (state.currentView === 'sessions') renderSessionsView();
+  }
+}
+
+function requestPastSessions(projectId) {
+  wsSend('sessions:list-past', { projectId });
+}
+
+function resumePastSession(sessionId, projectId) {
+  const project = state.projects.find(p => p.id === projectId);
+  if (!project) return;
+  state.selectedSessionId = null;
+  switchView('chat');
+  renderChatView();
+  wsSend('chat:start', {
+    cwd: project.path,
+    prompt: '',
+    resumeSessionId: sessionId,
+  });
+}
+
+function _formatTimeAgo(isoDate) {
+  const diff = Date.now() - new Date(isoDate).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return _isFr ? "a l'instant" : 'just now';
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d`;
+  return new Date(isoDate).toLocaleDateString();
 }
 
 // ─── Mission Control View ──────────────────────────────────────────────────────

@@ -5110,7 +5110,7 @@ api.quickPicker.onNavigateTab(({ tabId, action }) => {
 });
 
 // Remote Control: ouvrir un tab chat depuis mobile
-api.remote.onOpenChatTab(({ cwd, prompt, images, model, effort }) => {
+api.remote.onOpenChatTab(({ cwd, prompt, images, model, effort, resumeSessionId }) => {
   const projects = projectsState.get().projects;
   const project = projects.find(p => cwd && cwd.replace(/\\/g, '/').startsWith(p.path.replace(/\\/g, '/')));
   if (!project) return;
@@ -5121,10 +5121,11 @@ api.remote.onOpenChatTab(({ cwd, prompt, images, model, effort }) => {
     mode: 'chat',
     skipPermissions: settingsState.get().skipPermissions,
     cwd,
-    initialPrompt: prompt,
+    initialPrompt: prompt || null,
     initialImages: Array.isArray(images) && images.length ? images : null,
     initialModel: model || null,
     initialEffort: effort || null,
+    resumeSessionId: resumeSessionId || null,
     onSessionStart: (sessionId) => {
       api.remote.notifySessionCreated({ sessionId, projectId: project.id, tabName: project.name });
     },

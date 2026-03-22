@@ -2329,6 +2329,36 @@ html, body {
   letter-spacing: 0.04em;
 }
 
+/* Past sessions */
+.past-sessions-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0 8px;
+  padding: 0 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-family: var(--font-mono);
+}
+.past-sessions-divider::before,
+.past-sessions-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.session-card-past { opacity: 0.7; }
+.session-card-past:active { opacity: 1; }
+.past-session-icon { color: var(--text-muted); flex-shrink: 0; margin-top: 2px; }
+.past-session-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+
 .new-session-btn {
   display: flex;
   align-items: center;

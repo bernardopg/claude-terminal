@@ -490,24 +490,27 @@ function _handleClientMessage(ws, token, raw) {
             _wsSend(ws, 'chat-error', { sessionId: data?.sessionId, error: 'Invalid project path' });
             break;
           }
+          const resumeSessionId = data.resumeSessionId || null;
           _resolveMentions(mentions, cwd).then(resolvedText => {
             const prompt = resolvedText ? (data.prompt || '') + resolvedText : (data.prompt || '');
             mainWindow.webContents.send('remote:open-chat-tab', {
               cwd,
-              prompt,
+              prompt: prompt || null,
               images: Array.isArray(data.images) ? data.images : [],
               sessionId: data.sessionId,
               model: data.model || null,
               effort: data.effort || null,
+              resumeSessionId,
             });
           }).catch(() => {
             mainWindow.webContents.send('remote:open-chat-tab', {
               cwd,
-              prompt: data?.prompt || '',
+              prompt: data?.prompt || null,
               images: Array.isArray(data?.images) ? data.images : [],
               sessionId: data?.sessionId,
               model: data?.model || null,
               effort: data?.effort || null,
+              resumeSessionId,
             });
           });
         } else {
@@ -653,6 +656,18 @@ function _handleClientMessage(ws, token, raw) {
         } catch (e) {
           console.warn('[Remote] webhook:trigger: WorkflowService not available:', e.message);
         }
+        break;
+      }
+
+      case 'sessions:list-past': {
+        const cwd = _resolveProjectPath(data?.projectId);
+        if (!cwd) { _wsSend(ws, 'sessions:past', { projectId: data?.projectId, sessions: [] }); break; }
+        const { getClaudeSessions } = require('../ipc/claude.ipc');
+        getClaudeSessions(cwd).then(sessions => {
+          _wsSend(ws, 'sessions:past', { projectId: data.projectId, sessions });
+        }).catch(() => {
+          _wsSend(ws, 'sessions:past', { projectId: data.projectId, sessions: [] });
+        });
         break;
       }
 
