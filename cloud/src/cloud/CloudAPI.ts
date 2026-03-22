@@ -547,18 +547,28 @@ export function createCloudRouter(relay?: RelayServer): Router {
 
   router.post('/sessions', async (req: AuthRequest, res: Response) => {
     try {
-      const { projectName, prompt, model, effort } = req.body;
+      const { projectName, prompt, model, effort, resumeSessionId } = req.body;
       if (!projectName || !prompt) {
         res.status(400).json({ error: 'Missing projectName or prompt' });
         return;
       }
 
-      console.log(`[API] POST /sessions user=${req.userName} project=${projectName} model=${model || 'default'}`);
-      const sessionId = await sessionManager.createSession(req.userName!, projectName, prompt, model, effort);
+      console.log(`[API] POST /sessions user=${req.userName} project=${projectName} model=${model || 'default'}${resumeSessionId ? ` resume=${resumeSessionId}` : ''}`);
+      const sessionId = await sessionManager.createSession(req.userName!, projectName, prompt, model, effort, resumeSessionId);
       console.log(`[API] Session created: ${sessionId}`);
       res.status(201).json({ sessionId });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.get('/sessions/history/:projectName', async (req: AuthRequest, res: Response) => {
+    try {
+      const projectName = req.params.projectName as string;
+      const sessions = await sessionManager.listPastSessions(req.userName!, projectName);
+      res.json({ sessions });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
   });
 

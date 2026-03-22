@@ -90,7 +90,7 @@ export class SessionManager {
     return require.resolve('@anthropic-ai/claude-agent-sdk/cli.js');
   }
 
-  async createSession(userName: string, projectName: string, prompt: string, model?: string, effort?: string): Promise<string> {
+  async createSession(userName: string, projectName: string, prompt: string, model?: string, effort?: string, resumeSessionId?: string): Promise<string> {
     // Check project exists
     const exists = await projectManager.projectExists(userName, projectName);
     if (!exists) throw new Error(`Project "${projectName}" does not exist`);
@@ -165,6 +165,7 @@ export class SessionManager {
 
     if (model) options.model = model;
     if (effort) options.effort = effort;
+    if (resumeSessionId) options.resume = resumeSessionId;
 
     console.log(`[Session ${sessionId}] Creating session for user="${userName}" project="${projectName}" model="${model || 'default'}" cwd="${cwd}"`);
 
@@ -284,6 +285,72 @@ export class SessionManager {
   isUserSession(sessionId: string, userName: string): boolean {
     const session = this.sessions.get(sessionId);
     return session?.userName === userName;
+  }
+
+  async listPastSessions(userName: string, projectName: string): Promise<Array<{ sessionId: string; firstPrompt: string; modified: string; messageCount: number }>> {
+    const projectPath = store.getProjectPath(userName, projectName);
+    const userHome = store.userHomePath(userName);
+    const encoded = projectPath.replace(/[^a-zA-Z0-9]/g, '-').slice(0, 200);
+    const sessionsDir = path.join(userHome, '.claude', 'projects', encoded);
+
+    let files: string[];
+    try {
+      files = await fs.promises.readdir(sessionsDir);
+    } catch {
+      return [];
+    }
+
+    const jsonlFiles = files.filter(f => f.endsWith('.jsonl'));
+    if (!jsonlFiles.length) return [];
+
+    const results = await Promise.all(jsonlFiles.map(async (file) => {
+      const filePath = path.join(sessionsDir, file);
+      try {
+        const stat = await fs.promises.stat(filePath);
+        if (stat.size < 200) return null;
+
+        // Read first 30 lines to extract info
+        const content = await fs.promises.readFile(filePath, 'utf-8');
+        const lines = content.split('\n').slice(0, 30);
+        let sessionId = '';
+        let firstPrompt = '';
+        let messageCount = 0;
+        let isSidechain = false;
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const obj = JSON.parse(line);
+            if (obj.type === 'user' || obj.type === 'assistant') messageCount++;
+            if (obj.type === 'user' && !firstPrompt) {
+              sessionId = obj.sessionId || '';
+              isSidechain = obj.isSidechain || false;
+              const c = obj.message?.content;
+              if (typeof c === 'string') firstPrompt = c;
+              else if (Array.isArray(c)) {
+                const tb = c.find((b: any) => b.type === 'text');
+                if (tb) firstPrompt = tb.text;
+              }
+            }
+          } catch {}
+        }
+
+        if (isSidechain || !sessionId) return null;
+        return {
+          sessionId,
+          firstPrompt: firstPrompt.slice(0, 200),
+          modified: stat.mtime.toISOString(),
+          messageCount,
+        };
+      } catch {
+        return null;
+      }
+    }));
+
+    return results
+      .filter((r): r is NonNullable<typeof r> => r !== null)
+      .sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime())
+      .slice(0, 30);
   }
 
   private async processStream(sessionId: string, queryStream: AsyncIterable<any>): Promise<void> {

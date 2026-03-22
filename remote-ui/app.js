@@ -1412,12 +1412,52 @@ function onPastSessions(data) {
 }
 
 function requestPastSessions(projectId) {
-  wsSend('sessions:list-past', { projectId });
+  // Desktop online: ask via WS
+  if (!state.desktopOffline) {
+    wsSend('sessions:list-past', { projectId });
+  }
+  // Cloud mode: also fetch from cloud API
+  if (conn.cloudUrl && conn.cloudApiKey) {
+    const project = state.projects.find(p => p.id === projectId);
+    if (!project) return;
+    const projectName = project.name || project.path?.split(/[\\/]/).pop() || '';
+    _fetchCloudPastSessions(projectId, projectName);
+  }
+}
+
+async function _fetchCloudPastSessions(projectId, projectName) {
+  try {
+    const base = conn.cloudUrl.replace(/\/$/, '');
+    const resp = await fetch(`${base}/api/sessions/history/${encodeURIComponent(projectName)}`, {
+      headers: { 'Authorization': `Bearer ${conn.cloudApiKey}` },
+    });
+    if (!resp.ok) return;
+    const { sessions } = await resp.json();
+    if (!sessions?.length) return;
+    // Merge with existing past sessions (desktop ones), avoiding duplicates
+    const existing = state.pastSessions[projectId] || [];
+    const existingIds = new Set(existing.map(s => s.sessionId));
+    const merged = [...existing, ...sessions.filter(s => !existingIds.has(s.sessionId))];
+    merged.sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime());
+    state.pastSessions[projectId] = merged;
+    if (state.currentView === 'sessions') renderSessionsView();
+  } catch (err) {
+    _debugLog('[Cloud] Failed to fetch past sessions:', err?.message || err);
+  }
 }
 
 function resumePastSession(sessionId, projectId) {
   const project = state.projects.find(p => p.id === projectId);
   if (!project) return;
+
+  // Cloud/headless mode: resume via cloud API
+  if (state.desktopOffline && conn.cloudUrl && conn.cloudApiKey) {
+    const projectName = project.name || project.path?.split(/[\\/]/).pop() || '';
+    _startHeadlessSession(projectName, 'Continue from where we left off.', sessionId);
+    return;
+  }
+
+  // Desktop mode: resume via WS relay
   state.selectedSessionId = null;
   switchView('chat');
   renderChatView();
@@ -2990,7 +3030,7 @@ function _showHeadlessBanner(show) {
   }
 }
 
-async function _startHeadlessSession(projectName, prompt) {
+async function _startHeadlessSession(projectName, prompt, resumeSessionId) {
   if (!conn.cloudUrl || !conn.cloudApiKey) return;
   const base = conn.cloudUrl.replace(/\/$/, '');
   const headers = {
@@ -3004,15 +3044,17 @@ async function _startHeadlessSession(projectName, prompt) {
 
   try {
     // Create session via cloud API
+    const body = {
+      projectName,
+      prompt,
+      model: state.selectedModel,
+      effort: state.selectedEffort,
+    };
+    if (resumeSessionId) body.resumeSessionId = resumeSessionId;
     const resp = await fetch(`${base}/api/sessions`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({
-        projectName,
-        prompt,
-        model: state.selectedModel,
-        effort: state.selectedEffort,
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!resp.ok) {
