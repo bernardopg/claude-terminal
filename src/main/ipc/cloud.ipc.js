@@ -427,6 +427,22 @@ function registerCloudHandlers() {
     return { ok: true };
   });
 
+  // ── Update cloud project display name ──
+
+  ipcMain.handle('cloud:update-display-name', async (_event, { projectId, displayName }) => {
+    const { url, key } = _getCloudConfig();
+    const resp = await _fetchCloud(`${url}/api/projects/${encodeURIComponent(projectId)}`, {
+      method: 'PATCH',
+      headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ displayName }),
+    });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error || `HTTP ${resp.status}`);
+    }
+    return { ok: true };
+  });
+
   // ── User profile ──
 
   ipcMain.handle('cloud:get-user', async () => {
