@@ -704,13 +704,6 @@ class SyncEngine {
     if (!this.active || !fs.existsSync(filePath)) return;
 
     try {
-      // Skip files larger than 5MB to avoid 413 errors
-      const stat = fs.statSync(filePath);
-      if (stat.size > 5 * 1024 * 1024) {
-        console.warn(`[SyncEngine] Skipping conversation ${sessionId}: file too large (${(stat.size / 1024 / 1024).toFixed(1)}MB)`);
-        return;
-      }
-
       const entityKey = `conversations.${sessionId}`;
       const manifestEntry = this.manifest.entities[entityKey];
       const content = fs.readFileSync(filePath, 'utf8');
@@ -721,35 +714,49 @@ class SyncEngine {
       const newLines = lines.slice(lastSyncedLineCount);
       if (newLines.length === 0) return;
 
-      const payload = JSON.stringify({
-        machineId: getMachineId(),
-        appendLines: newLines.join('\n'),
-        totalLineCount: lines.length,
-        timestamp: Date.now(),
-      });
+      // Chunk new lines into batches of ~8MB max payload to stay under server 10MB limit
+      const MAX_PAYLOAD = 8 * 1024 * 1024;
+      let syncedLineCount = lastSyncedLineCount;
 
-      // Double-check serialized size
-      if (payload.length > 5 * 1024 * 1024) {
-        console.warn(`[SyncEngine] Skipping conversation ${sessionId}: payload too large`);
-        return;
-      }
+      for (let i = 0; i < newLines.length; ) {
+        let batch = [];
+        let batchSize = 0;
+        while (i < newLines.length) {
+          const lineSize = Buffer.byteLength(newLines[i], 'utf8') + 1;
+          if (batchSize + lineSize > MAX_PAYLOAD && batch.length > 0) break;
+          batch.push(newLines[i]);
+          batchSize += lineSize;
+          i++;
+        }
 
-      const resp = await this._fetchCloud(`/api/sync/conversation/${encodeURIComponent(sessionId)}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: payload,
-      });
+        syncedLineCount += batch.length;
+        const payload = JSON.stringify({
+          machineId: getMachineId(),
+          appendLines: batch.join('\n'),
+          totalLineCount: syncedLineCount,
+          timestamp: Date.now(),
+        });
 
-      if (resp.ok) {
-        this.manifest.entities[entityKey] = {
-          localHash: this._hash(content),
-          cloudHash: this._hash(content),
-          lastSyncAt: Date.now(),
-          cloudLineCount: lines.length,
-        };
-        this._saveManifest();
-      } else if (resp.status === 413) {
-        console.warn(`[SyncEngine] Server rejected conversation ${sessionId}: payload too large (413)`);
+        const resp = await this._fetchCloud(`/api/sync/conversation/${encodeURIComponent(sessionId)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+        });
+
+        if (resp.ok) {
+          this.manifest.entities[entityKey] = {
+            localHash: this._hash(content),
+            cloudHash: this._hash(content),
+            lastSyncAt: Date.now(),
+            cloudLineCount: syncedLineCount,
+          };
+          this._saveManifest();
+        } else if (resp.status === 413) {
+          console.warn(`[SyncEngine] Server rejected conversation ${sessionId}: payload too large (413), batch ${batch.length} lines`);
+          break;
+        } else {
+          break;
+        }
       }
     } catch (err) {
       console.warn(`[SyncEngine] Push conversation ${sessionId} failed:`, err.message);
