@@ -1604,7 +1604,7 @@ window.createTerminalForProject = createTerminalForProject;
 window.projectsState = projectsState;
 
 // ========== CLOUD STATE PERSISTENCE ==========
-const _cloudStateFile = path.join(os.homedir(), '.claude-terminal', 'cloud-state.json');
+const _cloudStateFile = path.join(window.electron_nodeModules.os.homedir(), '.claude-terminal', 'cloud-state.json');
 
 function _loadCloudState() {
   try {
