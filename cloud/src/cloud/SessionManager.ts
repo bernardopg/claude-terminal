@@ -287,10 +287,22 @@ export class SessionManager {
     return session?.userName === userName;
   }
 
+  private _encodeProjectPath(projectPath: string): string {
+    const MAX_LEN = 200;
+    const encoded = projectPath.replace(/[^a-zA-Z0-9]/g, '-');
+    if (encoded.length <= MAX_LEN) return encoded;
+    // DJB2-style hash to match Claude Code's encoding for long paths
+    let hash = 0;
+    for (let i = 0; i < projectPath.length; i++) {
+      hash = ((hash << 5) - hash + projectPath.charCodeAt(i)) | 0;
+    }
+    return `${encoded.slice(0, MAX_LEN)}-${Math.abs(hash).toString(36)}`;
+  }
+
   async listPastSessions(userName: string, projectName: string): Promise<Array<{ sessionId: string; firstPrompt: string; modified: string; messageCount: number }>> {
     const projectPath = store.getProjectPath(userName, projectName);
     const userHome = store.userHomePath(userName);
-    const encoded = projectPath.replace(/[^a-zA-Z0-9]/g, '-').slice(0, 200);
+    const encoded = this._encodeProjectPath(projectPath);
     const sessionsDir = path.join(userHome, '.claude', 'projects', encoded);
 
     let files: string[];
@@ -303,25 +315,33 @@ export class SessionManager {
     const jsonlFiles = files.filter(f => f.endsWith('.jsonl'));
     if (!jsonlFiles.length) return [];
 
+    const HEAD_BYTES = 8192; // Read only first 8KB to extract session metadata
+
     const results = await Promise.all(jsonlFiles.map(async (file) => {
       const filePath = path.join(sessionsDir, file);
       try {
         const stat = await fs.promises.stat(filePath);
         if (stat.size < 200) return null;
 
-        // Read first 30 lines to extract info
-        const content = await fs.promises.readFile(filePath, 'utf-8');
-        const lines = content.split('\n').slice(0, 30);
+        // Read only the first chunk instead of the entire file
+        const fd = await fs.promises.open(filePath, 'r');
+        const buf = Buffer.alloc(Math.min(HEAD_BYTES, stat.size));
+        await fd.read(buf, 0, buf.length, 0);
+        await fd.close();
+
+        const head = buf.toString('utf-8');
+        // Only parse complete lines (drop the last partial line)
+        const lastNewline = head.lastIndexOf('\n');
+        const lines = (lastNewline > 0 ? head.slice(0, lastNewline) : head).split('\n');
+
         let sessionId = '';
         let firstPrompt = '';
-        let messageCount = 0;
         let isSidechain = false;
 
         for (const line of lines) {
           if (!line.trim()) continue;
           try {
             const obj = JSON.parse(line);
-            if (obj.type === 'user' || obj.type === 'assistant') messageCount++;
             if (obj.type === 'user' && !firstPrompt) {
               sessionId = obj.sessionId || '';
               isSidechain = obj.isSidechain || false;
@@ -331,16 +351,21 @@ export class SessionManager {
                 const tb = c.find((b: any) => b.type === 'text');
                 if (tb) firstPrompt = tb.text;
               }
+              break; // Got what we need
             }
           } catch {}
         }
 
         if (isSidechain || !sessionId) return null;
+
+        // Estimate message count from file size (~2KB per message on average)
+        const estimatedMessages = Math.max(1, Math.round(stat.size / 2048));
+
         return {
           sessionId,
           firstPrompt: firstPrompt.slice(0, 200),
           modified: stat.mtime.toISOString(),
-          messageCount,
+          messageCount: estimatedMessages,
         };
       } catch {
         return null;
