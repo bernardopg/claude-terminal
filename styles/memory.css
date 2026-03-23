@@ -641,10 +641,194 @@
   text-overflow: ellipsis;
 }
 
-/* ── Badge Settings ── */
+/* ── Badge variants ── */
 .memory-badge.settings {
   background: var(--text-secondary);
   font-size: 9px;
+}
+
+.memory-badge.private {
+  background: var(--info);
+}
+
+.memory-badge.memory {
+  background: var(--success);
+}
+
+/* ── Project collapsible groups ── */
+.memory-project-group {
+  margin-bottom: 2px;
+}
+
+.memory-project-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.12s;
+}
+
+.memory-project-header:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.memory-project-header span {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.memory-chevron {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0.5;
+  transition: transform 0.15s;
+}
+
+.memory-project-group.expanded > .memory-project-header .memory-chevron {
+  transform: rotate(90deg);
+  opacity: 0.8;
+}
+
+.memory-project-children {
+  display: none;
+  padding-left: 8px;
+}
+
+.memory-project-group.expanded > .memory-project-children {
+  display: block;
+}
+
+.memory-child-item {
+  padding: 5px 8px 5px 22px !important;
+  font-size: 12px !important;
+  gap: 8px !important;
+  margin-bottom: 1px !important;
+}
+
+.memory-child-item svg {
+  width: 13px !important;
+  height: 13px !important;
+}
+
+.memory-child-missing {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.5;
+  flex: none !important;
+}
+
+/* ── Memory file grid ── */
+.memory-file-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  max-width: 900px;
+}
+
+.memory-file-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.memory-file-card:hover {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.memory-file-card-icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+}
+
+.memory-file-card-icon svg {
+  width: 18px;
+  height: 18px;
+  color: var(--text-muted);
+}
+
+.memory-file-card:hover .memory-file-card-icon svg {
+  color: var(--accent);
+}
+
+.memory-file-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.memory-file-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.memory-file-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: 'Cascadia Code', monospace;
+}
+
+.memory-file-preview {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+/* ── Back button ── */
+.memory-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  margin-bottom: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.memory-back-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+.memory-back-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* ── Button Create ── */
