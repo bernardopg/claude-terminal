@@ -19,7 +19,7 @@ function initToastContainer() {
   if (!toastContainer) {
     toastContainer = document.createElement('div');
     toastContainer.className = 'toast-container';
-    toastContainer.setAttribute('role', 'status');
+    toastContainer.setAttribute('role', 'log');
     toastContainer.setAttribute('aria-live', 'polite');
     toastContainer.setAttribute('aria-relevant', 'additions');
     document.body.appendChild(toastContainer);
@@ -71,7 +71,6 @@ function showToast({ message, type = 'info', duration, action, onAction }) {
 
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
-  toast.setAttribute('role', 'alert');
 
   const icons = {
     success: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>',
@@ -168,8 +167,7 @@ function hideToast(toast) {
     delete toast._autoHideTimer;
   }
 
-  toast.classList.remove('show');
-  toast.classList.add('hide');
+  toast.classList.add('toast-exit');
 
   setTimeout(() => {
     if (toast.parentNode) {
@@ -236,6 +234,13 @@ function withUndo(message, undoCallback, { type = 'info', duration } = {}) {
  */
 function clearAllToasts() {
   if (toastContainer) {
+    const toasts = toastContainer.querySelectorAll('.toast');
+    toasts.forEach(toast => {
+      if (toast._autoHideTimer) {
+        toast._autoHideTimer();
+        delete toast._autoHideTimer;
+      }
+    });
     toastContainer.innerHTML = '';
   }
 }
